@@ -3,7 +3,7 @@ from collections import Counter
 from pathlib import Path
 import hashlib, json, struct, zipfile
 root = Path(__file__).resolve().parent
-package = root / 'outputs/Extended_Pickup_Icons_v2.4_build25480438.zip'
+package = root / 'outputs/Extended_Pickup_Icons_Range_v2.4_build25480438.zip'
 expected = (root / 'SHA256SUMS.txt').read_text().split()[0]
 assert hashlib.sha256(package.read_bytes()).hexdigest() == expected, 'Release checksum mismatch'
 rows = json.loads((root / 'work/release_v24_verified_targets.json').read_text())

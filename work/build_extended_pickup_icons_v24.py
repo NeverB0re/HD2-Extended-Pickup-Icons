@@ -38,7 +38,7 @@ for folder, number, resource_name, script_name in options:
 manifest = {
     "Version": 1,
     "Guid": "453493d3-ffa7-4148-9b30-d6e4ab32b9d1",
-    "Name": "Extended Pickup Icons",
+    "Name": "Extended Pickup Icons Range",
     "Description": "Vanilla pickup icons: internal ViewDistance 35 for samples/gear, 20 for supplies, 15 for carry-ammo/warhead/SEAF shells. Build 25480438; Bingus Shared Loader v15+ required.",
     "IconPath": "icon.png",
     "Options": [
@@ -56,7 +56,7 @@ for output_name, zip_name in (
 ):
     files[zip_name] = (outputs / output_name).read_bytes()
 
-package = outputs / "Extended_Pickup_Icons_v2.4_build25480438.zip"
+package = outputs / "Extended_Pickup_Icons_Range_v2.4_build25480438.zip"
 buffer = BytesIO()
 with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
     for name, data in sorted(files.items()):

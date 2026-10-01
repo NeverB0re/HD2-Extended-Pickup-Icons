@@ -1,6 +1,6 @@
 # 제목
 
-Extended Pickup Icons v2.4 — 순정 아이콘 표시 거리 조정
+Extended Pickup Icons Range v2.4 — 순정 아이콘 표시 거리 조정
 
 # 본문
 
@@ -20,5 +20,5 @@ v2.3은 `seaf_shell` 레코드만 15로 설정해 별도 레코드를 쓰는 SEA
 
 **설치:** HELLDIVERS 2 Steam build **25480438**, [Bingus Shared Loader v15+](https://github.com/CowboyBingus/BingusSharedLoader)가 필요합니다. 이전 버전을 끄고 ZIP 하나를 Arsenal에 가져와 옵션을 선택한 뒤 **Purge → Deploy**하고 게임을 완전히 재시작하세요. ZIP 안에 자세한 설명이 있습니다.
 
-모드 이름: **Extended Pickup Icons**  
+모드 이름: **Extended Pickup Icons Range**  
 버전: **2.4**

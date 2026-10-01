@@ -1,4 +1,4 @@
-# Extended Pickup Icons v2.4
+# Extended Pickup Icons Range v2.4
 
 게임에 원래 있던 플로팅 아이콘의 표시 거리만 조정합니다. 빛기둥과 발광 텍스처는 추가하지 않습니다.
 
@@ -30,7 +30,7 @@
 ## 설치 및 확인
 
 1. 게임을 완전히 종료합니다. 창이 사라져도 작업 관리자에 `helldivers2.exe`가 남아 있다면 먼저 종료합니다.
-2. 이전 Extended Pickup Icons 시험판과 v2.3을 비활성화하거나 교체합니다.
+2. 이전 Extended Pickup Icons Range 시험판과 v2.3을 비활성화하거나 교체합니다.
 3. Bingus Shared Loader v15 이상을 활성화하고 이 ZIP을 Arsenal에 가져옵니다.
 4. 원하는 옵션을 선택한 뒤 **Purge → Deploy**하고 게임을 새로 시작합니다.
 

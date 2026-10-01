@@ -1,6 +1,6 @@
-# Extended Pickup Icons
+# Extended Pickup Icons Range
 
-![Extended Pickup Icons](outputs/Extended_Pickup_Icons_thumbnail.png)
+![Extended Pickup Icons Range](outputs/Extended_Pickup_Icons_thumbnail.png)
 
 Lore-friendly pickup visibility for **HELLDIVERS 2 Steam build 25480438**. Extends the game's native floating icons without adding light pillars or glowing textures. Requires **Bingus Shared Loader v15+** and Arsenal.
 
@@ -19,7 +19,7 @@ These numbers are **internal settings, not guaranteed measured meters**: fading,
 
 ## Install
 
-1. Completely close the game and disable earlier Extended Pickup Icons versions.
+1. Completely close the game and disable earlier Extended Pickup Icons Range versions.
 2. Enable a compatible Bingus Shared Loader v15+.
 3. Import the release ZIP into Arsenal and select any of the three options.
 4. Purge, Deploy and restart the game.
@@ -37,7 +37,7 @@ With all options enabled: `samples=30 supplies=8 equipment=213` (251 zones).
 
 ## Source and build
 
-The four Lua files in `work/` are the exact source entries used by the archived package. `work/release_v24_verified_targets.json` records the selected resources and expected values. Game binaries, extracted game databases, personal logs and the loader itself are not distributed here.
+The four Lua files in `work/` are identical to the archived v2.4 gameplay source. `work/release_v24_verified_targets.json` records the selected resources and expected values. Game binaries, extracted game databases, personal logs and the loader itself are not distributed here.
 
 The original build script is preserved. It requires Python 3 and the Bingus Shared Loader authoring helpers `archive.py` and `build_addon.py` in `work/vendor/BingusSharedLoader-main/scripts/`. Obtain compatible helpers from the loader's authoring source. This repository neither forks nor bundles Shared Loader. Run:
 

@@ -1,6 +1,6 @@
 # Title
 
-Extended Pickup Icons
+Extended Pickup Icons Range
 
 # Short description
 
@@ -8,7 +8,7 @@ Extend the game's existing pickup icons with three independent Arsenal toggles. 
 
 # Description
 
-Extended Pickup Icons adjusts the visibility range of vanilla in-world item icons while leaving pickup distance unchanged. Arsenal provides three independent options:
+Extended Pickup Icons Range adjusts the visibility range of vanilla in-world item icons while leaving pickup distance unchanged. Arsenal provides three independent options:
 
 - **Samples:** common, rare, super, packaged and intel samples — internal `ViewDistance` **35**.
 - **Supplies:** ammo boxes, grenade packs, stims and resupply packs — internal `ViewDistance` **20**. Stims use their existing ping icon as an automatic item marker.
