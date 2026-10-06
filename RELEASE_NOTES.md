@@ -1,27 +1,31 @@
-# Extended Pickup Icons Range v2.5
+# Extended Pickup Icons Range v3.0
 
-Import the attached mod ZIP into Arsenal. Requires Bingus Shared Loader v15+. Tested on HELLDIVERS 2 Steam build 25480438.
+Import the attached mod ZIP into Arsenal (no options to pick). Requires Bingus Shared Loader v15+. Install Mod Options Menu to change the settings on the MODS tab of the Escape menu; without it the defaults apply. Tested on HELLDIVERS 2 Steam build 25480438.
 
 ## What's new
 
-- **Survives more game updates.** The mod no longer locks itself to one exact game version. It finds each item by its ID, so small game patches should not break it.
-- **Plays nicer with other mods.** If another mod or a game update has changed an item, only that item is skipped. The rest of the mod still works.
-- **Options no longer affect each other.** A problem with the stim marker no longer turns off Samples or Equipment.
-- **Smoother startup.** The large file check at game start is gone, and the data search is spread over the loading screen.
-- **Same icons, same distances.** Nothing changes in what you see compared with 2.4.
-
-After a big game update, check `%LOCALAPPDATA%\CowboyBingus\Helldivers2\Logs\CodexPickupIconRangeTest.log`. `skipped 0 unmatched` means everything applied. A long list of skipped items means that update changed them and the mod needs an update.
+- Settings moved into the game. Turn Samples, Supplies and Equipment on or off and set each distance on the MODS tab of the Escape menu. The Arsenal options are gone.
+- Each distance goes from this mod's default up to 100 meters.
+- New separate distance for SEAF shells, carried ammo and warheads.
+- Changes take effect from your next mission.
+- The menu follows your game language (12 languages).
+- Works without Mod Options Menu, using the default settings.
+- Warning: very high distances can fill your screen with icons and spoil the game. This mod's default distances are recommended.
+- Default distances are the same as before. Settings you picked in Arsenal for older versions are not carried over: everything starts switched on.
 
 ## 변경 내용
 
-- **게임 업데이트에 덜 민감해졌습니다.** 특정 게임 버전에 고정하지 않고 아이템을 ID로 찾아서, 작은 업데이트 후에도 계속 작동합니다.
-- **다른 모드와 더 잘 어울립니다.** 다른 모드나 업데이트로 달라진 아이템은 그것만 건너뛰고 나머지는 정상 적용합니다.
-- **옵션끼리 영향을 주지 않습니다.** 자극제 표시에 문제가 생겨도 Samples와 Equipment는 정상 적용됩니다.
-- **시작이 더 부드러워졌습니다.** 게임 시작 때 큰 파일을 검사하던 과정을 없앴습니다.
-- **아이콘과 거리는 v2.4와 같습니다.**
+- 설정을 게임 안으로 옮겼습니다. ESC 메뉴의 MODS 탭에서 샘플, 보급품, 장비를 켜고 끄고, 각 거리를 정할 수 있습니다. Arsenal 옵션은 없어졌습니다.
+- 각 거리는 이 모드의 기본값부터 100미터까지 정할 수 있습니다.
+- SEAF 포탄, 운반 탄약, 탄두의 거리를 따로 정할 수 있습니다.
+- 변경한 설정은 다음 미션부터 적용됩니다.
+- 메뉴 글자가 게임 언어를 따라갑니다(12개 언어).
+- Mod Options Menu가 없어도 기본 설정으로 작동합니다.
+- 주의: 거리를 너무 높이면 화면에 아이콘이 너무 많이 떠서 게임 경험을 망칠 수 있습니다. 이 모드의 기본 거리를 권장합니다.
+- 기본 거리는 이전과 같습니다. 이전 버전에서 Arsenal로 고른 설정은 이어지지 않고, 모든 항목이 켜진 상태로 시작합니다.
 
-**설치:** 게임 종료 → 구버전 비활성화 → Shared Loader 활성화 → 아래 모드 ZIP을 Arsenal에 가져오기 → 옵션 선택 → Purge / Deploy.
+**설치:** 게임 종료 → 구버전 비활성화 → Shared Loader(및 Mod Options Menu) 활성화 → 아래 모드 ZIP을 Arsenal에 가져오기 → Purge / Deploy.
 
 GitHub's automatic source-code archives are not installable Arsenal packages.
 
-SHA-256: `286fb044425749e105296d131d1b3d66370d6d1069699d0e6f6088db7eebc32e`
+SHA-256: `06914a857edc5d5ca23d963c3eb0cb4ed5df34d7a5c7287b16b3e9002ae91b4b`
