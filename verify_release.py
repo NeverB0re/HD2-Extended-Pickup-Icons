@@ -3,9 +3,10 @@ from collections import Counter
 from pathlib import Path
 import hashlib, json, struct, zipfile
 root = Path(__file__).resolve().parent
-package = root / 'outputs/Extended_Pickup_Icons_Range_v2.4_build25480438.zip'
-expected = (root / 'SHA256SUMS.txt').read_text().split()[0]
-assert hashlib.sha256(package.read_bytes()).hexdigest() == expected, 'Release checksum mismatch'
+sums = dict(reversed(line.split()) for line in (root / 'SHA256SUMS.txt').read_text().splitlines() if line.strip())
+for name, digest in sums.items():
+    assert hashlib.sha256((root / name).read_bytes()).hexdigest() == digest, 'Release checksum mismatch: '+name
+package = root / 'outputs/Extended_Pickup_Icons_Range_v2.5.zip'
 rows = json.loads((root / 'work/release_v24_verified_targets.json').read_text())
 assert Counter(x['feature'] for x in rows) == {'samples':30,'supplies':8,'equipment':213}
 assert Counter(x['view_after'] for x in rows) == {35.0:233,20.0:8,15.0:10}
@@ -28,9 +29,9 @@ with zipfile.ZipFile(package) as z:
             source_length, version = struct.unpack_from('<II',body)
             assert version == 2 and source_length == len(body)-8
             embedded.append(body[8:])
-        core = (root/'work/extended_pickup_icons_v24.lua').read_bytes()
+        core = (root/'work/extended_pickup_icons_v25.lua').read_bytes()
         option = (root/f'work/extended_pickup_icons_{folder.lower()}.lua').read_bytes()
         assert set(embedded) == {core,option}, f'Embedded source mismatch: {folder}'
         assert z.read(stem+'.stream') == z.read(stem+'.gpu_resources') == b''
     assert set(z.namelist()) == expected_names
-print('PASS: checksum, exact embedded Lua, manifest, 251 targets and ZIP structure')
+print('PASS: checksums, exact embedded v2.5 Lua, manifest, 251 targets and ZIP structure')
