@@ -1,9 +1,9 @@
 # Extended Pickup Icons Range
 
 A **HELLDIVERS 2** mod that marks samples, supplies, mission items, drop-off points, valves and vehicles
-from farther away, using the game's own icons. Since 4.0 it runs on **Boot Mod Loader** (Nexus 17754)
-and draws its own on-screen markers; the old 2.x/3.x versions (Bingus Shared Loader) are in this
-repository's history and releases.
+from farther away, using the game's own icons. Since 2.0.0 (numbered as on Nexus) it runs on
+**Boot Mod Loader** (Nexus 17754) and draws its own on-screen markers; the older Bingus Shared Loader
+versions (released here as v2.4, v2.5 and v3.0) are in this repository's history and releases.
 
 Player-facing description and install steps: [PUBLISH_NEXUS.txt](PUBLISH_NEXUS.txt) (Nexus BBCode).
 

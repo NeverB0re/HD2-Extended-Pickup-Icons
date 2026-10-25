@@ -15,7 +15,7 @@
 local MOD_KEY = 'CodexPickupDots'
 if rawget(_G, MOD_KEY) then return rawget(_G, MOD_KEY) end
 
-local VERSION = '4.0.0'
+local VERSION = '2.0.1'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
