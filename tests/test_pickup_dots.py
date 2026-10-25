@@ -210,7 +210,7 @@ class DrawingTests(Case):
         self.assertGreater(self.fake.updates, 0)
         self.assertEqual(set(self.fake.lookups.keys()), {AVATAR, MARK})
         self.assertIn("can_get: present", log)
-        self.assertIn("84 target resources: 80 named, 4 by id only (looked up if the id self-test passes)", log)
+        self.assertIn("83 target resources: 79 named, 4 by id only (looked up if the id self-test passes)", log)
         self.frames(1, start=200.0)                   # the next status line, after a full sweep
         log = self.log_text()
         self.assertIn("found: il_sarcophagus=2", log)
@@ -367,20 +367,22 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.1.0 loading", text)
+            self.assertIn("Pickup Dots 2.1.0-test.1 loading", text)
             self.assertNotIn("last launch", text)
 
-    def test_samples_and_supplies_near_you_get_no_marker(self):
+    def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
         stim = "content/fac_helldivers/discoverables/health_pack_discoverable_01/health_pack_discoverable_01"
+        ammo = "content/fac_helldivers/discoverables/ammo_box_discoverable_01/ammo_box_discoverable_01"
         self.set_units(AVATAR, [unit(0)], loaded=False)
-        self.set_units(SAMPLE, [unit(8), unit(12)])           # 8 m: the game's own icon shows; 12 m: ours
-        self.set_units(stim, [unit(-3)])
+        self.set_units(SAMPLE, [unit(7.9), unit(8.1)])        # the game's icon from 9 m: ours stays to 8 m
+        self.set_units(ammo, [unit(-2.9)])                     # supplies: from 4 m, ours to 3 m
+        self.set_units(stim, [unit(-1.5)])                     # no icon of the game's: always ours
         self.set_units(MARK, [unit(0, 3, 0)])                  # a mission item 3 m off keeps its marker
         self.load()
         self.settle()
-        self.assertEqual(self.dots(), 2)
+        self.assertEqual(self.dots(), 3)
         xs = sorted(round(sum(p[0] for p in s) / 4, 1) for s in self.shapes())
-        self.assertEqual(xs, [0.0, 12.0])
+        self.assertEqual(xs, [-1.5, 0.0, 8.1])
 
     def test_super_samples_are_left_to_the_game_further_off(self):
         egg = "content/env_bugs/assets/samples/bug_egg_super_sample_01"
@@ -892,10 +894,19 @@ class ScreenTests(Case):
         rack = "content/objectives/obj_common/fire_artillery/ready_rack"
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(rack, [unit(-4, 0, 0)])
-        self.set_units(shell, [unit(-4, 0, 1.0), unit(4, 0, 0)])        # one in the rack, one on the ground
+        self.set_units(shell, [unit(-4, 0, 0.5), unit(-2.5, 0, 0)])     # one in the rack; one left beside it
         self.load()
         self.settle()
         self.assertIn("carry drawn=1 worn=1", self.status_now())
+
+    def test_a_mission_items_state_is_logged_when_it_changes(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(MARK, [unit(0, 0, 0), unit(0, 30, 0)])            # 8 m: logged; 38 m: too far
+        self.load()
+        self.settle()
+        lines = [l for l in self.log_text().splitlines() if "state: " in l]
+        self.assertEqual(len(lines), 1, lines)
+        self.assertIn("state: il_sarcophagus at 0.0 0.0 0.0 (8.0 m): ", lines[0])
 
     def test_where_mission_items_lie_is_logged_once_per_spot(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
@@ -957,14 +968,13 @@ class ScreenTests(Case):
         self.frames(80, start=30.0)
         self.assertEqual({t.color.a for t in self.screen_tris()}, {25})
 
-    def test_sample_and_supply_markers_can_be_moved(self):
-        self.set_options({"pickup_dots.offset_x": -6, "pickup_dots.offset_y": -4})
+    def test_sample_and_supply_markers_sit_where_the_games_icons_do(self):
         self.set_units(AVATAR, [unit(0, -11, 0)], loaded=False)
-        self.set_units(SAMPLE, [unit(0, 0, 0)])               # straight ahead: centred at 960 without the setting
+        self.set_units(SAMPLE, [unit(0, 0, 0)])               # straight ahead: it would be centred at 960
         self.load()
         self.settle()
         xs = self.xs()
-        self.assertAlmostEqual((max(xs) + min(xs)) / 2, 954, places=3)
+        self.assertAlmostEqual((max(xs) + min(xs)) / 2, 960 - 28, places=3)
 
     def test_kinds_can_be_switched_off_and_the_settings_are_ranges_switches_and_look(self):
         self.lua.execute("""
@@ -977,9 +987,10 @@ class ScreenTests(Case):
         self.settle()
         self.assertEqual(self.screen_tris(), [])
         ids = sorted(self.fake.options.keys())
-        look = ["pickup_dots." + n for n in ("fade", "hide_near", "offset_x", "offset_y", "opacity", "smallest_size")]
+        look = ["pickup_dots." + n for n in ("fade", "hide_near", "opacity", "smallest_size")]
         self.assertEqual([i for i in ids if not i.startswith(("pickup_dots.range_", "pickup_dots.show_"))], look)
-        self.assertEqual(len(ids), 16 + 6)
+        self.assertEqual(len(ids), 16 + 4)
+        self.assertTrue(self.fake.options["pickup_dots.fade"].default)
         self.assertFalse(self.fake.options["pickup_dots.show_terminals"].default)   # terminals: off unless chosen
         self.assertEqual(self.fake.options["pickup_dots.show_vehicles"].type, "toggle")
 

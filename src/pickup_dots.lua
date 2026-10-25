@@ -15,7 +15,7 @@
 local MOD_KEY = 'CodexPickupDots'
 if rawget(_G, MOD_KEY) then return rawget(_G, MOD_KEY) end
 
-local VERSION = '2.1.0'
+local VERSION = '2.1.0-test.1'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -25,13 +25,14 @@ local RANGE = {samples = 40, supplies = 25, mission = 40, carry = 25,  -- metres
 local SHOW = {terminals = false}   -- a setting per kind: false hides it (nil or true: shown); terminals
                               -- (2.1.0) are off unless switched on
 local NEAR_ME = {samples = 9, supplies = 4}   -- this close to you: no marker (the game shows its own icon;
-                                               -- a target's own 'near' overrides it)
-local LOOK = {                -- settings (2.1.0); the defaults draw as 2.0 did
+                                               -- a target's own 'near' overrides it; 0: always a marker)
+local NEAR_OVERLAP = 1        -- metres: ours goes this much inside where the game's icon comes (no gap between)
+local ICON_OFFSET = {-28, -35}   -- pixels right and up: sample and supply markers sit where the game's icon does
+local LOOK = {                -- settings (2.1.0)
     hide_near = true,         -- false: markers stay on where the game shows its own icon (NEAR_ME)
     smallest = 0.7,           -- size at the edge of a kind's range (full size up to FULL_SIZE_M)
     opacity = 1,              -- 0..1
-    fade = false,             -- true: fainter with distance, down to FADE_LEAST of opacity at the edge
-    offset_x = 0, offset_y = 0,   -- pixels, right and up: sample and supply markers moved by this much
+    fade = true,              -- fainter with distance, down to FADE_LEAST of opacity at the edge
 }
 local DOT_HEIGHT = 0.6        -- metres above the unit's origin
 local GROUP_HEIGHT = {samples = 0.3, supplies = 0.3, dropoffs = 1.8, controls = 1.2, vehicles = 3.2, terminals = 1.5}
@@ -41,8 +42,8 @@ local VEHICLE_BUSY = 4        -- a helldiver this close to a vehicle's origin is
 local VEHICLE_PARKED_S = 3    -- a vehicle that has not moved this long is parked: teammates beside it do not hide it
 local WRECK_NEAR = 4          -- an exosuit this close to an exosuit wreck is that wreck
 local ARMS_NEAR = 5           -- a vehicle's weapon units (group 'arms') are this close to it
-local DELIVERED_NEAR = 3      -- a mission item or load this close to a drop-off is in it (an SSSD put in;
-                              -- an artillery shell loaded: group 'loaders', not drawn, counts as a drop-off)
+local DELIVERED_NEAR = 3      -- a mission item or load this close to a drop-off is in it (an SSSD put in)
+local LOADED_NEAR = 1         -- an artillery shell this close to a ready rack (group 'loaders', not drawn) is in it
 local DIAMOND_PER_M = 0.008   -- half-height per metre of distance: about the same size on screen at any range
 local DIAMOND_MIN, DIAMOND_MAX = 0.05, 0.4   -- half-height limits, metres
 local DIAMOND_ASPECT = 1      -- half-width / half-height: a square on its corner, like the game's icon
@@ -282,7 +283,7 @@ local sr = rawget(_G, 'stingray')
 
 -- Names only: walking the tables is plain Lua and calls nothing in the engine.
 local function log_api_inventory()
-    for _, lib in ipairs({'Application', 'World', 'Unit', 'LineObject', 'IdString64', 'Script', 'Gui', 'Matrix4x4', 'Camera',
+    for _, lib in ipairs({'Application', 'World', 'Unit', 'LineObject', 'IdString64', 'Script', 'Gui', 'Matrix4x4', 'Camera', 'Mesh', 'Actor',
                           'Window', 'Mouse', 'Keyboard'}) do
         local t = sr[lib]
         if type(t) == 'table' then
@@ -521,7 +522,7 @@ local function read_key(world, i)
         local units = units_of(world, lookup, keys[i].label)
         for _, unit in ipairs(units) do
             local x, y, z = position_of(unit)
-            if x then points[#points + 1] = {x, y, z} end
+            if x then points[#points + 1] = {x, y, z, unit = unit} end
         end
         return points, true
     end
@@ -560,7 +561,7 @@ local function sweep_step(world)
             end
             for _, unit in ipairs(units) do
                 local x, y, z = position_of(unit)
-                if x then points[#points + 1] = {x, y, z} end
+                if x then points[#points + 1] = {x, y, z, unit = unit} end
             end
             stats.units = stats.units + #points
         else
@@ -638,6 +639,61 @@ local SPOT_SAME = 2           -- metres: the same spot
 local spots = {}              -- per key: the spots logged in this world
 local spots_logged = 0
 
+-- Diagnostics (2.1.0-test.2): a picked-up launch code (generic_intel) stays where it lay, alive (ICBM
+-- mission, test.1). What changes on a mission item when it is picked up is logged, so it can be told apart:
+-- for each one within STATE_NEAR of you, a line whenever its state below changes.
+local STATE_NEAR = 15
+local STATE_LOG_MAX = 300
+local states = {}             -- per unit (tostring): its last state line
+local states_logged = 0
+
+local function state_of(unit)
+    local parts = {}
+    local function add(name, fn, ...)
+        if type(fn) ~= 'function' then return end
+        local ok, a, b, c = pcall(fn, unit, ...)
+        if not ok then a = 'err' end
+        if type(a) == 'userdata' then a = tostring(a):gsub('0x%x+', '#') end
+        parts[#parts + 1] = name .. '=' .. tostring(a) .. (b ~= nil and (',' .. tostring(b)) or '')
+            .. (c ~= nil and (',' .. tostring(c)) or '')
+    end
+    local U = sr.Unit
+    add('scale', U.local_scale)
+    add('meshes', U.num_meshes)
+    add('child', U.is_child)
+    add('graph', U.num_scene_graph_items)
+    add('actors', U.num_actors)
+    add('lods', U.num_lod_objects)
+    add('moving', U.is_moving)
+    local Mesh = sr.Mesh
+    if Mesh and type(U.mesh) == 'function' then
+        local okn, n = pcall(U.num_meshes, unit)
+        for m = 1, (okn and type(n) == 'number') and math.min(n, 3) or 0 do
+            local okm, mesh = pcall(U.mesh, unit, m)
+            if okm and mesh ~= nil then
+                for _, f in ipairs({'is_visible', 'visible', 'is_hidden'}) do
+                    if type(Mesh[f]) == 'function' then
+                        local okv, v = pcall(Mesh[f], mesh)
+                        parts[#parts + 1] = 'mesh' .. m .. '.' .. f .. '=' .. tostring(okv and v or 'err')
+                    end
+                end
+            end
+        end
+    end
+    return table.concat(parts, ' ')
+end
+
+local function note_state(k, p, d)
+    if states_logged >= STATE_LOG_MAX or p.unit == nil or d == nil or d > STATE_NEAR then return end
+    local id = tostring(p.unit)
+    local now_state = state_of(p.unit)
+    if states[id] == now_state then return end
+    states[id] = now_state
+    states_logged = states_logged + 1
+    log(string.format('state: %s at %.1f %.1f %.1f (%.1f m): %s', string.match(k.label, '([^/]+)$') or k.label,
+        p[1], p[2], p[3], d, now_state))
+end
+
 local function note_spot(k, p)
     if spots_logged >= SPOT_LOG_MAX then return end
     local seen = spots[k]
@@ -661,9 +717,10 @@ local function collect_dots(now)
     local wrecks = {}        -- exosuit wrecks: the exosuit beside one is destroyed (its unit may stay)
     local arms = {}          -- vehicles' weapon units: a vehicle that had some and has none now is destroyed
     local dropoffs = {}      -- a mission item or load beside one is delivered (2.1.0)
+    local racks = {}         -- artillery ready racks: a shell in one is loaded (2.1.0)
     for i = 1, #keys do
         local group = keys[i].group
-        local list = (group == 'wrecks' and wrecks) or (group == 'arms' and arms) or ((group == 'dropoffs' or group == 'loaders') and dropoffs) or nil
+        local list = (group == 'wrecks' and wrecks) or (group == 'arms' and arms) or (group == 'dropoffs' and dropoffs) or (group == 'loaders' and racks) or nil
         if list and found[i] then
             for _, p in ipairs(found[i]) do list[#list + 1] = p end
         end
@@ -689,6 +746,7 @@ local function collect_dots(now)
             for _, p in ipairs(points) do
                 local d, who, carried, mine, others = measure(p[1], p[2], p[3], keys[i].worn)
                 if SPOT_KINDS[group] and not carried then note_spot(keys[i], p) end
+                if group == 'mission' then note_state(keys[i], p, d) end
                 if d ~= nil and d <= range + HOT_MARGIN then near_any = true end
                 if d == nil or d > range then
                     c.far = c.far + 1
@@ -711,11 +769,13 @@ local function collect_dots(now)
                         dots[#dots + 1] = {p[1], p[2], p[3] + (keys[i].height or GROUP_HEIGHT.vehicles), d, who, group, keys[i].icon}
                     end
                 elseif LOOK.hide_near and (keys[i].near or NEAR_ME[group]) and me ~= nil and who == me
-                    and d < (keys[i].near or NEAR_ME[group]) then
+                    and d < (keys[i].near or NEAR_ME[group]) - NEAR_OVERLAP then
                     c.worn = c.worn + 1
                 elseif carried and group ~= 'dropoffs' and group ~= 'controls' and group ~= 'terminals' then   -- never worn; a teammate may stand at it
                     c.worn = c.worn + 1
                 elseif (group == 'mission' or group == 'carry') and near(dropoffs, p, DELIVERED_NEAR) then
+                    c.worn = c.worn + 1
+                elseif group == 'carry' and near(racks, p, LOADED_NEAR) then
                     c.worn = c.worn + 1
                 elseif group == 'dropoffs' and near(filled, p, DELIVERED_NEAR) then
                     c.worn = c.worn + 1
@@ -1037,7 +1097,7 @@ local function screen_draw(world, world_id, dots)
             if sx then
                 opacity = opacity_of(d)
                 ink = ink_of(255 * opacity)
-                if d[6] == 'samples' or d[6] == 'supplies' then sx, sy = sx + LOOK.offset_x, sy + LOOK.offset_y end
+                if d[6] == 'samples' or d[6] == 'supplies' then sx, sy = sx + ICON_OFFSET[1], sy + ICON_OFFSET[2] end
             end
             if sx and d[7] and ICON_PIXELS[d[7]] then
                 local sizes = ICON_PIXELS[d[7]]   -- full size first, then a pixel smaller each
@@ -1240,7 +1300,7 @@ local function tick()
         world_id = 'world #' .. world_seq
         last_world, world_seen_at, cursor, found, players, players_read_at, me = world, now, 1, {}, {}, nil, nil
         vehicles_seen = {}
-        spots = {}
+        spots, states = {}, {}
         hot = {}
         new_main_world()
         traced = 0
@@ -1297,7 +1357,7 @@ local RANGE_OPTIONS = {   -- group, its name in the settings window, the most me
     {'terminals', 'Terminals', 150},   -- off by default (SHOW)
 }
 
--- 2.1.0: how markers look; each default keeps 2.0's look. id, its spec, how a value goes into LOOK.
+-- 2.1.0: how markers look. id, its spec, how a value goes into LOOK.
 local function toggle_into(field)
     return function(value) if type(value) == 'boolean' then LOOK[field] = value end end
 end
@@ -1319,15 +1379,9 @@ local LOOK_OPTIONS = {
     {'opacity', {type = 'slider', label = 'Marker opacity (%)', default = 100, min = 10, max = 100, step = 5,
         description = '100 is solid.'},
         number_into('opacity', 10, 100, 0.01)},
-    {'fade', {type = 'toggle', label = 'Fade markers with distance', default = false,
-        description = 'On: markers get fainter the farther away they are.'},
+    {'fade', {type = 'toggle', label = 'Fade markers with distance', default = true,
+        description = 'Markers get fainter the farther away they are.'},
         toggle_into('fade')},
-    {'offset_x', {type = 'slider', label = 'Sample and supply markers: move right (px)', default = 0,
-        min = -40, max = 40, step = 1, description = 'Negative moves them left.'},
-        number_into('offset_x', -40, 40, 1)},
-    {'offset_y', {type = 'slider', label = 'Sample and supply markers: move up (px)', default = 0,
-        min = -40, max = 40, step = 1, description = 'Negative moves them down.'},
-        number_into('offset_y', -40, 40, 1)},
 }
 
 local function register_look(host)

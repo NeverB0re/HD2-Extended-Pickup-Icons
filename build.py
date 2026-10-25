@@ -1,6 +1,7 @@
 """Build Extended Pickup Icons Range (Pickup Dots) into a mod zip (Modocracy, HD2 Arsenal, HD2MM).
 
-    python build.py            -> dist/Extended Pickup Icons Range v<version>.zip
+    python build.py            -> dist/Extended Pickup Icons Range v<version>.zip (a test version, e.g.
+                                  2.1.0-test.1: copy it to test-builds/; a release: to release/)
 
 The mod is one plain-text Lua resource, mods/codex/pickup_dots, in
 9ba626afa44a3aa3.patch_0, which Boot Mod Loader finds and starts.
@@ -61,11 +62,12 @@ What gets a marker (default distance):
 Markers get a little smaller farther away and hide while a menu is open. Items someone is
 carrying, and the vehicle you or a teammate are driving, get no marker. Items close enough
 for the game to show its own icon get none either: samples within 9 m (Terminid eggs and
-Automaton super samples 20 m, sample containers 15 m) and supplies within 4 m.
+Automaton super samples 20 m, sample containers 15 m) and ammo and grenade boxes within
+4 m. Stims have no icon of the game's and keep theirs.
 
 Settings: turn each kind on or off and set its distance with HD2 Mod Setting GUI
 (Nexus mod 17756). It can also keep markers on up close, and change their smallest size,
-opacity (optionally fading with distance) and the position of sample and supply markers.
+and opacity, and fade them with distance (on by default).
 Without it, the defaults above are used.
 
 Requires Boot Mod Loader (Nexus mod 17754). In your mod manager's load order, Boot Mod
@@ -140,7 +142,7 @@ def built_source():
 
 
 def version_of(source):
-    match = re.search(r"local VERSION = '([0-9.]+)'", source)
+    match = re.search(r"local VERSION = '([0-9A-Za-z.-]+)'", source)
     if not match:
         raise SystemExit("no VERSION in pickup_dots.lua")
     return match.group(1)

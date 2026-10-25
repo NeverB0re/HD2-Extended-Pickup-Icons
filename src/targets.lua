@@ -3,7 +3,8 @@
 -- equipment and weapons (0.9.0). key: the unit resource name when known, otherwise its 64-bit id as hex.
 -- icon: drawn as this shape (samples, supplies); the rest as diamonds (vehicles: chevrons).
 -- Rare samples are Crystallized E-710, Legendarium and Black Saffron; the super sample is Super Uranium.
--- near: no marker this close to you (the game's own icon shows); default NEAR_ME of the group.
+-- near: no marker this close to you (the game's own icon shows); default NEAR_ME of the group. Stims
+-- have no icon of the game's: 0, always a marker.
 -- groups: samples, supplies, mission (objective items), carry (SEAF shells, carried ammo, warheads),
 -- dropoffs (where an SSSD or data goes in), controls (valves, cranks, switches), vehicles.
 return {
@@ -21,7 +22,7 @@ return {
   {group='samples', name='content/env_shared_forest/assets/samples/plant_sample_01', icon='common'},
   {group='samples', name='content/env_bugs/assets/samples/bug_sample_01', icon='common'},
   {group='samples', name='content/env_super_earth/samples/se_intel_sample_01', icon='common'},
-  {group='supplies', name='content/fac_helldivers/hellpod/health_pack_rack/health_pack', icon='stim'},
+  {group='supplies', name='content/fac_helldivers/hellpod/health_pack_rack/health_pack', icon='stim', near=0},
   {group='samples', name='content/env_shared_desert/assets/samples/mineral_sample_01', icon='common'},
   {group='mission', name='content/objectives/obj_common/carry_data/carry_data', icon='package'},
   {group='mission', name='content/objectives/obj_bugs/retrieve_larva/bug_larva_container_backpack', icon='larva'},
@@ -33,7 +34,7 @@ return {
   {group='mission', name='content/objectives/obj_cyborgs/cyborg_airbase_control_tower/cyborg_carry_data', icon='package'},
   {group='mission', name='content/objectives/obj_common/briefcase/briefcase', icon='package'},
   {group='mission', hex='0dc9084e50c051f3'},  -- unresolved_mission_carryable_0dc9084e50c051f3
-  {group='supplies', name='content/fac_helldivers/discoverables/health_pack_discoverable_01/health_pack_discoverable_01', icon='stim'},
+  {group='supplies', name='content/fac_helldivers/discoverables/health_pack_discoverable_01/health_pack_discoverable_01', icon='stim', near=0},
   {group='samples', name='content/env_shared/assets/samples/super_uranium/super_uranium_sample_01', icon='super'},
   {group='samples', name='content/env_shared_arctic/assets/samples/crystal_sample_01', icon='common'},
   {group='samples', name='content/env_cyborg/samples/automaton_intel_sample_01', icon='common'},
@@ -101,7 +102,7 @@ return {
   -- hash list: its id, found by its 'computer_terminal_screen_new' material, shared by nine objectives.
   {group='terminals', hex='cd5fb5dc997811bb'},
   {group='terminals', name='content/objectives/obj_cyborgs/cyborg_generic_objective_terminal/cy_objective_terminal'},
-  -- 2.1.0: not drawn; where artillery shells are loaded: a shell beside one is in it (DELIVERED_NEAR)
-  {group='loaders', name='content/objectives/obj_common/fire_artillery/automated_artillery'},
+  -- 2.1.0: not drawn; where artillery shells are loaded: a shell in one is in it (LOADED_NEAR). Not the
+  -- artillery itself: it is large, and shells are left beside it to load later.
   {group='loaders', name='content/objectives/obj_common/fire_artillery/ready_rack'},
 }
