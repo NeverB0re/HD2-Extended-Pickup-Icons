@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.1.0-test.5 loading", text)
+            self.assertIn("Pickup Dots 2.1.0-test.6 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -889,7 +889,8 @@ class ScreenTests(Case):
         self.load()
         self.settle()                                                  # 9 s on: long enough
         self.assertIn("mission drawn=1 worn=1", self.status_now())
-        self.assertIn("taken: the item at 10.0 1.5 0.0 is taken for picked up", self.log_text())
+        self.assertIn("taken: the item at 10.0 1.5 0.0 is taken for picked up (a helldiver standing at it)",
+                      self.log_text())
         self.fake.units[AVATAR][2].x = 30                              # the teammate goes: they stay taken
         self.frames(10, start=30.0)
         self.assertIn("mission drawn=1 worn=1", self.status_now())
@@ -909,6 +910,7 @@ class ScreenTests(Case):
           text = function(x, y, s, px, c) fake.texts[#fake.texts + 1] = {x = x, y = y, s = s, px = px, c = c} end,
           unit_alive = function(u) return true end,
           mouse_down = function(name) return name == 'right' and fake.rmb == true end,
+          key_down = function(name) return name == 'e' and fake.e_key == true end,
           unit_position = function(u, node)
             if node and node > 1 then return u.x, u.y + node, u.z + (node == 3 and (u.turn or 0) or 0) end
             return u.x, u.y, u.z
@@ -1034,6 +1036,23 @@ class ScreenTests(Case):
         self.fake.rmb = False                                          # let go: back
         self.frames(5, start=32.0)
         self.assertGreater(len(self.screen_tris()), 0)
+
+    def test_with_chef_launch_codes_you_walk_past_stay_marked_until_you_press_e(self):
+        codes = "content/objectives/obj_common/generic_intel/generic_intel"
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(codes, [unit(0, -6.5, 0)])                      # 1.5 m from you, for long
+        self.load_with_chef()
+        self.settle()
+        self.assertNotIn("taken:", self.log_text())
+        self.assertIn("mission drawn=1 worn=0", self.status_now())     # still marked
+        self.fake.e_key = True                                         # you pick them up
+        self.frames(3, start=30.0)
+        self.assertIn("(you, with the interact key)", self.log_text())
+        self.fake.e_key = False
+        self.frames(80, start=40.0)
+        self.assertEqual(self.screen_tris(), [])                       # and stay taken: no marker
 
     def test_vehicles_are_sky_blue(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)

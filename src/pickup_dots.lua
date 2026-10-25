@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.1.0-test.5'
+local VERSION = '2.1.0-test.6'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -687,32 +687,41 @@ local spots = {}              -- per key: the spots logged in this world
 local spots_logged = 0
 
 -- Launch codes and keycards (targets with 'taken'): picked up, the unit stays where it lay, alive and
--- unchanged in everything the engine lets a mod read (2.1.0-test.1 logs). So one a helldiver stood at, within
--- TAKE_REACH for TAKE_HOLD_S, is taken for picked up; up close the game shows its own icon anyway.
+-- unchanged in everything the engine lets a mod read (2.1.0-test.1 logs). So they are taken for picked up when
+-- you press the interact key (TAKE_KEY) within TAKE_REACH of them, or a teammate has stood that close for
+-- TAKE_HOLD_S (their keys can't be read). Walking past them leaves them marked (test.5 took 1 s at them, anyone).
+-- Without the loader's keyboard: anyone at them for TAKE_HOLD_S.
 local TAKE_REACH = 2
-local TAKE_HOLD_S = 1
-local reached = {}            -- per unit: since when a helldiver has been at it
+local TAKE_HOLD_S = 2
+local TAKE_KEY = 'e'
+local reached = {}            -- per unit: since when a teammate has been at it
 local taken = {}              -- per unit: picked up (this world)
 
 local function check_taken(p, now)
     local id = p.unit ~= nil and tostring(p.unit) or string.format('%.0f %.0f %.0f', p[1], p[2], p[3])
     if taken[id] then return true end
-    local at = false
+    local keys_known = chef_has('key_down')
+    local by, other = nil, false
     for _, h in ipairs(players) do
         local dx, dy, dz = p[1] - h[1], p[2] - h[2], p[3] - h[3]
         if dx * dx + dy * dy + dz * dz < TAKE_REACH * TAKE_REACH then
-            at = true
-            break
+            if h == me and keys_known then
+                local ok, down = pcall(CHEF.key_down, TAKE_KEY)
+                if ok and down then by = 'you, with the interact key' end
+            else
+                other = true
+            end
         end
     end
-    if not at then
+    if other then
+        reached[id] = reached[id] or now
+        if by == nil and now - reached[id] >= TAKE_HOLD_S then by = 'a helldiver standing at it' end
+    else
         reached[id] = nil
-        return false
     end
-    reached[id] = reached[id] or now
-    if now - reached[id] >= TAKE_HOLD_S then
+    if by then
         taken[id] = true
-        log(string.format('taken: the item at %.1f %.1f %.1f is taken for picked up', p[1], p[2], p[3]))
+        log(string.format('taken: the item at %.1f %.1f %.1f is taken for picked up (%s)', p[1], p[2], p[3], by))
         return true
     end
     return false
