@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.1.0-test.9'
+local VERSION = '2.1.0-test.10'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -731,8 +731,10 @@ end
 -- face, relative to the unit itself, looked at every PARTS_EVERY_S. What test.3-test.8 logs showed:
 --   * a valve or crank turned: one part (a valve's wheel) turns, and stays turned when done. So a control one of
 --     whose parts faces another way than when first seen, and none has moved for CONTROL_STILL_S, is finished;
---   * a supply FRV destroyed: in one look, most of its parts (PARTS_WRECKED of them) change while the unit
---     stays where it is. (Its weapon rack doesn't tell: it stays.)
+--   * a supply FRV destroyed: in one look, most of its parts (PARTS_WRECKED of them) change, even while it is
+--     thrown about (test.10: no longer only where it stands). Its weapon rack doesn't tell: it stays.
+--   * test.10, to define a wreck by how its parts lie instead: a vehicle's every part is logged when first seen
+--     and after a big change (PARTS_SNAPSHOT_SHARE), and how many change while it moves (PARTS_MOVING_NEAR).
 -- Near you (PARTS_LOG_NEAR) what moved is logged too, for what is still to be found out (tanks).
 local PARTS_EVERY_S = 1
 local PARTS_MOST = 160        -- parts looked at, at most
@@ -743,6 +745,9 @@ local PARTS_WRECKED = 0.6
 local CONTROL_STILL_S = 2
 local PARTS_LOG_NEAR = 15
 local PARTS_LOG_MAX = 800
+local PARTS_SNAPSHOT_SHARE = 0.5
+local PARTS_SNAPSHOTS = 4     -- per vehicle
+local PARTS_MOVING_NEAR = 30
 local parts = {}              -- per unit: {at, root, first, nodes, changed_at, done, wrecked}
 local parts_logged = 0
 
@@ -767,6 +772,16 @@ local function read_parts(u)
     return {rx, ry, rz}, nodes, count, n
 end
 
+local function snapshot(name, why, where, nodes, count)
+    local list = {}
+    for i = 2, PARTS_MOST do
+        local v = nodes[i]
+        if v then list[#list + 1] = string.format('%d:%.2f,%.2f,%.2f/%.2f,%.2f,%.2f', i, v[1], v[2], v[3], v[4], v[5], v[6]) end
+    end
+    log(string.format('parts: %s at %.1f %.1f %.1f, %s, %d parts: %s', name, where[1], where[2], where[3], why, count,
+        table.concat(list, ' ')))
+end
+
 local function parts_step(k, p, d, now)
     if p.unit == nil or not (chef_has('call') and chef_has('unit_position') and chef_has('unit_rotation')) then
         return nil
@@ -779,8 +794,12 @@ local function parts_step(k, p, d, now)
     local name = string.match(k.label, '([^/]+)$') or k.label
     local logging = d ~= nil and d <= PARTS_LOG_NEAR and parts_logged < PARTS_LOG_MAX
     if e == nil then
-        e = {at = now, root = where, first = nodes, nodes = nodes, changed_at = now}
+        e = {at = now, root = where, first = nodes, nodes = nodes, changed_at = now, snapshots = 0}
         parts[id] = e
+        if k.group == 'vehicles' then
+            e.snapshots = 1
+            snapshot(name, 'first seen', where, nodes, count)
+        end
         if logging then
             parts_logged = parts_logged + 1
             log(string.format('pose: %s at %.1f %.1f %.1f: %d parts', name, where[1], where[2], where[3], n))
@@ -799,7 +818,16 @@ local function parts_step(k, p, d, now)
     local still = math.abs(where[1] - e.root[1]) < 0.2 and math.abs(where[2] - e.root[2]) < 0.2
         and math.abs(where[3] - e.root[3]) < 0.2
     if #moved > 0 or not still then e.changed_at = now end
-    if k.wreck_parts and still and not e.wrecked and count > 0 and #moved >= PARTS_WRECKED * count then
+    if k.group == 'vehicles' and count > 0 then
+        if #moved >= PARTS_SNAPSHOT_SHARE * count and e.snapshots < PARTS_SNAPSHOTS then
+            e.snapshots = e.snapshots + 1
+            snapshot(name, string.format('%d changed%s', #moved, still and '' or ', moving'), where, nodes, count)
+        elseif not still and d ~= nil and d <= PARTS_MOVING_NEAR and parts_logged < PARTS_LOG_MAX then
+            parts_logged = parts_logged + 1
+            log(string.format('parts: %s moving: %d of %d changed', name, #moved, count))
+        end
+    end
+    if k.wreck_parts and not e.wrecked and count > 0 and #moved >= PARTS_WRECKED * count then
         e.wrecked = true
         log(string.format('vehicle: %s at %.1f %.1f %.1f - %d of %d parts changed at once: taken for destroyed',
             name, where[1], where[2], where[3], #moved, count))

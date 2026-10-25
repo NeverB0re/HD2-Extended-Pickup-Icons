@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.1.0-test.9 loading", text)
+            self.assertIn("Pickup Dots 2.1.0-test.10 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -1018,9 +1018,12 @@ class ScreenTests(Case):
         self.load_with_chef()
         self.settle()
         self.assertGreater(len(self.screen_tris()), 0)
-        self.fake.units[frv][1].blast = 1                             # it blows up where it stands
+        self.assertIn("parts: frv_supply at 0.0 20.0 0.0, first seen, 2 parts: 2:", self.log_text())
+        self.fake.units[frv][1].blast = 1                             # it blows up, thrown aside
+        self.fake.units[frv][1].x = 2
         self.frames(120, start=30.0)
-        self.assertIn("vehicle: frv_supply at 0.0 20.0 0.0 - 2 of 2 parts changed at once: taken for destroyed",
+        self.assertIn("parts: frv_supply at 2.0 20.0 0.0, 2 changed, moving, 2 parts: 2:", self.log_text())
+        self.assertIn("vehicle: frv_supply at 2.0 20.0 0.0 - 2 of 2 parts changed at once: taken for destroyed",
                       self.log_text())
         self.assertEqual(self.screen_tris(), [])
 
