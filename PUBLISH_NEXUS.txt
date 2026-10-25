@@ -19,11 +19,6 @@ The October 20, 2026 game update broke the old version of this mod, and the load
 [*]Markers get smaller the farther away they are, and supply markers fainter. Vehicle markers also show how far away they are.
 [*]Ammo, grenade, stim, package and egg icons are drawn from the game's own textures.
 [*]Markers follow the game's camera, also when you zoom in with a scope.
-[*]Items someone is carrying get no marker, and neither do items put into a drop-off point or shells loaded into artillery. The drop-off point itself keeps its marker.
-[*]Launch codes and keycards lose their marker when you pick them up, or when a teammate runs right past them.
-[*]Items close enough for the game to show its own icon get no marker: samples within 9 m of you (Terminid eggs and Automaton super samples 20 m, sample containers 15 m), ammo and grenade boxes within 4 m. Stims have no icon of the game's, so they keep their marker.
-[*]The vehicle you are in, or one a teammate is driving, gets no marker. A parked vehicle shows again after a few seconds.
-[*]Destroyed exosuits and FRVs lose their marker.
 [*]On your ship, mission markers are off.
 [/list]
 
@@ -49,10 +44,16 @@ Press [b]F9[/b] in the game to open Chef Shared Loader's options menu, then pick
 [*]Purge and Deploy, then start the game.
 [/list]
 
-[size=5][b]Good to know[/b][/size]
+[size=5][b]Limits[/b][/size]
+Since the October 20 update, the game runs mods in a locked-down Lua with anti-cheat: a mod can no longer read the game's memory. Chef Shared Loader gives mods where things are and lets them draw on screen, but not what state they are in: whether an item was picked up, a valve is finished, a vehicle is destroyed or who is in it. So the mod works these out from where things are, and can now and then be wrong:
 [list]
-[*]Valves and cranks stay marked after you turn them. The mod cannot tell whether one is finished.
-[*]Destroyed [b]tanks[/b] and [b]supply FRVs[/b] keep their marker until the wreck disappears from the map.
+[*][b]Carried items[/b]: an item right on a helldiver is taken for carried and gets no marker.
+[*][b]Items put into a drop-off point, shells loaded into artillery[/b]: the item stays there once put in, so one right at a drop-off point or ready rack is taken for delivered and gets no marker. The drop-off point keeps its own, as some missions have you take things out of one again.
+[*][b]Launch codes and keycards[/b]: picked up, they stay where they were. So they lose their marker when you press the interact key (E) at them, or when a teammate runs right past them; a teammate only passing by can turn it off too. With another key or a controller, picking them up yourself leaves the marker.
+[*][b]Up close[/b]: the mod cannot hide the game's own icons, so it hides its marker where the game shows one: samples within 9 m of you (Terminid eggs and Automaton super samples 20 m, sample containers 15 m), ammo and grenade boxes within 4 m. Stims have no icon of the game's and keep theirs.
+[*][b]Vehicles in use[/b]: the mod cannot tell who is in a vehicle. One a helldiver is in that is moving gets no marker; one that has stood still for a few seconds is taken for parked and shows again.
+[*][b]Destroyed vehicles[/b]: the mod cannot read a vehicle's health. Exosuits and FRVs whose weapons are gone are taken for destroyed; [b]tanks[/b] and [b]supply FRVs[/b] give no such sign and keep their marker until the wreck disappears from the map.
+[*][b]Valves and cranks[/b] stay marked after you turn them: whether one is finished can't be told.
 [/list]
 
 [line]
@@ -78,11 +79,6 @@ Press [b]F9[/b] in the game to open Chef Shared Loader's options menu, then pick
 [*]멀리 있을수록 마커가 작아지고, 보급품 마커는 흐려집니다. 차량 마커에는 거리도 표시됩니다.
 [*]탄약·수류탄·스팀·패키지·알 아이콘은 게임 텍스처로 그립니다.
 [*]마커는 게임 카메라를 따라가며, 스코프로 확대해도 맞습니다.
-[*]누군가 들고 있는 아이템, 반납 지점에 넣은 아이템, 야포에 장전한 포탄에는 마커가 뜨지 않습니다. 반납 지점 자체의 마커는 남습니다.
-[*]발사 코드와 키카드는 내가 주우면, 또는 동료가 바로 옆을 지나가면 마커가 사라집니다.
-[*]게임 자체 아이콘이 뜨는 거리 안에서는 마커가 뜨지 않습니다: 샘플은 나에게서 9m(테르미니드 알과 오토마톤 슈퍼 샘플은 20m, 샘플통은 15m), 탄약·수류탄 상자는 4m. 스팀은 게임 아이콘이 없어서 마커가 계속 뜹니다.
-[*]내가 탄 차량이나 동료가 운전 중인 차량에는 마커가 뜨지 않습니다. 주차하면 몇 초 뒤 다시 보입니다.
-[*]파괴된 엑소슈트와 FRV는 마커가 사라집니다.
 [*]함선 안에서는 임무 마커가 꺼집니다.
 [/list]
 
@@ -108,8 +104,14 @@ Press [b]F9[/b] in the game to open Chef Shared Loader's options menu, then pick
 [*]Purge 후 Deploy하고 게임을 시작합니다.
 [/list]
 
-[size=5][b]알아 둘 점[/b][/size]
+[size=5][b]한계점[/b][/size]
+10월 20일 업데이트 이후 게임은 안티치트와 함께 제한된 Lua 환경에서 모드를 실행하고, 모드는 더 이상 게임 메모리를 읽을 수 없습니다. Chef Shared Loader는 물체가 어디에 있는지와 화면에 그리는 기능은 주지만, 물체의 상태(아이템을 주웠는지, 밸브를 다 돌렸는지, 차량이 파괴됐는지, 누가 타고 있는지)는 알려 주지 않습니다. 그래서 모드는 이런 것들을 위치로 추정하며, 가끔 틀릴 수 있습니다.
 [list]
-[*]밸브와 크랭크는 돌린 뒤에도 표시됩니다. 모드가 완료 여부를 알 수 없습니다.
-[*]파괴된 [b]탱크[/b]와 [b]보급 FRV[/b]는 잔해가 맵에서 사라질 때까지 마커가 남습니다.
+[*][b]들고 있는 아이템[/b]: 헬다이버 몸에 붙어 있는 아이템은 누군가 들고 있는 것으로 보고 마커를 띄우지 않습니다.
+[*][b]반납 지점에 넣은 아이템, 야포에 장전한 포탄[/b]: 넣은 뒤에도 물체가 그 자리에 남기 때문에, 반납 지점이나 포탄 거치대 바로 옆에 있으면 넣은 것으로 보고 마커를 띄우지 않습니다. 반납 지점에서 다시 꺼내 옮기는 임무가 있어서 반납 지점 자체의 마커는 남깁니다.
+[*][b]발사 코드와 키카드[/b]: 주워도 물체가 그 자리에 그대로 남습니다. 그래서 내가 그 앞에서 상호작용 키(E)를 누르거나 동료가 바로 옆을 지나가면 주운 것으로 봅니다. 동료가 줍지 않고 지나가기만 해도 마커가 꺼질 수 있고, E 대신 다른 키나 컨트롤러로 주우면 마커가 남습니다.
+[*][b]가까운 거리[/b]: 모드가 게임 자체 아이콘을 숨길 수는 없어서, 게임 아이콘이 뜨는 거리 안에서는 대신 모드의 마커를 숨깁니다. 샘플은 나에게서 9m(테르미니드 알과 오토마톤 슈퍼 샘플은 20m, 샘플통은 15m), 탄약·수류탄 상자는 4m입니다. 스팀은 게임 아이콘이 없어서 마커가 계속 뜹니다.
+[*][b]사용 중인 차량[/b]: 누가 타고 있는지 알 수 없어서, 헬다이버가 탄 채 움직이는 차량에는 마커를 띄우지 않습니다. 몇 초 동안 멈춰 있으면 주차한 것으로 보고 다시 표시합니다.
+[*][b]파괴된 차량[/b]: 차량 체력을 읽을 수 없어서, 엑소슈트와 FRV는 달린 무기가 사라지면 파괴된 것으로 봅니다. [b]탱크[/b]와 [b]보급 FRV[/b]는 그런 표시가 없어서 잔해가 맵에서 사라질 때까지 마커가 남습니다.
+[*][b]밸브와 크랭크[/b]: 완료 여부를 알 수 없어서 돌린 뒤에도 표시됩니다.
 [/list]
