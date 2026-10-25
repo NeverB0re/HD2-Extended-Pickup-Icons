@@ -5,7 +5,7 @@ from farther away, using the game's own icons. Since 4.0 it runs on **Boot Mod L
 and draws its own on-screen markers; the old 2.x/3.x versions (Bingus Shared Loader) are in this
 repository's history and releases.
 
-Player-facing description and install steps: [PUBLISH_NEXUS.md](PUBLISH_NEXUS.md).
+Player-facing description and install steps: [PUBLISH_NEXUS.txt](PUBLISH_NEXUS.txt) (Nexus BBCode).
 
 ## Layout
 

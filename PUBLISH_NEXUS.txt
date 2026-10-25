@@ -1,0 +1,105 @@
+[size=6][b]Extended Pickup Icons Range[/b][/size]
+See samples, supplies, mission items and vehicles from farther away, marked with the game's own icons.
+
+[size=5][b]Back after the October 20 update[/b][/size]
+The October 20, 2026 game update broke the old version of this mod, and the loader it relied on no longer works. With the new [b]Boot Mod Loader[/b] it can run again, so the mod has been rebuilt from scratch. It now draws its own markers on screen using the game's icons, and it covers much more than before: mission items, drop-off points, valves and vehicles.
+
+[b]If you used the old version, remove it before installing this one.[/b] Bingus Shared Loader and Mod Options Menu are no longer needed for this mod.
+
+[size=5][b]What gets a marker[/b][/size]
+[list]
+[*][b]Samples[/b] (common, rare, super), sample containers, Terminid eggs: sample icons, 40 m
+[*][b]Ammo boxes, grenade boxes, stims, resupply pod crates[/b]: supply icons, 25 m
+[*][b]SSSDs, data drives, black boxes, larva containers[/b]: package / larva icons, 40 m
+[*][b]Launch codes, keycards, video cameras and other mission items[/b]: diamond, 40 m
+[*][b]Artillery shells, warheads and batteries you carry[/b]: diamond, 25 m
+[*][b]Drop-off points and cargo containers[/b]: diamond, 40 m
+[*][b]Valves and cranks you turn in missions[/b]: diamond, 40 m
+[*][b]Exosuits, FRVs and tanks[/b]: vehicle icons, 100 m
+[/list]
+
+[list]
+[*]Markers get a little smaller the farther away they are.
+[*]Items someone is carrying get no marker.
+[*]Items close enough for the game to show its own icon get no marker: samples within 9 m of you (Terminid eggs and Automaton super samples 20 m, sample containers 15 m), supplies within 4 m.
+[*]The vehicle you are in, or one a teammate is driving, gets no marker. A parked vehicle shows again after a few seconds.
+[*]Destroyed exosuits and FRVs lose their marker.
+[/list]
+
+[size=5][b]Settings[/b][/size]
+Install [b]HD2 Mod Setting GUI[/b] (Nexus mod 17756) to turn each kind on or off and change its distance while you play. Changes apply within a second. Without it, the mod uses the default distances above.
+
+[size=5][b]Requirements[/b][/size]
+[list]
+[*][b]Boot Mod Loader[/b] (Nexus mod 17754)
+[*]Optional: [b]HD2 Mod Setting GUI[/b] (Nexus mod 17756) to change settings
+[/list]
+
+[size=5][b]Install[/b][/size]
+[list=1]
+[*]Close the game completely. Remove or disable any older version of this mod.
+[*]Import this ZIP into your mod manager (Arsenal etc.) together with Boot Mod Loader.
+[*][b]Load order: Boot Mod Loader must be below this mod.[/b] In Arsenal, mods listed at the bottom have higher priority.
+[*]Deploy, then start the game.
+[/list]
+
+[size=5][b]Good to know[/b][/size]
+[list]
+[*]Drop-off points and valves stay marked after you use them. The mod cannot tell whether one is finished.
+[*]Destroyed [b]tanks[/b] and [b]supply FRVs[/b] keep their marker until the wreck disappears from the map. Exosuits and other FRVs are recognised as destroyed.
+[*]Terminals are not marked; they are easy to spot already.
+[/list]
+
+[line]
+
+[size=6][b]한글 해석[/b][/size]
+샘플, 보급품, 임무 아이템, 차량을 더 먼 거리에서 게임 아이콘으로 볼 수 있게 해 줍니다.
+
+[size=5][b]10월 20일 업데이트 이후 다시 돌아왔습니다[/b][/size]
+2026년 10월 20일 게임 업데이트로 예전 버전이 작동하지 않게 되었고, 의존하던 로더도 더 이상 쓸 수 없게 되었습니다. 새로운 [b]Boot Mod Loader[/b]로 다시 작동할 수 있게 되어 모드를 처음부터 새로 만들었습니다. 이제 게임 아이콘으로 화면에 직접 마커를 그리며, 임무 아이템, 반납 지점, 밸브, 차량까지 예전보다 훨씬 많은 것을 표시합니다.
+
+[b]예전 버전을 쓰셨다면 먼저 지우고 설치하세요.[/b] 이 모드는 더 이상 Bingus Shared Loader와 Mod Options Menu가 필요하지 않습니다.
+
+[size=5][b]표시 대상[/b][/size]
+[list]
+[*][b]샘플[/b](일반·희귀·슈퍼), 샘플통, 테르미니드 알: 샘플 아이콘, 40m
+[*][b]탄약 상자, 수류탄 상자, 스팀, 재보급 포드 상자[/b]: 보급품 아이콘, 25m
+[*][b]SSSD, 데이터 드라이브, 블랙박스, 유충 용기[/b]: 패키지·유충 아이콘, 40m
+[*][b]발사 코드, 키카드, 비디오 카메라 등 임무 아이템[/b]: 마름모, 40m
+[*][b]들고 옮기는 야포 탄두, 탄두, 배터리[/b]: 마름모, 25m
+[*][b]반납 지점, 화물 컨테이너[/b]: 마름모, 40m
+[*][b]미션에서 돌리는 밸브, 크랭크[/b]: 마름모, 40m
+[*][b]엑소슈트, FRV, 탱크[/b]: 차량 아이콘, 100m
+[/list]
+
+[list]
+[*]멀리 있을수록 마커가 조금 작아집니다.
+[*]누군가 들고 있는 아이템에는 마커가 뜨지 않습니다.
+[*]게임 자체 아이콘이 뜨는 거리 안에서는 마커가 뜨지 않습니다: 샘플은 나에게서 9m(테르미니드 알과 오토마톤 슈퍼 샘플은 20m, 샘플통은 15m), 보급품은 4m.
+[*]내가 탄 차량이나 동료가 운전 중인 차량에는 마커가 뜨지 않습니다. 주차하면 몇 초 뒤 다시 보입니다.
+[*]파괴된 엑소슈트와 FRV는 마커가 사라집니다.
+[/list]
+
+[size=5][b]설정[/b][/size]
+[b]HD2 Mod Setting GUI[/b](넥서스 모드 17756)를 설치하면 게임 중에 항목별 켜기/끄기와 표시 거리를 바꿀 수 있고, 1초 안에 적용됩니다. 없으면 위의 기본 거리로 작동합니다.
+
+[size=5][b]필요한 것[/b][/size]
+[list]
+[*][b]Boot Mod Loader[/b](넥서스 모드 17754)
+[*]선택: 설정을 바꾸려면 [b]HD2 Mod Setting GUI[/b](넥서스 모드 17756)
+[/list]
+
+[size=5][b]설치[/b][/size]
+[list=1]
+[*]게임을 완전히 종료하고, 이 모드의 예전 버전을 지우거나 끕니다.
+[*]이 ZIP을 Boot Mod Loader와 함께 모드 관리자(Arsenal 등)에 가져옵니다.
+[*][b]로드 순서: Boot Mod Loader가 이 모드보다 아래에 있어야 합니다.[/b] Arsenal의 기본 설정값은 맨 아래에 있는 모드가 더 높은 우선순위를 가집니다.
+[*]적용(Deploy) 후 게임을 시작합니다.
+[/list]
+
+[size=5][b]알아 둘 점[/b][/size]
+[list]
+[*]반납 지점과 밸브는 사용한 뒤에도 표시됩니다. 모드가 완료 여부를 알 수 없습니다.
+[*]파괴된 [b]탱크[/b]와 [b]보급 FRV[/b]는 잔해가 맵에서 사라질 때까지 마커가 남습니다. 엑소슈트와 다른 FRV는 파괴를 인식합니다.
+[*]터미널은 원래 잘 보이므로 표시하지 않습니다.
+[/list]
