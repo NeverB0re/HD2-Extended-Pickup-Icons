@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.1.0-test.13 loading", text)
+            self.assertIn("Pickup Dots 2.1.0 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -995,38 +995,20 @@ class ScreenTests(Case):
         self.frames(5, start=30.0)
         self.assertGreater(len(self.screen_tris()), 0)
 
-    def test_with_chef_a_valve_turned_all_the_way_loses_its_marker(self):
-        valve = "content/objectives/obj_common/oil_pump/oil_pump_valve"
+    def test_with_chef_launch_codes_you_pick_up_leave_other_codes_marked(self):
+        codes = "content/objectives/obj_common/generic_intel/generic_intel"
         self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
                                                   "fov": math.radians(50)})
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(valve, [unit(3, 0, 0)])
+        self.set_units(codes, [unit(0, -6.5, 0), unit(5, 5, 0)])      # one at you, one farther on
         self.load_with_chef()
         self.settle()
-        self.assertEqual(len(self.screen_points()), 1)
-        self.fake.units[valve][1].turn = 1.0                          # its wheel turns, then stays
-        self.frames(300, start=30.0)
-        self.assertIn("control: oil_pump_valve at 3.0 0.0 0.0 - part 3 turned and stopped: taken for closed",
-                      self.log_text())
-        self.assertEqual(self.screen_tris(), [])
-        self.fake.units[valve][1].turn = 0.1                          # turned back: open
-        self.frames(120, start=40.0)
-        self.assertIn("control: oil_pump_valve at 3.0 0.0 0.0 - turned back: open again", self.log_text())
-        self.assertEqual(len(self.screen_points()), 1)
-
-    def test_with_chef_one_valve_turned_leaves_the_others_marked(self):
-        valve = "content/objectives/obj_common/oil_pump/oil_pump_valve"
-        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
-                                                  "fov": math.radians(50)})
-        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(valve, [unit(-3, 0, 0), unit(3, 0, 0), unit(0, 5, 0)])
-        self.load_with_chef()
-        self.settle()
-        self.assertEqual(len(self.screen_points()), 3)
-        self.fake.units[valve][2].turn = 1.0                          # only the one on the right
-        self.frames(300, start=30.0)
-        self.assertEqual(len(self.screen_points()), 2)
-        self.assertEqual(self.log_text().count("taken for closed"), 1)
+        self.fake.e_key = True
+        self.frames(3, start=30.0)
+        self.fake.e_key = False
+        self.frames(80, start=40.0)
+        self.assertEqual(self.log_text().count("taken: "), 1)
+        self.assertEqual(len(self.screen_points()), 1)                 # the other codes keep their marker
 
     def test_with_chef_a_crank_that_turned_keeps_its_marker(self):
         crank = "content/objectives/obj_common/colony_relay/colony_relay_01/objective_colony_relay_antenna_crank_01"
@@ -1040,35 +1022,6 @@ class ScreenTests(Case):
         self.frames(300, start=30.0)
         self.assertNotIn("control: ", self.log_text())
         self.assertEqual(len(self.screen_points()), 1)
-
-    def test_with_chef_a_vehicles_parts_are_logged_on_the_ground_but_tell_no_wreck(self):
-        frv = "content/fac_helldivers/vehicles/frv_supply/frv_supply"
-        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
-                                                  "fov": math.radians(50)})
-        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(frv, [unit(0, 20, 0)])
-        self.load_with_chef()
-        self.settle()
-        self.frames(80, start=30.0)                                   # a second look: it isn't falling
-        self.assertIn("parts: frv_supply at 0.0 20.0 0.0, on the ground, 2 parts: 2:", self.log_text())
-        self.fake.units[frv][1].blast = 1                             # all its parts change
-        self.frames(120, start=40.0)
-        self.assertIn("parts: frv_supply at 0.0 20.0 0.0, 2 changed, 2 parts: 2:", self.log_text())
-        self.assertNotIn("taken for destroyed", self.log_text())      # not until a wreck's parts are known
-        self.assertGreater(len(self.screen_tris()), 0)
-
-    def test_with_chef_a_vehicle_coming_down_from_orbit_is_not_logged_on_the_ground(self):
-        frv = "content/fac_helldivers/vehicles/frv_supply/frv_supply"
-        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
-                                                  "fov": math.radians(50)})
-        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(frv, [unit(0, 20, 800)])
-        self.load_with_chef()
-        self.frames(1, start=11.0)
-        for k in range(5):                                            # 150 m a second down
-            self.fake.units[frv][1].z = 800 - 150 * (k + 1)
-            self.frames(61, start=20.0 + k)
-        self.assertNotIn("on the ground", self.log_text())
 
     def test_you_stay_the_same_helldiver_while_a_teammate_passes_the_camera(self):
         self.set_units(AVATAR, [unit(0, -8, 0), unit(0, -12.5, 0)], loaded=False)   # the camera: 0 -10 0.6
@@ -1092,15 +1045,6 @@ class ScreenTests(Case):
         self.settle()
         colours = {(t.color.r, t.color.g, t.color.b) for t in self.screen_tris()}
         self.assertEqual(colours, {(110, 205, 255)})
-
-    def test_where_mission_items_lie_is_logged_once_per_spot(self):
-        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(MARK, [unit(0, 0, -30), unit(0, 1, -30)])          # under the map, 1 m apart: one spot
-        self.load()
-        self.settle()
-        lines = [l for l in self.log_text().splitlines() if "spot: " in l]
-        self.assertEqual(len(lines), 1, lines)
-        self.assertIn("spot: il_sarcophagus at 0.0 0.0 -30.0 (you at 0.0 -8.0 0.0)", lines[0])
 
     def set_options(self, values):
         self.fake.option_values = self.lua.table_from(values)

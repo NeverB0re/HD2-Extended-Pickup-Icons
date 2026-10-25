@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.1.0-test.13'
+local VERSION = '2.1.0'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -40,7 +40,7 @@ local LOOK = {                -- settings (2.1.0)
     fade = true,              -- supplies fainter with distance, down to FADE_LEAST of opacity at the edge
     distance = true,          -- the distance above a vehicle's marker, in the game's font (Chef Shared Loader)
     game_textures = true,     -- icons drawn from the game's own textures (Chef Shared Loader) where it has them
-                              -- loaded, else pixels (test.6-test.11 tried both: the textures look better)
+                              -- loaded, else pixels (both were tried in testing: the textures look better)
 }
 -- The game's icon textures the pixel icons were made from (tools/icons): id, width, height, and the icon's
 -- box in it (left, top, right, bottom; from the top). Drawn by Chef Shared Loader when the game has one loaded.
@@ -52,7 +52,7 @@ local ICON_TEXTURES = {
     egg = {'460c4e527705db55', 256, 256, 45, 16, 208, 240},
 }
 local VEHICLE_RGB = {110, 205, 255}   -- vehicles: the sky blue of the HUD's support weapon icons
-local DISTANCE_PX = 1.6       -- the loader's text size at 1080 pixels of screen (test.5's 8 drew far too big)
+local DISTANCE_PX = 1.6       -- the loader's text size at 1080 pixels of screen (8 drew far too big)
 local BOLD = {{0, 0}, {1, 0}, {0, 1}, {1, 1}}   -- the distance drawn at each, in the loader's screen pixels
 local DOT_HEIGHT = 0.6        -- metres above the unit's origin
 local GROUP_HEIGHT = {samples = 0.3, supplies = 0.3, dropoffs = 1.8, controls = 1.2, vehicles = 3.2}
@@ -310,9 +310,8 @@ local sr = rawget(_G, 'stingray')
 
 -- Names only: walking the tables is plain Lua and calls nothing in the engine.
 local function log_api_inventory()
-    for _, lib in ipairs({'Application', 'World', 'Unit', 'LineObject', 'IdString64', 'Script', 'Gui', 'Matrix4x4', 'Camera', 'Mesh', 'Actor',
-                          'Window', 'Mouse', 'Keyboard', 'GameSession', 'Network', 'Entity', 'EntityManager',
-                          'PhysicsWorld', 'Material'}) do
+    for _, lib in ipairs({'Application', 'World', 'Unit', 'LineObject', 'IdString64', 'Script', 'Gui', 'Matrix4x4', 'Camera',
+                          'Window', 'Mouse', 'Keyboard'}) do
         local t = sr[lib]
         if type(t) == 'table' then
             local names = {}
@@ -487,10 +486,10 @@ local function build_keys()
     local unnamed = 0
     for _, t in ipairs(TARGETS) do
         if t.name then
-            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, wreck_parts = t.wreck_parts, valve = t.valve}
+            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height}
         elseif t.hex then
             unnamed = unnamed + 1
-            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, wreck_parts = t.wreck_parts, valve = t.valve}
+            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height}
         end
     end
     log(string.format('%d target resources: %d named, %d by id only (looked up if the id self-test passes)',
@@ -677,17 +676,8 @@ local SHIP_HIDDEN = {mission = true, carry = true, dropoffs = true, controls = t
 -- Last frame's counts per group, for the status line: drawn, hidden as worn/held, out of range.
 local last_counts = {}
 
--- Diagnostics (2.1.0): where each mission item, load, drop-off and control lies, once per spot and
--- world, so a log shows items the game keeps out of sight (diamonds under the map and under the ship's
--- hellpods were reported on 2.0.1). Items on a helldiver are left out.
-local SPOT_KINDS = {mission = true, carry = true, dropoffs = true, controls = true}
-local SPOT_LOG_MAX = 300      -- lines a launch
-local SPOT_SAME = 2           -- metres: the same spot
-local spots = {}              -- per key: the spots logged in this world
-local spots_logged = 0
-
 -- Launch codes and keycards (targets with 'taken'): picked up, the unit stays where it lay, alive and
--- unchanged in everything the engine lets a mod read (2.1.0-test.1 logs). So they are taken for picked up when
+-- unchanged in everything the engine lets a mod read (2.1.0 test logs). So they are taken for picked up when
 -- you press the interact key (TAKE_KEY) within TAKE_REACH of them, or a teammate has been within
 -- TAKE_TEAMMATE_REACH of them for TAKE_HOLD_S (their keys can't be read; they pick codes up running past, so
 -- briefly). You walking past leaves them marked. Without the loader's keyboard: you count as a teammate.
@@ -695,8 +685,8 @@ local TAKE_REACH = 2
 local TAKE_TEAMMATE_REACH = 1.5
 local TAKE_HOLD_S = 0.5
 local TAKE_KEY = 'e'
--- Per-unit tables are keyed by the unit itself, weakly (2.1.0-test.13): under Chef Shared Loader every unit's
--- tostring is the same, so test.12 kept one state for all three valves of a mission.
+-- Per-unit tables are keyed by the unit itself, weakly: under Chef Shared Loader every unit's tostring is the
+-- same (one key for all would mix units up).
 local function by_unit() return setmetatable({}, {__mode = 'k'}) end
 local reached = by_unit()     -- per unit: since when a teammate has been at it
 local taken = by_unit()       -- per unit: picked up (this world)
@@ -730,188 +720,6 @@ local function check_taken(p, now)
         return true
     end
     return false
-end
-
--- Parts (2.1.0, Chef Shared Loader only): a unit's parts (scene graph nodes), where they are and which way they
--- face, relative to the unit itself, looked at every PARTS_EVERY_S. What test.3-test.8 logs showed:
---   * an oil pump valve turned: one part (its wheel) turns, and stays turned when done. So a valve (targets with
---     'valve') one of whose parts faces another way than when first seen, none having moved for CONTROL_STILL_S,
---     is closed; turned back to within PARTS_TURNED of how it was first seen, it is open again. Not cranks or the
---     radar station's valve: they turn round and round, and end as they began;
---   * a supply FRV destroyed: in one look, most of its parts change. But so they did (test.12) while it came down
---     from orbit and while it drove, the parts then turned by its heading only: no wreck is told from parts
---     (targets with 'wreck_parts', none for now) until the parts of a wreck are known.
---   * test.10, to define a wreck by how its parts lie instead: a vehicle's every part is logged when first seen
---     and after a big change (PARTS_SNAPSHOT_SHARE), and how many change while it moves (PARTS_MOVING_NEAR).
--- Near you (PARTS_LOG_NEAR) what moved is logged too, for what is still to be found out (tanks).
-local PARTS_EVERY_S = 1
-local PARTS_MOST = 160        -- parts looked at, at most
-local PARTS_MOVE = 0.05       -- metres
-local PARTS_TURN = 0.05       -- of the forward vector: moved since the last look
-local PARTS_TURNED = 0.94     -- cosine: turned away from where it was first seen (about 20 degrees)
-local PARTS_WRECKED = 0.6
-local CONTROL_STILL_S = 2
-local PARTS_LOG_NEAR = 15
-local PARTS_LOG_MAX = 800
-local PARTS_SNAPSHOT_SHARE = 0.5
-local PARTS_SNAPSHOTS = 6     -- per vehicle
-local PARTS_FALLING = 5       -- metres a second down: coming down from orbit, not yet a vehicle on the ground
-local PARTS_MOVING_NEAR = 30
-local parts = by_unit()       -- per unit: {at, root, first, nodes, changed_at, done, wrecked}
-local parts_logged = 0
-
--- The unit's own axes (right, forward, up) from its root's rotation; nil when the engine won't say. test.12 turned
--- parts by the unit's heading only, and a vehicle tilting on a slope or tumbling down from orbit seemed to change
--- every part.
-local function axes_of(u)
-    local q = CHEF.call('Unit.world_rotation', u, 1)
-    if q == nil then return nil end
-    local out = {}
-    for _, f in ipairs({'Quaternion.right', 'Quaternion.forward', 'Quaternion.up'}) do
-        local v = CHEF.call(f, q)
-        local x, y, z
-        if v ~= nil then x, y, z = CHEF.call('Vector3.to_elements', v) end
-        if type(x) ~= 'number' or type(y) ~= 'number' or type(z) ~= 'number' then return nil end
-        out[#out + 1] = {x, y, z}
-    end
-    return out
-end
-
-local function read_parts(u)
-    local rx, ry, rz = CHEF.unit_position(u, 1)
-    local _, _, _, yaw = CHEF.unit_rotation(u, 1)
-    local n = CHEF.call('Unit.num_scene_graph_items', u)
-    if type(rx) ~= 'number' or type(yaw) ~= 'number' or type(n) ~= 'number' then return nil end
-    local ax = axes_of(u)
-    local function into(x, y, z)                         -- a world vector in the unit's own frame
-        if ax then
-            return x * ax[1][1] + y * ax[1][2] + z * ax[1][3], x * ax[2][1] + y * ax[2][2] + z * ax[2][3],
-                   x * ax[3][1] + y * ax[3][2] + z * ax[3][3]
-        end
-        local c, sn = math.cos(-yaw), math.sin(-yaw)      -- its heading only
-        return x * c - y * sn, x * sn + y * c, z
-    end
-    local nodes, count = {}, 0
-    for i = 2, math.min(n, PARTS_MOST) do
-        local x, y, z = CHEF.unit_position(u, i)
-        local fx, fy, fz = CHEF.unit_rotation(u, i)
-        if type(x) == 'number' and type(fx) == 'number' then
-            local lx, ly, lz = into(x - rx, y - ry, z - rz)
-            local lfx, lfy, lfz = into(fx, fy, fz)
-            nodes[i] = {lx, ly, lz, lfx, lfy, lfz}
-            count = count + 1
-        end
-    end
-    return {rx, ry, rz}, nodes, count, n
-end
-
-local function snapshot(name, why, where, nodes, count)
-    local list = {}
-    for i = 2, PARTS_MOST do
-        local v = nodes[i]
-        if v then list[#list + 1] = string.format('%d:%.2f,%.2f,%.2f/%.2f,%.2f,%.2f', i, v[1], v[2], v[3], v[4], v[5], v[6]) end
-    end
-    log(string.format('parts: %s at %.1f %.1f %.1f, %s, %d parts: %s', name, where[1], where[2], where[3], why, count,
-        table.concat(list, ' ')))
-end
-
-local function parts_step(k, p, d, now)
-    if p.unit == nil or not (chef_has('call') and chef_has('unit_position') and chef_has('unit_rotation')) then
-        return nil
-    end
-    local id = p.unit
-    local e = parts[id]
-    if e and now - e.at < PARTS_EVERY_S then return e end
-    local where, nodes, count, n = read_parts(p.unit)
-    if where == nil then return e end
-    local name = string.match(k.label, '([^/]+)$') or k.label
-    local logging = d ~= nil and d <= PARTS_LOG_NEAR and parts_logged < PARTS_LOG_MAX
-    if e == nil then
-        e = {at = now, root = where, first = nodes, nodes = nodes, changed_at = now, snapshots = 0}
-        parts[id] = e
-        e.snapshots = 0
-        if logging then
-            parts_logged = parts_logged + 1
-            log(string.format('pose: %s at %.1f %.1f %.1f: %d parts', name, where[1], where[2], where[3], n))
-        end
-        return e
-    end
-    local moved = {}
-    for i, v in pairs(nodes) do
-        local o = e.nodes[i]
-        if o == nil or math.abs(v[1] - o[1]) > PARTS_MOVE or math.abs(v[2] - o[2]) > PARTS_MOVE
-            or math.abs(v[3] - o[3]) > PARTS_MOVE or math.abs(v[4] - o[4]) > PARTS_TURN
-            or math.abs(v[5] - o[5]) > PARTS_TURN or math.abs(v[6] - o[6]) > PARTS_TURN then
-            moved[#moved + 1] = i
-        end
-    end
-    local still = math.abs(where[1] - e.root[1]) < 0.2 and math.abs(where[2] - e.root[2]) < 0.2
-        and math.abs(where[3] - e.root[3]) < 0.2
-    if #moved > 0 or not still then e.changed_at = now end
-    local falling = (e.root[3] - where[3]) / math.max(0.001, now - e.at) > PARTS_FALLING
-    if k.group == 'vehicles' and count > 0 and not falling then
-        if e.snapshots == 0 then
-            e.snapshots = 1
-            snapshot(name, 'on the ground', where, nodes, count)
-        elseif #moved >= PARTS_SNAPSHOT_SHARE * count and e.snapshots < PARTS_SNAPSHOTS then
-            e.snapshots = e.snapshots + 1
-            snapshot(name, string.format('%d changed%s', #moved, still and '' or ', moving'), where, nodes, count)
-        elseif not still and d ~= nil and d <= PARTS_MOVING_NEAR and parts_logged < PARTS_LOG_MAX then
-            parts_logged = parts_logged + 1
-            log(string.format('parts: %s moving: %d of %d changed', name, #moved, count))
-        end
-    end
-    if k.wreck_parts and not falling and not e.wrecked and count > 0 and #moved >= PARTS_WRECKED * count then
-        e.wrecked = true
-        log(string.format('vehicle: %s at %.1f %.1f %.1f - %d of %d parts changed at once: taken for destroyed',
-            name, where[1], where[2], where[3], #moved, count))
-    end
-    if k.valve then
-        local turned
-        for i, v in pairs(nodes) do
-            local f = e.first[i]
-            if f and v[4] * f[4] + v[5] * f[5] + v[6] * f[6] < PARTS_TURNED then
-                turned = i
-                break
-            end
-        end
-        if not e.done and turned and now - e.changed_at >= CONTROL_STILL_S then
-            e.done = true
-            log(string.format('control: %s at %.1f %.1f %.1f - part %d turned and stopped: taken for closed',
-                name, where[1], where[2], where[3], turned))
-        elseif e.done and not turned then
-            e.done = false
-            log(string.format('control: %s at %.1f %.1f %.1f - turned back: open again', name, where[1], where[2], where[3]))
-        end
-    end
-    if logging and still and #moved > 0 then
-        parts_logged = parts_logged + 1
-        table.sort(moved)
-        local shown = {}
-        for j = 1, math.min(#moved, 12) do
-            local v = nodes[moved[j]]
-            shown[j] = string.format('%d:%.2f,%.2f,%.2f/%.2f,%.2f,%.2f', moved[j], v[1], v[2], v[3], v[4], v[5], v[6])
-        end
-        log(string.format('pose: %s at %.1f %.1f %.1f: %d of %d parts moved: %s%s', name, where[1], where[2], where[3],
-            #moved, count, table.concat(shown, ' '), #moved > 12 and ' ...' or ''))
-    end
-    e.at, e.root, e.nodes = now, where, nodes
-    return e
-end
-
-local function note_spot(k, p)
-    if spots_logged >= SPOT_LOG_MAX then return end
-    local seen = spots[k]
-    if seen == nil then
-        seen = {}
-        spots[k] = seen
-    end
-    if near(seen, p, SPOT_SAME) then return end
-    seen[#seen + 1] = p
-    spots_logged = spots_logged + 1
-    local you = me and string.format(' (you at %.1f %.1f %.1f)', me[1], me[2], me[3]) or ''
-    log(string.format('spot: %s at %.1f %.1f %.1f%s', string.match(k.label, '([^/]+)$') or k.label,
-        p[1], p[2], p[3], you))
 end
 
 local function collect_dots(now)
@@ -953,8 +761,6 @@ local function collect_dots(now)
             local near_any = false
             for _, p in ipairs(points) do
                 local d, who, carried, mine, others = measure(p[1], p[2], p[3], keys[i].worn)
-                if SPOT_KINDS[group] and not carried then note_spot(keys[i], p) end
-                local state = (group == 'controls' or group == 'vehicles') and parts_step(keys[i], p, d, now) or nil
                 if d ~= nil and d <= range + HOT_MARGIN then near_any = true end
                 if d == nil or d > range then
                     c.far = c.far + 1
@@ -965,7 +771,6 @@ local function collect_dots(now)
                     local armed_now = near(arms, p, ARMS_NEAR)
                     if armed_now then v.armed, v.lost = true, nil end
                     local destroyed = near(wrecks, p, WRECK_NEAR) or (v.armed and not armed_now)
-                        or (state ~= nil and state.wrecked)
                     if destroyed and not v.lost then
                         v.lost = true
                         log('vehicle: ' .. (string.match(keys[i].label, '([^/]+)$') or keys[i].label)
@@ -981,8 +786,6 @@ local function collect_dots(now)
                     and d < (keys[i].near or NEAR_ME[group]) - NEAR_OVERLAP then
                     c.worn = c.worn + 1
                 elseif keys[i].taken and check_taken(p, now) then
-                    c.worn = c.worn + 1
-                elseif state ~= nil and state.done then   -- an oil pump valve turned all the way (closed)
                     c.worn = c.worn + 1
                 elseif carried and group ~= 'dropoffs' and group ~= 'controls' then   -- never worn; a teammate may stand at it
                     c.worn = c.worn + 1
@@ -1350,7 +1153,7 @@ local function screen_draw(world, world_id, dots)
                 local c = tint or {255, 255, 255}
                 local color = CHEF.color(c[1], c[2], c[3], math.floor(255 * opacity))
                 local x = sx * cw / width - CHEF.text_width(text, px) / 2
-                -- bold: the loader's text has one weight, too thin at this size (test.12), so it goes down
+                -- bold: the loader's text has one weight, too thin at this size, so it goes down
                 -- four times, a pixel apart
                 local y = (top + 3) * ch / height
                 for _, o in ipairs(BOLD) do CHEF.text(x + o[1], y + o[2], text, px, color) end
@@ -1634,7 +1437,7 @@ local function tick()
         world_id = 'world #' .. world_seq
         last_world, world_seen_at, cursor, found, players, players_read_at, me = world, now, 1, {}, {}, nil, nil
         vehicles_seen = {}
-        spots, reached, taken, parts, me_unit = {}, by_unit(), by_unit(), by_unit(), nil
+        reached, taken, me_unit = by_unit(), by_unit(), nil
         hot = {}
         new_main_world()
         traced = 0

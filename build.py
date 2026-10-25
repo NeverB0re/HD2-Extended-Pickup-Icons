@@ -76,9 +76,9 @@ Requires Chef Shared Loader 1.2.0 or newer (Nexus mod 17760). Give it the highes
 in your mod manager (in Arsenal, by default, the bottom of the list).
 
 Good to know:
-- Oil pump valves turned shut (back on when opened again) and destroyed exosuits and FRVs
-  (supply FRVs too) lose their marker. Destroyed tanks keep it until the wreck disappears,
-  and cranks and other valves stay marked after you turn them.
+- Valves and cranks stay marked after you turn them.
+- Destroyed exosuits and FRVs lose their marker. Destroyed tanks and supply FRVs keep it
+  until the wreck disappears from the map.
 """
 
 
