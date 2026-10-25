@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.1.0-test.12 loading", text)
+            self.assertIn("Pickup Dots 2.1.0-test.13 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -960,6 +960,7 @@ class ScreenTests(Case):
         self.settle()
         texts = list(self.fake.texts.values())
         self.assertEqual({t.s for t in texts}, {"28m"})
+        self.assertEqual(len({(round(t.x, 3), round(t.y, 3)) for t in texts}), 4)   # bold: four, a pixel apart
         self.assertGreater(texts[-1].y, 600)                          # above the vehicle's icon
         self.assertAlmostEqual(texts[-1].px, 1200 / 1080 * 1.6, places=6)   # a fifth of test.5's size
 
@@ -1013,6 +1014,20 @@ class ScreenTests(Case):
         self.assertIn("control: oil_pump_valve at 3.0 0.0 0.0 - turned back: open again", self.log_text())
         self.assertEqual(len(self.screen_points()), 1)
 
+    def test_with_chef_one_valve_turned_leaves_the_others_marked(self):
+        valve = "content/objectives/obj_common/oil_pump/oil_pump_valve"
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(valve, [unit(-3, 0, 0), unit(3, 0, 0), unit(0, 5, 0)])
+        self.load_with_chef()
+        self.settle()
+        self.assertEqual(len(self.screen_points()), 3)
+        self.fake.units[valve][2].turn = 1.0                          # only the one on the right
+        self.frames(300, start=30.0)
+        self.assertEqual(len(self.screen_points()), 2)
+        self.assertEqual(self.log_text().count("taken for closed"), 1)
+
     def test_with_chef_a_crank_that_turned_keeps_its_marker(self):
         crank = "content/objectives/obj_common/colony_relay/colony_relay_01/objective_colony_relay_antenna_crank_01"
         self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
@@ -1026,7 +1041,7 @@ class ScreenTests(Case):
         self.assertNotIn("control: ", self.log_text())
         self.assertEqual(len(self.screen_points()), 1)
 
-    def test_with_chef_a_supply_frv_whose_parts_all_change_is_taken_for_destroyed(self):
+    def test_with_chef_a_vehicles_parts_are_logged_on_the_ground_but_tell_no_wreck(self):
         frv = "content/fac_helldivers/vehicles/frv_supply/frv_supply"
         self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
                                                   "fov": math.radians(50)})
@@ -1034,15 +1049,26 @@ class ScreenTests(Case):
         self.set_units(frv, [unit(0, 20, 0)])
         self.load_with_chef()
         self.settle()
+        self.frames(80, start=30.0)                                   # a second look: it isn't falling
+        self.assertIn("parts: frv_supply at 0.0 20.0 0.0, on the ground, 2 parts: 2:", self.log_text())
+        self.fake.units[frv][1].blast = 1                             # all its parts change
+        self.frames(120, start=40.0)
+        self.assertIn("parts: frv_supply at 0.0 20.0 0.0, 2 changed, 2 parts: 2:", self.log_text())
+        self.assertNotIn("taken for destroyed", self.log_text())      # not until a wreck's parts are known
         self.assertGreater(len(self.screen_tris()), 0)
-        self.assertIn("parts: frv_supply at 0.0 20.0 0.0, first seen, 2 parts: 2:", self.log_text())
-        self.fake.units[frv][1].blast = 1                             # it blows up, thrown aside
-        self.fake.units[frv][1].x = 2
-        self.frames(120, start=30.0)
-        self.assertIn("parts: frv_supply at 2.0 20.0 0.0, 2 changed, moving, 2 parts: 2:", self.log_text())
-        self.assertIn("vehicle: frv_supply at 2.0 20.0 0.0 - 2 of 2 parts changed at once: taken for destroyed",
-                      self.log_text())
-        self.assertEqual(self.screen_tris(), [])
+
+    def test_with_chef_a_vehicle_coming_down_from_orbit_is_not_logged_on_the_ground(self):
+        frv = "content/fac_helldivers/vehicles/frv_supply/frv_supply"
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(frv, [unit(0, 20, 800)])
+        self.load_with_chef()
+        self.frames(1, start=11.0)
+        for k in range(5):                                            # 150 m a second down
+            self.fake.units[frv][1].z = 800 - 150 * (k + 1)
+            self.frames(61, start=20.0 + k)
+        self.assertNotIn("on the ground", self.log_text())
 
     def test_you_stay_the_same_helldiver_while_a_teammate_passes_the_camera(self):
         self.set_units(AVATAR, [unit(0, -8, 0), unit(0, -12.5, 0)], loaded=False)   # the camera: 0 -10 0.6

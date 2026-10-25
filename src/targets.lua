@@ -57,7 +57,7 @@ return {
   {group='vehicles', name='content/fac_helldivers/vehicles/combat_walker/combat_walker', icon='walker', height=4.8},  -- tall: above it
   {group='vehicles', name='content/fac_helldivers/vehicles/frv/frv', icon='car'},
   {group='vehicles', name='content/fac_helldivers/vehicles/frv_heavy/frv_flamer', icon='car'},
-  {group='vehicles', name='content/fac_helldivers/vehicles/frv_supply/frv_supply', icon='car', wreck_parts=true},
+  {group='vehicles', name='content/fac_helldivers/vehicles/frv_supply/frv_supply', icon='car'},
   {group='vehicles', name='content/fac_helldivers/vehicles/tank/tank', icon='tank'},
   {group='vehicles', name='content/fac_helldivers/vehicles/tank_storm/tank_storm', icon='tank'},
   -- 0.18.0: mission controls you work by hand (valves, cranks, switches, buttons), names from filediver's hash list

@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.1.0-test.12'
+local VERSION = '2.1.0-test.13'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -53,6 +53,7 @@ local ICON_TEXTURES = {
 }
 local VEHICLE_RGB = {110, 205, 255}   -- vehicles: the sky blue of the HUD's support weapon icons
 local DISTANCE_PX = 1.6       -- the loader's text size at 1080 pixels of screen (test.5's 8 drew far too big)
+local BOLD = {{0, 0}, {1, 0}, {0, 1}, {1, 1}}   -- the distance drawn at each, in the loader's screen pixels
 local DOT_HEIGHT = 0.6        -- metres above the unit's origin
 local GROUP_HEIGHT = {samples = 0.3, supplies = 0.3, dropoffs = 1.8, controls = 1.2, vehicles = 3.2}
                               -- icons (samples, supplies) sit lower than diamonds   -- these stand taller: the marker goes above them
@@ -694,11 +695,14 @@ local TAKE_REACH = 2
 local TAKE_TEAMMATE_REACH = 1.5
 local TAKE_HOLD_S = 0.5
 local TAKE_KEY = 'e'
-local reached = {}            -- per unit: since when a teammate has been at it
-local taken = {}              -- per unit: picked up (this world)
+-- Per-unit tables are keyed by the unit itself, weakly (2.1.0-test.13): under Chef Shared Loader every unit's
+-- tostring is the same, so test.12 kept one state for all three valves of a mission.
+local function by_unit() return setmetatable({}, {__mode = 'k'}) end
+local reached = by_unit()     -- per unit: since when a teammate has been at it
+local taken = by_unit()       -- per unit: picked up (this world)
 
 local function check_taken(p, now)
-    local id = p.unit ~= nil and tostring(p.unit) or string.format('%.0f %.0f %.0f', p[1], p[2], p[3])
+    local id = p.unit or string.format('%.0f %.0f %.0f', p[1], p[2], p[3])
     if taken[id] then return true end
     local keys_known = chef_has('key_down')
     local by, other = nil, false
@@ -734,8 +738,9 @@ end
 --     'valve') one of whose parts faces another way than when first seen, none having moved for CONTROL_STILL_S,
 --     is closed; turned back to within PARTS_TURNED of how it was first seen, it is open again. Not cranks or the
 --     radar station's valve: they turn round and round, and end as they began;
---   * a supply FRV destroyed: in one look, most of its parts (PARTS_WRECKED of them) change, even while it is
---     thrown about (test.10: no longer only where it stands). Its weapon rack doesn't tell: it stays.
+--   * a supply FRV destroyed: in one look, most of its parts change. But so they did (test.12) while it came down
+--     from orbit and while it drove, the parts then turned by its heading only: no wreck is told from parts
+--     (targets with 'wreck_parts', none for now) until the parts of a wreck are known.
 --   * test.10, to define a wreck by how its parts lie instead: a vehicle's every part is logged when first seen
 --     and after a big change (PARTS_SNAPSHOT_SHARE), and how many change while it moves (PARTS_MOVING_NEAR).
 -- Near you (PARTS_LOG_NEAR) what moved is logged too, for what is still to be found out (tanks).
@@ -749,26 +754,51 @@ local CONTROL_STILL_S = 2
 local PARTS_LOG_NEAR = 15
 local PARTS_LOG_MAX = 800
 local PARTS_SNAPSHOT_SHARE = 0.5
-local PARTS_SNAPSHOTS = 4     -- per vehicle
+local PARTS_SNAPSHOTS = 6     -- per vehicle
+local PARTS_FALLING = 5       -- metres a second down: coming down from orbit, not yet a vehicle on the ground
 local PARTS_MOVING_NEAR = 30
-local parts = {}              -- per unit: {at, root, first, nodes, changed_at, done, wrecked}
+local parts = by_unit()       -- per unit: {at, root, first, nodes, changed_at, done, wrecked}
 local parts_logged = 0
+
+-- The unit's own axes (right, forward, up) from its root's rotation; nil when the engine won't say. test.12 turned
+-- parts by the unit's heading only, and a vehicle tilting on a slope or tumbling down from orbit seemed to change
+-- every part.
+local function axes_of(u)
+    local q = CHEF.call('Unit.world_rotation', u, 1)
+    if q == nil then return nil end
+    local out = {}
+    for _, f in ipairs({'Quaternion.right', 'Quaternion.forward', 'Quaternion.up'}) do
+        local v = CHEF.call(f, q)
+        local x, y, z
+        if v ~= nil then x, y, z = CHEF.call('Vector3.to_elements', v) end
+        if type(x) ~= 'number' or type(y) ~= 'number' or type(z) ~= 'number' then return nil end
+        out[#out + 1] = {x, y, z}
+    end
+    return out
+end
 
 local function read_parts(u)
     local rx, ry, rz = CHEF.unit_position(u, 1)
     local _, _, _, yaw = CHEF.unit_rotation(u, 1)
     local n = CHEF.call('Unit.num_scene_graph_items', u)
     if type(rx) ~= 'number' or type(yaw) ~= 'number' or type(n) ~= 'number' then return nil end
-    local c, sn = math.cos(-yaw), math.sin(-yaw)
-    local function flat(x, y) return x * c - y * sn, x * sn + y * c end   -- turned into the unit's own frame
+    local ax = axes_of(u)
+    local function into(x, y, z)                         -- a world vector in the unit's own frame
+        if ax then
+            return x * ax[1][1] + y * ax[1][2] + z * ax[1][3], x * ax[2][1] + y * ax[2][2] + z * ax[2][3],
+                   x * ax[3][1] + y * ax[3][2] + z * ax[3][3]
+        end
+        local c, sn = math.cos(-yaw), math.sin(-yaw)      -- its heading only
+        return x * c - y * sn, x * sn + y * c, z
+    end
     local nodes, count = {}, 0
     for i = 2, math.min(n, PARTS_MOST) do
         local x, y, z = CHEF.unit_position(u, i)
         local fx, fy, fz = CHEF.unit_rotation(u, i)
         if type(x) == 'number' and type(fx) == 'number' then
-            local lx, ly = flat(x - rx, y - ry)
-            local lfx, lfy = flat(fx, fy)
-            nodes[i] = {lx, ly, z - rz, lfx, lfy, fz}
+            local lx, ly, lz = into(x - rx, y - ry, z - rz)
+            local lfx, lfy, lfz = into(fx, fy, fz)
+            nodes[i] = {lx, ly, lz, lfx, lfy, lfz}
             count = count + 1
         end
     end
@@ -789,7 +819,7 @@ local function parts_step(k, p, d, now)
     if p.unit == nil or not (chef_has('call') and chef_has('unit_position') and chef_has('unit_rotation')) then
         return nil
     end
-    local id = tostring(p.unit)
+    local id = p.unit
     local e = parts[id]
     if e and now - e.at < PARTS_EVERY_S then return e end
     local where, nodes, count, n = read_parts(p.unit)
@@ -799,10 +829,7 @@ local function parts_step(k, p, d, now)
     if e == nil then
         e = {at = now, root = where, first = nodes, nodes = nodes, changed_at = now, snapshots = 0}
         parts[id] = e
-        if k.group == 'vehicles' then
-            e.snapshots = 1
-            snapshot(name, 'first seen', where, nodes, count)
-        end
+        e.snapshots = 0
         if logging then
             parts_logged = parts_logged + 1
             log(string.format('pose: %s at %.1f %.1f %.1f: %d parts', name, where[1], where[2], where[3], n))
@@ -821,8 +848,12 @@ local function parts_step(k, p, d, now)
     local still = math.abs(where[1] - e.root[1]) < 0.2 and math.abs(where[2] - e.root[2]) < 0.2
         and math.abs(where[3] - e.root[3]) < 0.2
     if #moved > 0 or not still then e.changed_at = now end
-    if k.group == 'vehicles' and count > 0 then
-        if #moved >= PARTS_SNAPSHOT_SHARE * count and e.snapshots < PARTS_SNAPSHOTS then
+    local falling = (e.root[3] - where[3]) / math.max(0.001, now - e.at) > PARTS_FALLING
+    if k.group == 'vehicles' and count > 0 and not falling then
+        if e.snapshots == 0 then
+            e.snapshots = 1
+            snapshot(name, 'on the ground', where, nodes, count)
+        elseif #moved >= PARTS_SNAPSHOT_SHARE * count and e.snapshots < PARTS_SNAPSHOTS then
             e.snapshots = e.snapshots + 1
             snapshot(name, string.format('%d changed%s', #moved, still and '' or ', moving'), where, nodes, count)
         elseif not still and d ~= nil and d <= PARTS_MOVING_NEAR and parts_logged < PARTS_LOG_MAX then
@@ -830,7 +861,7 @@ local function parts_step(k, p, d, now)
             log(string.format('parts: %s moving: %d of %d changed', name, #moved, count))
         end
     end
-    if k.wreck_parts and not e.wrecked and count > 0 and #moved >= PARTS_WRECKED * count then
+    if k.wreck_parts and not falling and not e.wrecked and count > 0 and #moved >= PARTS_WRECKED * count then
         e.wrecked = true
         log(string.format('vehicle: %s at %.1f %.1f %.1f - %d of %d parts changed at once: taken for destroyed',
             name, where[1], where[2], where[3], #moved, count))
@@ -1319,7 +1350,10 @@ local function screen_draw(world, world_id, dots)
                 local c = tint or {255, 255, 255}
                 local color = CHEF.color(c[1], c[2], c[3], math.floor(255 * opacity))
                 local x = sx * cw / width - CHEF.text_width(text, px) / 2
-                CHEF.text(x, (top + 3) * ch / height, text, px, color)
+                -- bold: the loader's text has one weight, too thin at this size (test.12), so it goes down
+                -- four times, a pixel apart
+                local y = (top + 3) * ch / height
+                for _, o in ipairs(BOLD) do CHEF.text(x + o[1], y + o[2], text, px, color) end
             end)
         end
         -- an icon from the game's texture, as tall as its pixel icon at this size; false when it can't be drawn
@@ -1552,7 +1586,7 @@ local me_changes = 0
 local function pick_me(world)
     if #players == 0 then return nil end
     if #players == 1 then
-        me_unit = players[1].unit and tostring(players[1].unit) or nil
+        me_unit = players[1].unit
         return players[1]
     end
     local cam = camera_of(world)
@@ -1562,10 +1596,10 @@ local function pick_me(world)
         local dx, dy, dz = p[1] - cam.translation[1], p[2] - cam.translation[2], p[3] - cam.translation[3]
         local d = math.sqrt(dx * dx + dy * dy + dz * dz)
         if best == nil or d < best then best, who = d, p end
-        if me_unit ~= nil and p.unit ~= nil and tostring(p.unit) == me_unit then mine, mine_d = p, d end
+        if me_unit ~= nil and p.unit == me_unit then mine, mine_d = p, d end
     end
     if mine ~= nil and (who == mine or best >= ME_SWITCH * mine_d) then return mine end
-    local id = who.unit and tostring(who.unit) or nil
+    local id = who.unit
     if id ~= me_unit then
         me_unit = id
         me_changes = me_changes + 1
@@ -1600,7 +1634,7 @@ local function tick()
         world_id = 'world #' .. world_seq
         last_world, world_seen_at, cursor, found, players, players_read_at, me = world, now, 1, {}, {}, nil, nil
         vehicles_seen = {}
-        spots, reached, taken, parts, me_unit = {}, {}, {}, {}, nil
+        spots, reached, taken, parts, me_unit = {}, by_unit(), by_unit(), by_unit(), nil
         hot = {}
         new_main_world()
         traced = 0
