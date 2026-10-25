@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.1.0-test.8'
+local VERSION = '2.1.0-test.9'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -37,12 +37,10 @@ local LOOK = {                -- settings (2.1.0)
     hide_near = true,         -- false: markers stay on where the game shows its own icon (NEAR_ME)
     smallest = 0.7,           -- size at the edge of a kind's range (full size up to FULL_SIZE_M)
     opacity = 1,              -- 0..1
-    fade = true,              -- fainter with distance, down to FADE_LEAST of opacity at the edge
+    fade = true,              -- supplies fainter with distance, down to FADE_LEAST of opacity at the edge
     distance = true,          -- the distance above a vehicle's marker, in the game's font (Chef Shared Loader)
     game_textures = false,    -- test: icons drawn from the game's own textures (Chef Shared Loader), not pixels
-    hide_aiming = true,       -- no markers while aiming in first person (Chef Shared Loader)
 }
-local FIRST_PERSON_NEAR = 0.8 -- metres, level: a camera this close to you is first person (a scope)
 -- The game's icon textures the pixel icons were made from (tools/icons): id, width, height, and the icon's
 -- box in it (left, top, right, bottom; from the top). Drawn by Chef Shared Loader when the game has one loaded.
 local ICON_TEXTURES = {
@@ -53,7 +51,7 @@ local ICON_TEXTURES = {
     egg = {'460c4e527705db55', 256, 256, 45, 16, 208, 240},
 }
 local VEHICLE_RGB = {110, 205, 255}   -- vehicles: the sky blue of the HUD's support weapon icons
-local DISTANCE_PX = 8         -- the distance's height at 1080 pixels of screen: a little under the icons'
+local DISTANCE_PX = 1.6       -- the loader's text size at 1080 pixels of screen (test.5's 8 drew far too big)
 local DOT_HEIGHT = 0.6        -- metres above the unit's origin
 local GROUP_HEIGHT = {samples = 0.3, supplies = 0.3, dropoffs = 1.8, controls = 1.2, vehicles = 3.2}
                               -- icons (samples, supplies) sit lower than diamonds   -- these stand taller: the marker goes above them
@@ -70,7 +68,7 @@ local DIAMOND_ASPECT = 1      -- half-width / half-height: a square on its corne
 local EYE_HEIGHT = 1.6        -- diamonds face a point this high above the helldiver
 local VERTICAL_FOV = 50       -- degrees, used when the game's setting cannot be read
 local GAME_FOV_EVERY_S = 10   -- how often the game's settings file is read again
-local SCREEN_DIAMOND = 7.2    -- screen diamond half-height, pixels (0.11: 20% smaller)
+local SCREEN_DIAMOND = 7.92   -- screen diamond half-height, pixels (0.11: 20% smaller; 2.1.0: 10% bigger)
 local SCREEN_LINE = 2         -- screen diamond outline thickness, pixels
 local SCREEN_LAYER = 1        -- screen GUI layer: low, so the game's menus draw over the markers
 
@@ -487,10 +485,10 @@ local function build_keys()
     local unnamed = 0
     for _, t in ipairs(TARGETS) do
         if t.name then
-            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height}
+            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, wreck_parts = t.wreck_parts}
         elseif t.hex then
             unnamed = unnamed + 1
-            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height}
+            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, wreck_parts = t.wreck_parts}
         end
     end
     log(string.format('%d target resources: %d named, %d by id only (looked up if the id self-test passes)',
@@ -729,68 +727,107 @@ local function check_taken(p, now)
     return false
 end
 
--- Diagnostics (2.1.0-test.3, Chef Shared Loader only): what moves inside a valve, crank, generator, vehicle or
--- launch code near you, so a finished valve, a destroyed tank or picked-up codes can be told by their parts: for each one within POSE_NEAR,
--- every POSE_EVERY_S, the parts (scene graph nodes) that moved or turned since the last look, relative to the
--- unit itself. Nothing is logged while the whole unit moves (a vehicle driving).
-local POSE_NEAR = 15
-local POSE_EVERY_S = 1
-local POSE_LOG_MAX = 800
-local POSE_MOVE = 0.05        -- metres
-local POSE_TURN = 0.05        -- of the forward vector
-local POSE_NODES = 160
-local POSE_KINDS = {controls = true, vehicles = true}
-local poses = {}              -- per unit: {at, root = {x, y, z, yaw}, nodes}
-local poses_logged = 0
+-- Parts (2.1.0, Chef Shared Loader only): a unit's parts (scene graph nodes), where they are and which way they
+-- face, relative to the unit itself, looked at every PARTS_EVERY_S. What test.3-test.8 logs showed:
+--   * a valve or crank turned: one part (a valve's wheel) turns, and stays turned when done. So a control one of
+--     whose parts faces another way than when first seen, and none has moved for CONTROL_STILL_S, is finished;
+--   * a supply FRV destroyed: in one look, most of its parts (PARTS_WRECKED of them) change while the unit
+--     stays where it is. (Its weapon rack doesn't tell: it stays.)
+-- Near you (PARTS_LOG_NEAR) what moved is logged too, for what is still to be found out (tanks).
+local PARTS_EVERY_S = 1
+local PARTS_MOST = 160        -- parts looked at, at most
+local PARTS_MOVE = 0.05       -- metres
+local PARTS_TURN = 0.05       -- of the forward vector: moved since the last look
+local PARTS_TURNED = 0.94     -- cosine: turned away from where it was first seen (about 20 degrees)
+local PARTS_WRECKED = 0.6
+local CONTROL_STILL_S = 2
+local PARTS_LOG_NEAR = 15
+local PARTS_LOG_MAX = 800
+local parts = {}              -- per unit: {at, root, first, nodes, changed_at, done, wrecked}
+local parts_logged = 0
 
-local function pose_step(k, p, d, now)
-    if p.unit == nil or d == nil or d > POSE_NEAR or poses_logged >= POSE_LOG_MAX
-        or not (chef_has('call') and chef_has('unit_position') and chef_has('unit_rotation')) then
-        return
-    end
-    local id = tostring(p.unit)
-    local last = poses[id]
-    if last and now - last.at < POSE_EVERY_S then return end
-    local rx, ry, rz = CHEF.unit_position(p.unit, 1)
-    local _, _, _, yaw = CHEF.unit_rotation(p.unit, 1)
-    local n = CHEF.call('Unit.num_scene_graph_items', p.unit)
-    if type(rx) ~= 'number' or type(yaw) ~= 'number' or type(n) ~= 'number' then return end
+local function read_parts(u)
+    local rx, ry, rz = CHEF.unit_position(u, 1)
+    local _, _, _, yaw = CHEF.unit_rotation(u, 1)
+    local n = CHEF.call('Unit.num_scene_graph_items', u)
+    if type(rx) ~= 'number' or type(yaw) ~= 'number' or type(n) ~= 'number' then return nil end
     local c, sn = math.cos(-yaw), math.sin(-yaw)
     local function flat(x, y) return x * c - y * sn, x * sn + y * c end   -- turned into the unit's own frame
-    local nodes, moved = {}, {}
-    for i = 2, math.min(n, POSE_NODES) do
-        local x, y, z = CHEF.unit_position(p.unit, i)
-        local fx, fy, fz = CHEF.unit_rotation(p.unit, i)
+    local nodes, count = {}, 0
+    for i = 2, math.min(n, PARTS_MOST) do
+        local x, y, z = CHEF.unit_position(u, i)
+        local fx, fy, fz = CHEF.unit_rotation(u, i)
         if type(x) == 'number' and type(fx) == 'number' then
             local lx, ly = flat(x - rx, y - ry)
             local lfx, lfy = flat(fx, fy)
-            local v = {lx, ly, z - rz, lfx, lfy, fz}
-            nodes[i] = v
-            local o = last and last.nodes[i]
-            if o and (math.abs(v[1] - o[1]) > POSE_MOVE or math.abs(v[2] - o[2]) > POSE_MOVE
-                    or math.abs(v[3] - o[3]) > POSE_MOVE or math.abs(v[4] - o[4]) > POSE_TURN
-                    or math.abs(v[5] - o[5]) > POSE_TURN or math.abs(v[6] - o[6]) > POSE_TURN)
-                or (last and o == nil) then
-                moved[#moved + 1] = string.format('%d:%.2f,%.2f,%.2f/%.2f,%.2f,%.2f', i, v[1], v[2], v[3], v[4], v[5], v[6])
-            end
-        elseif last and last.nodes[i] then
-            moved[#moved + 1] = i .. ':gone'
+            nodes[i] = {lx, ly, z - rz, lfx, lfy, fz}
+            count = count + 1
         end
     end
-    local name = string.match(k.label, '([^/]+)$') or k.label
-    local still = last and math.abs(rx - last.root[1]) < 0.2 and math.abs(ry - last.root[2]) < 0.2
-        and math.abs(rz - last.root[3]) < 0.2
-    if last == nil then
-        poses_logged = poses_logged + 1
-        log(string.format('pose: %s at %.1f %.1f %.1f: %d parts', name, rx, ry, rz, n))
-    elseif still and #moved > 0 then
-        poses_logged = poses_logged + 1
-        local shown = {}
-        for j = 1, math.min(#moved, 12) do shown[j] = moved[j] end
-        log(string.format('pose: %s at %.1f %.1f %.1f: %d of %d parts moved: %s%s', name, rx, ry, rz, #moved, n,
-            table.concat(shown, ' '), #moved > 12 and ' ...' or ''))
+    return {rx, ry, rz}, nodes, count, n
+end
+
+local function parts_step(k, p, d, now)
+    if p.unit == nil or not (chef_has('call') and chef_has('unit_position') and chef_has('unit_rotation')) then
+        return nil
     end
-    poses[id] = {at = now, root = {rx, ry, rz}, nodes = nodes}
+    local id = tostring(p.unit)
+    local e = parts[id]
+    if e and now - e.at < PARTS_EVERY_S then return e end
+    local where, nodes, count, n = read_parts(p.unit)
+    if where == nil then return e end
+    local name = string.match(k.label, '([^/]+)$') or k.label
+    local logging = d ~= nil and d <= PARTS_LOG_NEAR and parts_logged < PARTS_LOG_MAX
+    if e == nil then
+        e = {at = now, root = where, first = nodes, nodes = nodes, changed_at = now}
+        parts[id] = e
+        if logging then
+            parts_logged = parts_logged + 1
+            log(string.format('pose: %s at %.1f %.1f %.1f: %d parts', name, where[1], where[2], where[3], n))
+        end
+        return e
+    end
+    local moved = {}
+    for i, v in pairs(nodes) do
+        local o = e.nodes[i]
+        if o == nil or math.abs(v[1] - o[1]) > PARTS_MOVE or math.abs(v[2] - o[2]) > PARTS_MOVE
+            or math.abs(v[3] - o[3]) > PARTS_MOVE or math.abs(v[4] - o[4]) > PARTS_TURN
+            or math.abs(v[5] - o[5]) > PARTS_TURN or math.abs(v[6] - o[6]) > PARTS_TURN then
+            moved[#moved + 1] = i
+        end
+    end
+    local still = math.abs(where[1] - e.root[1]) < 0.2 and math.abs(where[2] - e.root[2]) < 0.2
+        and math.abs(where[3] - e.root[3]) < 0.2
+    if #moved > 0 or not still then e.changed_at = now end
+    if k.wreck_parts and still and not e.wrecked and count > 0 and #moved >= PARTS_WRECKED * count then
+        e.wrecked = true
+        log(string.format('vehicle: %s at %.1f %.1f %.1f - %d of %d parts changed at once: taken for destroyed',
+            name, where[1], where[2], where[3], #moved, count))
+    end
+    if k.group == 'controls' and not e.done and now - e.changed_at >= CONTROL_STILL_S then
+        for i, v in pairs(nodes) do
+            local f = e.first[i]
+            if f and v[4] * f[4] + v[5] * f[5] + v[6] * f[6] < PARTS_TURNED then
+                e.done = true
+                log(string.format('control: %s at %.1f %.1f %.1f - part %d turned and stopped: taken for finished',
+                    name, where[1], where[2], where[3], i))
+                break
+            end
+        end
+    end
+    if logging and still and #moved > 0 then
+        parts_logged = parts_logged + 1
+        table.sort(moved)
+        local shown = {}
+        for j = 1, math.min(#moved, 12) do
+            local v = nodes[moved[j]]
+            shown[j] = string.format('%d:%.2f,%.2f,%.2f/%.2f,%.2f,%.2f', moved[j], v[1], v[2], v[3], v[4], v[5], v[6])
+        end
+        log(string.format('pose: %s at %.1f %.1f %.1f: %d of %d parts moved: %s%s', name, where[1], where[2], where[3],
+            #moved, count, table.concat(shown, ' '), #moved > 12 and ' ...' or ''))
+    end
+    e.at, e.root, e.nodes = now, where, nodes
+    return e
 end
 
 local function note_spot(k, p)
@@ -848,7 +885,7 @@ local function collect_dots(now)
             for _, p in ipairs(points) do
                 local d, who, carried, mine, others = measure(p[1], p[2], p[3], keys[i].worn)
                 if SPOT_KINDS[group] and not carried then note_spot(keys[i], p) end
-                if POSE_KINDS[group] or keys[i].taken then pose_step(keys[i], p, d, now) end
+                local state = (group == 'controls' or group == 'vehicles') and parts_step(keys[i], p, d, now) or nil
                 if d ~= nil and d <= range + HOT_MARGIN then near_any = true end
                 if d == nil or d > range then
                     c.far = c.far + 1
@@ -859,6 +896,7 @@ local function collect_dots(now)
                     local armed_now = near(arms, p, ARMS_NEAR)
                     if armed_now then v.armed, v.lost = true, nil end
                     local destroyed = near(wrecks, p, WRECK_NEAR) or (v.armed and not armed_now)
+                        or (state ~= nil and state.wrecked)
                     if destroyed and not v.lost then
                         v.lost = true
                         log('vehicle: ' .. (string.match(keys[i].label, '([^/]+)$') or keys[i].label)
@@ -874,6 +912,8 @@ local function collect_dots(now)
                     and d < (keys[i].near or NEAR_ME[group]) - NEAR_OVERLAP then
                     c.worn = c.worn + 1
                 elseif keys[i].taken and check_taken(p, now) then
+                    c.worn = c.worn + 1
+                elseif state ~= nil and state.done then   -- a valve or crank turned all the way
                     c.worn = c.worn + 1
                 elseif carried and group ~= 'dropoffs' and group ~= 'controls' then   -- never worn; a teammate may stand at it
                     c.worn = c.worn + 1
@@ -1104,7 +1144,7 @@ local function far_share(d)
 end
 local function size_of(d) return 1 - (1 - LOOK.smallest) * far_share(d) end
 local function opacity_of(d)
-    if not LOOK.fade then return LOOK.opacity end
+    if not LOOK.fade or d[6] ~= 'supplies' then return LOOK.opacity end   -- mission markers stay easy to find
     return LOOK.opacity * (1 - (1 - FADE_LEAST) * far_share(d))
 end
 
@@ -1236,7 +1276,7 @@ local function screen_draw(world, world_id, dots)
         local function distance_above(sx, top, d)
             if cw == nil or d[6] ~= 'vehicles' then return end
             pcall(function()
-                local px = math.max(6, math.floor(ch / 1080 * DISTANCE_PX + 0.5))
+                local px = math.max(1, ch / 1080 * DISTANCE_PX)
                 local text = string.format('%dm', math.floor(d[4] + 0.5))
                 local c = tint or {255, 255, 255}
                 local color = CHEF.color(c[1], c[2], c[3], math.floor(255 * opacity))
@@ -1411,21 +1451,8 @@ end
 
 local menus_released = 0
 
--- Aiming in first person (2.1.0, Chef Shared Loader): the right mouse button held and the camera at your
--- eyes. A first-person camera mod's camera is there all the time: the button keeps markers on until you aim.
-local function aiming_first_person(world)
-    if not (me and chef_has('mouse_down')) then return false end
-    local okm, down = pcall(CHEF.mouse_down, 'right')
-    if not okm or not down then return false end
-    local cam = camera_of(world)
-    if cam == nil then return false end
-    local dx, dy = cam.translation[1] - me[1], cam.translation[2] - me[2]
-    return dx * dx + dy * dy < FIRST_PERSON_NEAR * FIRST_PERSON_NEAR
-end
-
 local function draw(world, world_id, now)
     local dots = collect_dots(now)
-    if LOOK.hide_aiming and aiming_first_person(world) then dots = {} end
     if menu_open() then
         -- a menu is open: take the screen GUI away altogether, not just empty. Quitting goes through a
         -- menu, and a screen GUI still there when the game shuts down crashed its renderer on quitting
@@ -1535,7 +1562,7 @@ local function tick()
         world_id = 'world #' .. world_seq
         last_world, world_seen_at, cursor, found, players, players_read_at, me = world, now, 1, {}, {}, nil, nil
         vehicles_seen = {}
-        spots, reached, taken, poses, me_unit = {}, {}, {}, {}, nil
+        spots, reached, taken, parts, me_unit = {}, {}, {}, {}, nil
         hot = {}
         new_main_world()
         traced = 0
@@ -1588,7 +1615,7 @@ end
 local RANGE_OPTIONS = {   -- group, its name in the settings window, the most metres
     {'samples', 'Samples', 150}, {'supplies', 'Supplies', 150}, {'mission', 'Mission items', 150},
     {'carry', 'Shells, warheads, batteries', 150}, {'dropoffs', 'Drop-off points, cargo containers', 150},
-    {'controls', 'Valves, cranks, generators', 150}, {'vehicles', 'Vehicles', 300},
+    {'controls', 'Valves, cranks', 150}, {'vehicles', 'Vehicles', 300},
 }
 
 -- 2.1.0: how markers look. id, its spec, how a value goes into LOOK.
@@ -1613,15 +1640,12 @@ local LOOK_OPTIONS = {
     {'opacity', {type = 'slider', label = 'Marker opacity (%)', default = 100, min = 10, max = 100, step = 5,
         description = '100 is solid.'},
         number_into('opacity', 10, 100, 0.01)},
-    {'fade', {type = 'toggle', label = 'Fade markers with distance', default = true,
-        description = 'Markers get fainter the farther away they are.'},
+    {'fade', {type = 'toggle', label = 'Fade supply markers with distance', default = true,
+        description = 'Ammo, grenade, stim and supply markers get fainter the farther away they are.'},
         toggle_into('fade')},
     {'distance', {type = 'toggle', label = 'Show distance above vehicles', default = true,
         description = 'How far away each marked vehicle is, in metres.'},
         toggle_into('distance')},
-    {'hide_aiming', {type = 'toggle', label = 'Hide markers while aiming in first person', default = true,
-        description = 'While you hold the right mouse button with the camera at your eyes (a scope).'},
-        toggle_into('hide_aiming')},
     {'game_textures', {type = 'toggle', label = "Test: icons from the game's textures", default = false,
         description = 'Ammo, grenade, stim, package and egg icons drawn from the game textures instead of pixels.'},
         toggle_into('game_textures')},

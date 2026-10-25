@@ -55,10 +55,11 @@ What gets a marker (default distance):
 - Mission items (40 m): SSSDs, data drives, black boxes, larva containers, launch codes,
   keycards, video cameras and more.
 - Shells, warheads and batteries you carry (25 m).
-- Drop-off points and cargo containers (40 m), and valves, cranks and generators (40 m).
+- Drop-off points and cargo containers (40 m), and valves and cranks (40 m).
 - Vehicles (100 m): exosuits, FRVs and tanks, in sky blue.
 
-Vehicle markers show their distance. Markers get smaller and fainter farther away, follow the
+Vehicle markers show their distance. Markers get smaller farther away (supply markers
+fainter too), follow the
 game's camera (scopes too), and hide while a menu is open; on your ship mission markers
 are off. Items someone is
 carrying, and the vehicle you or a teammate are driving, get no marker. Items close enough
@@ -68,16 +69,15 @@ Automaton super samples 20 m, sample containers 15 m) and ammo and grenade boxes
 
 Settings: press F9 in the game (Chef Shared Loader's options menu) and pick Extended
 Pickup Icons Range: turn each kind on or off and set its distance, show or hide vehicles'
-distance, hide markers while aiming in first person (on by default), keep markers on up
-close, and change their smallest size, opacity and fading.
+distance, keep markers on up close, and change their smallest size, opacity and the
+supplies' fading.
 
 Requires Chef Shared Loader 1.2.0 or newer (Nexus mod 17760). Give it the highest priority
 in your mod manager (in Arsenal, by default, the bottom of the list).
 
 Good to know:
-- Valves, cranks and generators stay marked after you use them.
-- Destroyed exosuits and FRVs lose their marker. Destroyed tanks and supply FRVs keep it
-  until the wreck disappears from the map.
+- Valves and cranks turned all the way, and destroyed exosuits and FRVs (supply FRVs too),
+  lose their marker. Destroyed tanks keep it until the wreck disappears from the map.
 """
 
 

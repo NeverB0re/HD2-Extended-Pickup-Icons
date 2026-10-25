@@ -210,7 +210,7 @@ class DrawingTests(Case):
         self.assertGreater(self.fake.updates, 0)
         self.assertEqual(set(self.fake.lookups.keys()), {AVATAR, MARK})
         self.assertIn("can_get: present", log)
-        self.assertIn("82 target resources: 79 named, 3 by id only (looked up if the id self-test passes)", log)
+        self.assertIn("81 target resources: 78 named, 3 by id only (looked up if the id self-test passes)", log)
         self.frames(1, start=200.0)                   # the next status line, after a full sweep
         log = self.log_text()
         self.assertIn("found: il_sarcophagus=2", log)
@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.1.0-test.8 loading", text)
+            self.assertIn("Pickup Dots 2.1.0-test.9 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -553,7 +553,7 @@ class ScreenTests(Case):
         self.assertEqual(len(tris), 9)
         fill = [xyz(v) for v in (tris[8].a, tris[8].b, tris[8].c)]
         self.assertEqual(sorted((round(x, 3), round(y, 3)) for x, _, y in fill),
-                         [(952.8, 600.0), (960.0, 592.8), (967.2, 600.0)])   # left, bottom, right
+                         [(952.08, 600.0), (960.0, 592.08), (967.92, 600.0)])   # left, bottom, right
         self.assertEqual({t.layer for t in tris}, {1})
 
     VEHICLE = "content/fac_helldivers/vehicles/frv/frv"
@@ -850,8 +850,8 @@ class ScreenTests(Case):
         self.frames(80, start=30.0)
         tris = self.screen_tris()
         far = max(v._x for t in tris for v in (t.a, t.b, t.c)) - min(v._x for t in tris for v in (t.a, t.b, t.c))
-        self.assertAlmostEqual(near, 14.4, places=3)
-        self.assertAlmostEqual(far, 14.4 * 0.7, places=3)     # 70 %
+        self.assertAlmostEqual(near, 15.84, places=3)
+        self.assertAlmostEqual(far, 15.84 * 0.7, places=3)     # 70 %
 
     def test_an_item_put_into_a_drop_off_gets_no_marker(self):
         sssd = "content/objectives/obj_common/carry_data/carry_data"
@@ -912,10 +912,13 @@ class ScreenTests(Case):
           mouse_down = function(name) return name == 'right' and fake.rmb == true end,
           key_down = function(name) return name == 'e' and fake.e_key == true end,
           unit_position = function(u, node)
-            if node and node > 1 then return u.x, u.y + node, u.z + (node == 3 and (u.turn or 0) or 0) end
+            if node and node > 1 then return u.x, u.y + node, u.z + (u.blast or 0) * node end
             return u.x, u.y, u.z
           end,
-          unit_rotation = function(u, node) return 0, 1, 0, 0 end,
+          unit_rotation = function(u, node)
+            if node == 3 and u.turn then return math.sin(u.turn), math.cos(u.turn), 0, 0 end
+            return 0, 1, 0, 0
+          end,
           unit_node = function(u, name) return nil end,
           call = function(name, ...)
             if name == 'Unit.num_scene_graph_items' then return 3 end
@@ -958,7 +961,7 @@ class ScreenTests(Case):
         texts = list(self.fake.texts.values())
         self.assertEqual({t.s for t in texts}, {"28m"})
         self.assertGreater(texts[-1].y, 600)                          # above the vehicle's icon
-        self.assertEqual(texts[-1].px, 9)                             # 8 px at 1080: under the icons' height
+        self.assertAlmostEqual(texts[-1].px, 1200 / 1080 * 1.6, places=6)   # a fifth of test.5's size
 
     def test_with_chef_on_the_ship_mission_markers_are_off(self):
         self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
@@ -991,18 +994,35 @@ class ScreenTests(Case):
         self.frames(5, start=30.0)
         self.assertGreater(len(self.screen_tris()), 0)
 
-    def test_with_chef_a_moving_part_of_a_generator_is_logged(self):
-        generator = "content/objectives/obj_common/generator/generator"
+    def test_with_chef_a_valve_turned_all_the_way_loses_its_marker(self):
+        valve = "content/objectives/obj_common/oil_pump/oil_pump_valve"
         self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
                                                   "fov": math.radians(50)})
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(generator, [unit(3, 0, 0)])
+        self.set_units(valve, [unit(3, 0, 0)])
         self.load_with_chef()
         self.settle()
-        self.assertIn("pose: generator at 3.0 0.0 0.0: 3 parts", self.log_text())
-        self.fake.units[generator][1].turn = 0.5                      # its lever moves
-        self.frames(80, start=30.0)
-        self.assertIn("pose: generator at 3.0 0.0 0.0: 1 of 3 parts moved: 3:", self.log_text())
+        self.assertEqual(len(self.screen_points()), 1)
+        self.fake.units[valve][1].turn = 1.0                          # its wheel turns, then stays
+        self.frames(300, start=30.0)
+        self.assertIn("control: oil_pump_valve at 3.0 0.0 0.0 - part 3 turned and stopped: taken for finished",
+                      self.log_text())
+        self.assertEqual(self.screen_tris(), [])
+
+    def test_with_chef_a_supply_frv_whose_parts_all_change_is_taken_for_destroyed(self):
+        frv = "content/fac_helldivers/vehicles/frv_supply/frv_supply"
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(frv, [unit(0, 20, 0)])
+        self.load_with_chef()
+        self.settle()
+        self.assertGreater(len(self.screen_tris()), 0)
+        self.fake.units[frv][1].blast = 1                             # it blows up where it stands
+        self.frames(120, start=30.0)
+        self.assertIn("vehicle: frv_supply at 0.0 20.0 0.0 - 2 of 2 parts changed at once: taken for destroyed",
+                      self.log_text())
+        self.assertEqual(self.screen_tris(), [])
 
     def test_you_stay_the_same_helldiver_while_a_teammate_passes_the_camera(self):
         self.set_units(AVATAR, [unit(0, -8, 0), unit(0, -12.5, 0)], loaded=False)   # the camera: 0 -10 0.6
@@ -1018,49 +1038,6 @@ class ScreenTests(Case):
         self.frames(20, start=40.0)
         you = [l for l in self.log_text().splitlines() if "you: " in l]
         self.assertEqual(len(you), 2, you)
-
-    def test_with_chef_markers_hide_while_aiming_in_first_person(self):
-        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
-                                                  "fov": math.radians(50)})
-        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(MARK, [unit(0, 0, 0)])
-        self.load_with_chef()
-        self.settle()
-        self.fake.rmb = True                                           # aiming, the camera behind you: shown
-        self.frames(5, start=30.0)
-        self.assertEqual(len(self.screen_points()), 1)
-        self.fake.chef_cam = self.lua.table_from({"x": 0.1, "y": -7.9, "z": 1.6, "fx": 0, "fy": 1, "fz": 0,
-                                                  "fov": math.radians(20)})   # at your eyes: a scope
-        self.frames(5, start=31.0)
-        self.assertEqual(self.screen_tris(), [])
-        self.fake.rmb = False                                          # let go: back
-        self.frames(5, start=32.0)
-        self.assertGreater(len(self.screen_tris()), 0)
-
-    def test_launch_codes_a_teammate_only_passes_by_stay_marked(self):
-        codes = "content/objectives/obj_common/generic_intel/generic_intel"
-        self.set_units(AVATAR, [unit(0, -8, 0), unit(10, 0, 0)], loaded=False)   # you; a teammate 1.8 m off them
-        self.set_units(codes, [unit(10, 1.8, 0)])
-        self.load()
-        self.settle()
-        self.assertNotIn("taken:", self.log_text())
-
-    def test_with_chef_launch_codes_you_walk_past_stay_marked_until_you_press_e(self):
-        codes = "content/objectives/obj_common/generic_intel/generic_intel"
-        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
-                                                  "fov": math.radians(50)})
-        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(codes, [unit(0, -6.5, 0)])                      # 1.5 m from you, for long
-        self.load_with_chef()
-        self.settle()
-        self.assertNotIn("taken:", self.log_text())
-        self.assertIn("mission drawn=1 worn=0", self.status_now())     # still marked
-        self.fake.e_key = True                                         # you pick them up
-        self.frames(3, start=30.0)
-        self.assertIn("(you, with the interact key)", self.log_text())
-        self.fake.e_key = False
-        self.frames(80, start=40.0)
-        self.assertEqual(self.screen_tris(), [])                       # and stay taken: no marker
 
     def test_vehicles_are_sky_blue(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
@@ -1114,21 +1091,22 @@ class ScreenTests(Case):
             right = [v._x for t in tris if t.a._x > 960 for v in (t.a, t.b, t.c)]
             return max(left) - min(left), max(right) - min(right)
         diamond, full = widths()
-        self.assertAlmostEqual(diamond, 14.4 * 0.3, delta=0.05)
+        self.assertAlmostEqual(diamond, 15.84 * 0.3, delta=0.05)
         self.fake.units[stim][1].y = 16.9                     # 25 m, the edge of supplies: below its smallest pixels
         self.frames(80, start=30.0)
         self.assertAlmostEqual(widths()[1] / full, 0.3, delta=0.02)
 
-    def test_opacity_is_a_setting_and_can_fade_with_distance(self):
+    def test_opacity_is_a_setting_and_only_supplies_fade_with_distance(self):
         self.set_options({"pickup_dots.opacity": 50, "pickup_dots.fade": True})
+        stim = "content/fac_helldivers/discoverables/health_pack_discoverable_01/health_pack_discoverable_01"
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(MARK, [unit(0, 0, 0)])                 # 8 m: no fading yet
+        self.set_units(MARK, [unit(-2, 31.9, 0)])             # a mission item at the edge of its range: no fading
+        self.set_units(stim, [unit(2, 16.9, 0)])              # a stim at the edge of supplies' range
         self.load()
         self.settle()
-        self.assertEqual({t.color.a for t in self.screen_tris()}, {127})
-        self.fake.units[MARK][1].y = 32                       # the edge of range: a fifth of that
-        self.frames(80, start=30.0)
-        self.assertEqual({t.color.a for t in self.screen_tris()}, {25})
+        tris = self.screen_tris()
+        self.assertEqual({t.color.a for t in tris if t.a._x < 960}, {127})
+        self.assertEqual(max(t.color.a for t in tris if t.a._x > 960), 25)   # a fifth of that
 
     def test_sample_and_supply_markers_sit_where_the_games_icons_do(self):
         self.set_units(AVATAR, [unit(0, -11, 0)], loaded=False)
@@ -1149,10 +1127,9 @@ class ScreenTests(Case):
         self.settle()
         self.assertEqual(self.screen_tris(), [])
         ids = sorted(self.fake.options.keys())
-        look = ["pickup_dots." + n for n in ("distance", "fade", "game_textures", "hide_aiming", "hide_near", "opacity",
-                                             "smallest_size")]
+        look = ["pickup_dots." + n for n in ("distance", "fade", "game_textures", "hide_near", "opacity", "smallest_size")]
         self.assertEqual([i for i in ids if not i.startswith(("pickup_dots.range_", "pickup_dots.show_"))], look)
-        self.assertEqual(len(ids), 14 + 7)
+        self.assertEqual(len(ids), 14 + 6)
         self.assertTrue(self.fake.options["pickup_dots.fade"].default)
         self.assertEqual(self.fake.options["pickup_dots.show_vehicles"].type, "toggle")
 

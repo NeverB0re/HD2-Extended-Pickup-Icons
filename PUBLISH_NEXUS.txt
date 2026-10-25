@@ -2,7 +2,7 @@
 See samples, supplies, mission items and vehicles from farther away, marked with the game's own icons.
 
 [size=5][b]Back after the October 20 update[/b][/size]
-The October 20, 2026 game update broke the old version of this mod, and the loader it relied on no longer works. With the new [b]Chef Shared Loader[/b] it can run again, so the mod has been rebuilt from scratch. It now draws its own markers on screen using the game's icons, and it covers much more than before: mission items, drop-off points, valves, generators and vehicles.
+The October 20, 2026 game update broke the old version of this mod, and the loader it relied on no longer works. With the new [b]Chef Shared Loader[/b] it can run again, so the mod has been rebuilt from scratch. It now draws its own markers on screen using the game's icons, and it covers much more than before: mission items, drop-off points, valves and vehicles.
 
 [b]If you used the old version, remove it before installing this one.[/b] Bingus Shared Loader and Mod Options Menu are no longer needed for this mod.
 
@@ -14,18 +14,18 @@ The October 20, 2026 game update broke the old version of this mod, and the load
 [*][b]Launch codes, keycards, video cameras and other mission items[/b]: diamond, 40 m
 [*][b]Artillery shells, warheads and batteries you carry[/b]: diamond, 25 m
 [*][b]Drop-off points and cargo containers[/b]: diamond, 40 m
-[*][b]Valves, cranks and generators you start in missions[/b]: diamond, 40 m
+[*][b]Valves and cranks you turn in missions[/b]: diamond, 40 m
 [*][b]Exosuits, FRVs and tanks[/b]: sky blue vehicle icons, 100 m
 [/list]
 
 [list]
-[*]Markers get smaller and fainter the farther away they are. Vehicle markers also show how far away they are.
+[*]Markers get smaller the farther away they are, and supply markers fainter. Vehicle markers also show how far away they are.
 [*]Markers follow the game's camera, also when you zoom in with a scope.
 [*]Items someone is carrying get no marker, and neither do items put into a drop-off point or shells loaded into artillery. A drop-off point with an item put in loses its marker too.
 [*]Launch codes and keycards lose their marker when you pick them up, or when a teammate runs right past them.
 [*]Items close enough for the game to show its own icon get no marker: samples within 9 m of you (Terminid eggs and Automaton super samples 20 m, sample containers 15 m), ammo and grenade boxes within 4 m. Stims have no icon of the game's, so they keep their marker.
 [*]The vehicle you are in, or one a teammate is driving, gets no marker. A parked vehicle shows again after a few seconds.
-[*]Destroyed exosuits and FRVs lose their marker.
+[*]Destroyed exosuits and FRVs (supply FRVs too) lose their marker, and so do valves and cranks once turned all the way.
 [*]On your ship, mission markers are off.
 [/list]
 
@@ -35,10 +35,9 @@ Press [b]F9[/b] in the game to open Chef Shared Loader's options menu, then pick
 You can also change how markers look:
 [list]
 [*][b]Show distance above vehicles[/b] (on by default).
-[*][b]Hide markers while aiming in first person[/b] (on by default): while you look down a scope.
 [*][b]Hide markers where the game shows its own icon[/b]: turn off to keep markers up close too (useful with first-person camera mods).
 [*][b]Marker size at the edge of range[/b]: how small markers get far away.
-[*][b]Marker opacity[/b], and [b]Fade markers with distance[/b] (on by default).
+[*][b]Marker opacity[/b], and [b]Fade supply markers with distance[/b] (on by default).
 [/list]
 
 [size=5][b]Requirements[/b][/size]
@@ -56,8 +55,7 @@ You can also change how markers look:
 
 [size=5][b]Good to know[/b][/size]
 [list]
-[*]Valves, cranks and generators stay marked after you use them. The mod cannot tell whether one is finished.
-[*]Destroyed [b]tanks[/b] and [b]supply FRVs[/b] keep their marker until the wreck disappears from the map. Exosuits and other FRVs are recognised as destroyed.
+[*]Destroyed [b]tanks[/b] keep their marker until the wreck disappears from the map.
 [/list]
 
 [line]
@@ -66,7 +64,7 @@ You can also change how markers look:
 샘플, 보급품, 임무 아이템, 차량을 더 먼 거리에서 게임 아이콘으로 볼 수 있게 해 줍니다.
 
 [size=5][b]10월 20일 업데이트 이후 다시 돌아왔습니다[/b][/size]
-2026년 10월 20일 게임 업데이트로 예전 버전이 작동하지 않게 되었고, 의존하던 로더도 더 이상 쓸 수 없게 되었습니다. 새로운 [b]Chef Shared Loader[/b]로 다시 작동할 수 있게 되어 모드를 처음부터 새로 만들었습니다. 이제 게임 아이콘으로 화면에 직접 마커를 그리며, 임무 아이템, 반납 지점, 밸브, 발전기, 차량까지 예전보다 훨씬 많은 것을 표시합니다.
+2026년 10월 20일 게임 업데이트로 예전 버전이 작동하지 않게 되었고, 의존하던 로더도 더 이상 쓸 수 없게 되었습니다. 새로운 [b]Chef Shared Loader[/b]로 다시 작동할 수 있게 되어 모드를 처음부터 새로 만들었습니다. 이제 게임 아이콘으로 화면에 직접 마커를 그리며, 임무 아이템, 반납 지점, 밸브, 차량까지 예전보다 훨씬 많은 것을 표시합니다.
 
 [b]예전 버전을 쓰셨다면 먼저 지우고 설치하세요.[/b] 이 모드는 더 이상 Bingus Shared Loader와 Mod Options Menu가 필요하지 않습니다.
 
@@ -78,18 +76,18 @@ You can also change how markers look:
 [*][b]발사 코드, 키카드, 비디오 카메라 등 임무 아이템[/b]: 마름모, 40m
 [*][b]들고 옮기는 야포 탄두, 탄두, 배터리[/b]: 마름모, 25m
 [*][b]반납 지점, 화물 컨테이너[/b]: 마름모, 40m
-[*][b]미션에서 돌리는 밸브, 크랭크, 가동하는 발전기[/b]: 마름모, 40m
+[*][b]미션에서 돌리는 밸브, 크랭크[/b]: 마름모, 40m
 [*][b]엑소슈트, FRV, 탱크[/b]: 하늘색 차량 아이콘, 100m
 [/list]
 
 [list]
-[*]멀리 있을수록 마커가 작고 흐려집니다. 차량 마커에는 거리도 표시됩니다.
+[*]멀리 있을수록 마커가 작아지고, 보급품 마커는 흐려집니다. 차량 마커에는 거리도 표시됩니다.
 [*]마커는 게임 카메라를 따라가며, 스코프로 확대해도 맞습니다.
 [*]누군가 들고 있는 아이템, 반납 지점에 넣은 아이템, 야포에 장전한 포탄에는 마커가 뜨지 않습니다. 아이템을 넣은 반납 지점도 마커가 사라집니다.
 [*]발사 코드와 키카드는 내가 주우면, 또는 동료가 바로 옆을 지나가면 마커가 사라집니다.
 [*]게임 자체 아이콘이 뜨는 거리 안에서는 마커가 뜨지 않습니다: 샘플은 나에게서 9m(테르미니드 알과 오토마톤 슈퍼 샘플은 20m, 샘플통은 15m), 탄약·수류탄 상자는 4m. 스팀은 게임 아이콘이 없어서 마커가 계속 뜹니다.
 [*]내가 탄 차량이나 동료가 운전 중인 차량에는 마커가 뜨지 않습니다. 주차하면 몇 초 뒤 다시 보입니다.
-[*]파괴된 엑소슈트와 FRV는 마커가 사라집니다.
+[*]파괴된 엑소슈트와 FRV(보급 FRV 포함), 끝까지 돌린 밸브와 크랭크는 마커가 사라집니다.
 [*]함선 안에서는 임무 마커가 꺼집니다.
 [/list]
 
@@ -99,10 +97,9 @@ You can also change how markers look:
 마커 모양도 바꿀 수 있습니다:
 [list]
 [*][b]차량 위에 거리 표시[/b](기본값 켜짐).
-[*][b]1인칭 조준 중 마커 숨기기[/b](기본값 켜짐): 스코프로 조준하는 동안.
 [*][b]게임 아이콘이 뜨는 곳에서 마커 숨기기[/b]: 끄면 가까이에서도 마커가 남습니다(1인칭 카메라 모드와 함께 쓸 때 유용).
 [*][b]범위 끝에서의 마커 크기[/b]: 멀리 있을 때 마커가 얼마나 작아질지.
-[*][b]마커 투명도[/b], [b]거리에 따라 흐려지기[/b](기본값 켜짐).
+[*][b]마커 투명도[/b], [b]보급품 마커 거리에 따라 흐려지기[/b](기본값 켜짐).
 [/list]
 
 [size=5][b]필요한 것[/b][/size]
@@ -120,6 +117,5 @@ You can also change how markers look:
 
 [size=5][b]알아 둘 점[/b][/size]
 [list]
-[*]밸브, 크랭크, 발전기는 사용한 뒤에도 표시됩니다. 모드가 완료 여부를 알 수 없습니다.
-[*]파괴된 [b]탱크[/b]와 [b]보급 FRV[/b]는 잔해가 맵에서 사라질 때까지 마커가 남습니다. 엑소슈트와 다른 FRV는 파괴를 인식합니다.
+[*]파괴된 [b]탱크[/b]는 잔해가 맵에서 사라질 때까지 마커가 남습니다.
 [/list]

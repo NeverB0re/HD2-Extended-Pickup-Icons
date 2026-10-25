@@ -57,7 +57,7 @@ return {
   {group='vehicles', name='content/fac_helldivers/vehicles/combat_walker/combat_walker', icon='walker', height=4.8},  -- tall: above it
   {group='vehicles', name='content/fac_helldivers/vehicles/frv/frv', icon='car'},
   {group='vehicles', name='content/fac_helldivers/vehicles/frv_heavy/frv_flamer', icon='car'},
-  {group='vehicles', name='content/fac_helldivers/vehicles/frv_supply/frv_supply', icon='car'},
+  {group='vehicles', name='content/fac_helldivers/vehicles/frv_supply/frv_supply', icon='car', wreck_parts=true},
   {group='vehicles', name='content/fac_helldivers/vehicles/tank/tank', icon='tank'},
   {group='vehicles', name='content/fac_helldivers/vehicles/tank_storm/tank_storm', icon='tank'},
   -- 0.18.0: mission controls you work by hand (valves, cranks, switches, buttons), names from filediver's hash list
@@ -101,6 +101,4 @@ return {
   -- 2.1.0: not drawn; where artillery shells are loaded: a shell in one is in it (LOADED_NEAR). Not the
   -- artillery itself: it is large, and shells are left beside it to load later.
   {group='loaders', name='content/objectives/obj_common/fire_artillery/ready_rack'},
-  -- 2.1.0: the generator you start in a mission (its lever is on it)
-  {group='controls', name='content/objectives/obj_common/generator/generator'},
 }
