@@ -829,7 +829,7 @@ class ScreenTests(Case):
         """)
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(MARK, [unit(-1, 0, 0), unit(0, 20, 0)])        # 8 m: in; 28 m: past the 15 m set
-        self.set_units(self.CONSOLE, [unit(1, 0, 0)])                   # a drop-off: none shown at 0
+        self.set_units(self.CONSOLE, [unit(6, 0, 0)])                   # a drop-off: none shown at 0
         self.load()
         self.settle()
         self.assertEqual(len(self.screen_points()), 1)
@@ -850,6 +850,24 @@ class ScreenTests(Case):
         far = max(v._x for t in tris for v in (t.a, t.b, t.c)) - min(v._x for t in tris for v in (t.a, t.b, t.c))
         self.assertAlmostEqual(near, 14.4, places=3)
         self.assertAlmostEqual(far, 14.4 * 0.7, places=3)     # 70 %
+
+    def test_an_item_put_into_a_drop_off_gets_no_marker(self):
+        sssd = "content/objectives/obj_common/carry_data/carry_data"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(self.CONSOLE, [unit(-4, 0, 0)])
+        self.set_units(sssd, [unit(-4, 0, 1.0), unit(4, 0, 0)])        # one put in, one on the ground
+        self.load()
+        self.settle()
+        self.assertIn("mission drawn=1 worn=1", self.status_now())
+
+    def test_where_mission_items_lie_is_logged_once_per_spot(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(MARK, [unit(0, 0, -30), unit(0, 1, -30)])          # under the map, 1 m apart: one spot
+        self.load()
+        self.settle()
+        lines = [l for l in self.log_text().splitlines() if "spot: " in l]
+        self.assertEqual(len(lines), 1, lines)
+        self.assertIn("spot: il_sarcophagus at 0.0 0.0 -30.0 (you at 0.0 -8.0 0.0)", lines[0])
 
     def set_options(self, values):
         self.fake.option_values = self.lua.table_from(values)

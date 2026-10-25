@@ -40,6 +40,7 @@ local VEHICLE_BUSY = 4        -- a helldiver this close to a vehicle's origin is
 local VEHICLE_PARKED_S = 3    -- a vehicle that has not moved this long is parked: teammates beside it do not hide it
 local WRECK_NEAR = 4          -- an exosuit this close to an exosuit wreck is that wreck
 local ARMS_NEAR = 5           -- a vehicle's weapon units (group 'arms') are this close to it
+local DELIVERED_NEAR = 3      -- a mission item or load this close to a drop-off is in it (an SSSD put in)
 local DIAMOND_PER_M = 0.008   -- half-height per metre of distance: about the same size on screen at any range
 local DIAMOND_MIN, DIAMOND_MAX = 0.05, 0.4   -- half-height limits, metres
 local DIAMOND_ASPECT = 1      -- half-width / half-height: a square on its corner, like the game's icon
@@ -626,6 +627,30 @@ end
 -- Last frame's counts per group, for the status line: drawn, hidden as worn/held, out of range.
 local last_counts = {}
 
+-- Diagnostics (2.1.0): where each mission item, load, drop-off and control lies, once per spot and
+-- world, so a log shows items the game keeps out of sight (diamonds under the map and under the ship's
+-- hellpods were reported on 2.0.1). Items on a helldiver are left out.
+local SPOT_KINDS = {mission = true, carry = true, dropoffs = true, controls = true}
+local SPOT_LOG_MAX = 300      -- lines a launch
+local SPOT_SAME = 2           -- metres: the same spot
+local spots = {}              -- per key: the spots logged in this world
+local spots_logged = 0
+
+local function note_spot(k, p)
+    if spots_logged >= SPOT_LOG_MAX then return end
+    local seen = spots[k]
+    if seen == nil then
+        seen = {}
+        spots[k] = seen
+    end
+    if near(seen, p, SPOT_SAME) then return end
+    seen[#seen + 1] = p
+    spots_logged = spots_logged + 1
+    local you = me and string.format(' (you at %.1f %.1f %.1f)', me[1], me[2], me[3]) or ''
+    log(string.format('spot: %s at %.1f %.1f %.1f%s', string.match(k.label, '([^/]+)$') or k.label,
+        p[1], p[2], p[3], you))
+end
+
 local function collect_dots(now)
     local dots = {}
     local counts = {}
@@ -633,8 +658,10 @@ local function collect_dots(now)
     local seen_now = {}
     local wrecks = {}        -- exosuit wrecks: the exosuit beside one is destroyed (its unit may stay)
     local arms = {}          -- vehicles' weapon units: a vehicle that had some and has none now is destroyed
+    local dropoffs = {}      -- a mission item or load beside one is delivered (2.1.0)
     for i = 1, #keys do
-        local list = (keys[i].group == 'wrecks' and wrecks) or (keys[i].group == 'arms' and arms) or nil
+        local group = keys[i].group
+        local list = (group == 'wrecks' and wrecks) or (group == 'arms' and arms) or (group == 'dropoffs' and dropoffs) or nil
         if list and found[i] then
             for _, p in ipairs(found[i]) do list[#list + 1] = p end
         end
@@ -649,6 +676,7 @@ local function collect_dots(now)
             local near_any = false
             for _, p in ipairs(points) do
                 local d, who, carried, mine, others = measure(p[1], p[2], p[3], keys[i].worn)
+                if SPOT_KINDS[group] and not carried then note_spot(keys[i], p) end
                 if d ~= nil and d <= range + HOT_MARGIN then near_any = true end
                 if d == nil or d > range then
                     c.far = c.far + 1
@@ -674,6 +702,8 @@ local function collect_dots(now)
                     and d < (keys[i].near or NEAR_ME[group]) then
                     c.worn = c.worn + 1
                 elseif carried and group ~= 'dropoffs' and group ~= 'controls' then   -- never worn; a teammate may stand at it
+                    c.worn = c.worn + 1
+                elseif (group == 'mission' or group == 'carry') and near(dropoffs, p, DELIVERED_NEAR) then
                     c.worn = c.worn + 1
                 else
                     c.drawn = c.drawn + 1
@@ -1196,6 +1226,7 @@ local function tick()
         world_id = 'world #' .. world_seq
         last_world, world_seen_at, cursor, found, players, players_read_at, me = world, now, 1, {}, {}, nil, nil
         vehicles_seen = {}
+        spots = {}
         hot = {}
         new_main_world()
         traced = 0
