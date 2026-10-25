@@ -764,8 +764,8 @@ local function census_step(world, now)
     if stop >= #list then census.list, census.next_at = nil, now + CENSUS_EVERY_S end
 end
 
--- Diagnostics (2.1.0-test.3, Chef Shared Loader only): what moves inside a valve, crank, generator or vehicle
--- near you, so a finished valve or a destroyed tank can be told by its parts: for each one within POSE_NEAR,
+-- Diagnostics (2.1.0-test.3, Chef Shared Loader only): what moves inside a valve, crank, generator, vehicle or
+-- launch code near you, so a finished valve, a destroyed tank or picked-up codes can be told by their parts: for each one within POSE_NEAR,
 -- every POSE_EVERY_S, the parts (scene graph nodes) that moved or turned since the last look, relative to the
 -- unit itself. Nothing is logged while the whole unit moves (a vehicle driving).
 local POSE_NEAR = 15
@@ -934,7 +934,7 @@ local function collect_dots(now)
             for _, p in ipairs(points) do
                 local d, who, carried, mine, others = measure(p[1], p[2], p[3], keys[i].worn)
                 if SPOT_KINDS[group] and not carried then note_spot(keys[i], p) end
-                if POSE_KINDS[group] then pose_step(keys[i], p, d, now) end
+                if POSE_KINDS[group] or keys[i].taken then pose_step(keys[i], p, d, now) end
                 if d ~= nil and d <= range + HOT_MARGIN then near_any = true end
                 if d == nil or d > range then
                     c.far = c.far + 1
