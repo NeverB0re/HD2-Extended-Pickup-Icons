@@ -1500,7 +1500,7 @@ end
 local RANGE_OPTIONS = {   -- group, its name in the settings window, the most metres
     {'samples', 'Samples', 150}, {'supplies', 'Supplies', 150}, {'mission', 'Mission items', 150},
     {'carry', 'Shells, warheads, batteries', 150}, {'dropoffs', 'Drop-off points, cargo containers', 150},
-    {'controls', 'Valves, cranks', 150}, {'vehicles', 'Vehicles', 300},
+    {'controls', 'Valves, cranks, generators', 150}, {'vehicles', 'Vehicles', 300},
     {'terminals', 'Terminals', 150},   -- off by default (SHOW)
 }
 
