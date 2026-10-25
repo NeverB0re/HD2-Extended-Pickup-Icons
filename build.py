@@ -57,9 +57,8 @@ What gets a marker (default distance):
 - Shells, warheads and batteries you carry (25 m).
 - Drop-off points and cargo containers (40 m), and valves, cranks and generators (40 m).
 - Vehicles (100 m): exosuits, FRVs and tanks, in sky blue.
-- Mission terminals (40 m): off by default; turn on in the settings.
 
-Each marker shows its distance. Markers get smaller and fainter farther away, follow the
+Vehicle markers show their distance. Markers get smaller and fainter farther away, follow the
 game's camera (scopes too), and hide while a menu is open; on your ship mission markers
 are off. Items someone is
 carrying, and the vehicle you or a teammate are driving, get no marker. Items close enough
@@ -68,7 +67,7 @@ Automaton super samples 20 m, sample containers 15 m) and ammo and grenade boxes
 4 m. Stims have no icon of the game's and keep theirs.
 
 Settings: press F9 in the game (Chef Shared Loader's options menu) and pick Extended
-Pickup Icons Range: turn each kind on or off and set its distance, show or hide the
+Pickup Icons Range: turn each kind on or off and set its distance, show or hide vehicles'
 distance, hide markers while aiming in first person (on by default), keep markers on up
 close, and change their smallest size, opacity and fading.
 

@@ -16,11 +16,10 @@ The October 20, 2026 game update broke the old version of this mod, and the load
 [*][b]Drop-off points and cargo containers[/b]: diamond, 40 m
 [*][b]Valves, cranks and generators you start in missions[/b]: diamond, 40 m
 [*][b]Exosuits, FRVs and tanks[/b]: sky blue vehicle icons, 100 m
-[*][b]Mission terminals[/b]: diamond, 40 m. Off by default; turn on in the settings.
 [/list]
 
 [list]
-[*]Each marker shows how far away it is, and markers get smaller and fainter the farther away they are.
+[*]Markers get smaller and fainter the farther away they are. Vehicle markers also show how far away they are.
 [*]Markers follow the game's camera, also when you zoom in with a scope.
 [*]Items someone is carrying get no marker, and neither do items put into a drop-off point or shells loaded into artillery. A drop-off point with an item put in loses its marker too.
 [*]Launch codes and keycards lose their marker once someone has stood at them to pick them up.
@@ -35,7 +34,7 @@ Press [b]F9[/b] in the game to open Chef Shared Loader's options menu, then pick
 
 You can also change how markers look:
 [list]
-[*][b]Show distance above markers[/b] (on by default).
+[*][b]Show distance above vehicles[/b] (on by default).
 [*][b]Hide markers while aiming in first person[/b] (on by default): while you look down a scope.
 [*][b]Hide markers where the game shows its own icon[/b]: turn off to keep markers up close too (useful with first-person camera mods).
 [*][b]Marker size at the edge of range[/b]: how small markers get far away.
@@ -59,7 +58,6 @@ You can also change how markers look:
 [list]
 [*]Valves, cranks and generators stay marked after you use them. The mod cannot tell whether one is finished.
 [*]Destroyed [b]tanks[/b] and [b]supply FRVs[/b] keep their marker until the wreck disappears from the map. Exosuits and other FRVs are recognised as destroyed.
-[*]Some mission terminals may not be marked yet.
 [/list]
 
 [line]
@@ -82,11 +80,10 @@ You can also change how markers look:
 [*][b]반납 지점, 화물 컨테이너[/b]: 마름모, 40m
 [*][b]미션에서 돌리는 밸브, 크랭크, 가동하는 발전기[/b]: 마름모, 40m
 [*][b]엑소슈트, FRV, 탱크[/b]: 하늘색 차량 아이콘, 100m
-[*][b]임무 터미널[/b]: 마름모, 40m. 기본값은 꺼짐이며 설정에서 켤 수 있습니다.
 [/list]
 
 [list]
-[*]마커마다 거리가 표시되고, 멀리 있을수록 작고 흐려집니다.
+[*]멀리 있을수록 마커가 작고 흐려집니다. 차량 마커에는 거리도 표시됩니다.
 [*]마커는 게임 카메라를 따라가며, 스코프로 확대해도 맞습니다.
 [*]누군가 들고 있는 아이템, 반납 지점에 넣은 아이템, 야포에 장전한 포탄에는 마커가 뜨지 않습니다. 아이템을 넣은 반납 지점도 마커가 사라집니다.
 [*]발사 코드와 키카드는 누군가 그 앞에 서서 주우면 마커가 사라집니다.
@@ -101,7 +98,7 @@ You can also change how markers look:
 
 마커 모양도 바꿀 수 있습니다:
 [list]
-[*][b]마커 위에 거리 표시[/b](기본값 켜짐).
+[*][b]차량 위에 거리 표시[/b](기본값 켜짐).
 [*][b]1인칭 조준 중 마커 숨기기[/b](기본값 켜짐): 스코프로 조준하는 동안.
 [*][b]게임 아이콘이 뜨는 곳에서 마커 숨기기[/b]: 끄면 가까이에서도 마커가 남습니다(1인칭 카메라 모드와 함께 쓸 때 유용).
 [*][b]범위 끝에서의 마커 크기[/b]: 멀리 있을 때 마커가 얼마나 작아질지.
@@ -125,5 +122,4 @@ You can also change how markers look:
 [list]
 [*]밸브, 크랭크, 발전기는 사용한 뒤에도 표시됩니다. 모드가 완료 여부를 알 수 없습니다.
 [*]파괴된 [b]탱크[/b]와 [b]보급 FRV[/b]는 잔해가 맵에서 사라질 때까지 마커가 남습니다. 엑소슈트와 다른 FRV는 파괴를 인식합니다.
-[*]일부 임무 터미널은 아직 표시되지 않을 수 있습니다.
 [/list]

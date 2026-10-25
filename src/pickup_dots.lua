@@ -21,25 +21,24 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.1.0-test.4'
+local VERSION = '2.1.0-test.5'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
 -- ------------------------------------------------------------------ settings --
 local RANGE = {samples = 40, supplies = 25, mission = 40, carry = 25,  -- metres, settings (0 = none shown)
-               dropoffs = 40, controls = 40, vehicles = 100, terminals = 40, probe = 60}
-local SHOW = {terminals = false}   -- a setting per kind: false hides it (nil or true: shown); terminals
-                              -- (2.1.0) are off unless switched on
+               dropoffs = 40, controls = 40, vehicles = 100}
+local SHOW = {}               -- a setting per kind: false hides it (nil or true: shown)
 local NEAR_ME = {samples = 9, supplies = 4}   -- this close to you: no marker (the game shows its own icon;
                                                -- a target's own 'near' overrides it; 0: always a marker)
-local NEAR_OVERLAP = 1        -- metres: ours goes this much inside where the game's icon comes (no gap between)
+local NEAR_OVERLAP = 0.5      -- metres: ours goes this much inside where the game's icon comes (no gap between)
 local ICON_OFFSET = {-28, -35}   -- pixels right and up: sample and supply markers sit where the game's icon does
 local LOOK = {                -- settings (2.1.0)
     hide_near = true,         -- false: markers stay on where the game shows its own icon (NEAR_ME)
     smallest = 0.7,           -- size at the edge of a kind's range (full size up to FULL_SIZE_M)
     opacity = 1,              -- 0..1
     fade = true,              -- fainter with distance, down to FADE_LEAST of opacity at the edge
-    distance = true,          -- the distance above each marker, in the game's font (Chef Shared Loader)
+    distance = true,          -- the distance above a vehicle's marker, in the game's font (Chef Shared Loader)
     game_textures = false,    -- test: icons drawn from the game's own textures (Chef Shared Loader), not pixels
     hide_aiming = true,       -- no markers while aiming in first person (Chef Shared Loader)
 }
@@ -54,10 +53,9 @@ local ICON_TEXTURES = {
     egg = {'460c4e527705db55', 256, 256, 45, 16, 208, 240},
 }
 local VEHICLE_RGB = {110, 205, 255}   -- vehicles: the sky blue of the HUD's support weapon icons
-local PROBE_RGB = {255, 150, 40}      -- test builds: candidates for terminals (group 'probe'), orange, with their id
-local DISTANCE_PX = 13        -- the distance's height at 1080 pixels of screen
+local DISTANCE_PX = 8         -- the distance's height at 1080 pixels of screen: a little under the icons'
 local DOT_HEIGHT = 0.6        -- metres above the unit's origin
-local GROUP_HEIGHT = {samples = 0.3, supplies = 0.3, dropoffs = 1.8, controls = 1.2, vehicles = 3.2, terminals = 1.5}
+local GROUP_HEIGHT = {samples = 0.3, supplies = 0.3, dropoffs = 1.8, controls = 1.2, vehicles = 3.2}
                               -- icons (samples, supplies) sit lower than diamonds   -- these stand taller: the marker goes above them
 local VEHICLE_BUSY = 4        -- a helldiver this close to a vehicle's origin is in it: no marker while it moves,
                               -- and none ever while you are this close
@@ -489,10 +487,10 @@ local function build_keys()
     local unnamed = 0
     for _, t in ipairs(TARGETS) do
         if t.name then
-            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, probe = t.probe}
+            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height}
         elseif t.hex then
             unnamed = unnamed + 1
-            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, probe = t.probe}
+            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height}
         end
     end
     log(string.format('%d target resources: %d named, %d by id only (looked up if the id self-test passes)',
@@ -674,7 +672,7 @@ local function near(list, p, r)
     return false
 end
 
-local SHIP_HIDDEN = {mission = true, carry = true, dropoffs = true, controls = true, terminals = true, probe = true}
+local SHIP_HIDDEN = {mission = true, carry = true, dropoffs = true, controls = true}
 
 -- Last frame's counts per group, for the status line: drawn, hidden as worn/held, out of range.
 local last_counts = {}
@@ -682,7 +680,7 @@ local last_counts = {}
 -- Diagnostics (2.1.0): where each mission item, load, drop-off and control lies, once per spot and
 -- world, so a log shows items the game keeps out of sight (diamonds under the map and under the ship's
 -- hellpods were reported on 2.0.1). Items on a helldiver are left out.
-local SPOT_KINDS = {mission = true, carry = true, dropoffs = true, controls = true, terminals = true}
+local SPOT_KINDS = {mission = true, carry = true, dropoffs = true, controls = true}
 local SPOT_LOG_MAX = 300      -- lines a launch
 local SPOT_SAME = 2           -- metres: the same spot
 local spots = {}              -- per key: the spots logged in this world
@@ -718,51 +716,6 @@ local function check_taken(p, now)
         return true
     end
     return false
-end
-
--- Diagnostics (2.1.0-test.2, Chef Shared Loader only): every kind of unit within CENSUS_NEAR of you, once a
--- world, by its resource id: terminals and levers the hash list has no name for show up when you stand at one.
-local CENSUS_NEAR = 4
-local CENSUS_PER_FRAME = 300
-local CENSUS_EVERY_S = 2
-local CENSUS_LOG_MAX = 400
-local RUNTIME_KIND = '46cab355bd8d4d37'   -- units built at run time: asking where one is ends the game
-local census = {list = nil, i = 0, next_at = 0, seen = {}, logged = 0}
-
-local function census_step(world, now)
-    if me == nil or census.logged >= CENSUS_LOG_MAX
-        or not (chef_has('call') and chef_has('unit_kind') and chef_has('unit_position') and chef_has('unit_alive')) then
-        return
-    end
-    if census.list == nil then
-        if now < census.next_at then return end
-        local units = CHEF.call('World.units', world)
-        if type(units) ~= 'table' then
-            census.next_at = now + 30
-            return
-        end
-        census.list, census.i = units, 0
-    end
-    local list = census.list
-    local stop = math.min(#list, census.i + CENSUS_PER_FRAME)
-    for j = census.i + 1, stop do
-        local u = list[j]
-        local kind = CHEF.unit_alive(u) and CHEF.unit_kind(u)
-        if kind and kind ~= RUNTIME_KIND and not census.seen[kind] then
-            local x, y, z = CHEF.unit_position(u)
-            if x then
-                local dx, dy, dz = x - me[1], y - me[2], z - me[3]
-                local d = math.sqrt(dx * dx + dy * dy + dz * dz)
-                if d < CENSUS_NEAR then
-                    census.seen[kind] = true
-                    census.logged = census.logged + 1
-                    log(string.format('near: %s at %.1f m (%.1f %.1f %.1f)', kind, d, x, y, z))
-                end
-            end
-        end
-    end
-    census.i = stop
-    if stop >= #list then census.list, census.next_at = nil, now + CENSUS_EVERY_S end
 end
 
 -- Diagnostics (2.1.0-test.3, Chef Shared Loader only): what moves inside a valve, crank, generator, vehicle or
@@ -962,7 +915,7 @@ local function collect_dots(now)
                     c.worn = c.worn + 1
                 elseif keys[i].taken and check_taken(p, now) then
                     c.worn = c.worn + 1
-                elseif carried and group ~= 'dropoffs' and group ~= 'controls' and group ~= 'terminals' and group ~= 'probe' then   -- never worn; a teammate may stand at it
+                elseif carried and group ~= 'dropoffs' and group ~= 'controls' then   -- never worn; a teammate may stand at it
                     c.worn = c.worn + 1
                 elseif (group == 'mission' or group == 'carry') and near(dropoffs, p, DELIVERED_NEAR) then
                     c.worn = c.worn + 1
@@ -972,8 +925,7 @@ local function collect_dots(now)
                     c.worn = c.worn + 1
                 else
                     c.drawn = c.drawn + 1
-                    dots[#dots + 1] = {p[1], p[2], p[3] + (GROUP_HEIGHT[group] or DOT_HEIGHT), d, who, group, keys[i].icon,
-                                       group == 'probe' and keys[i].probe or nil}
+                    dots[#dots + 1] = {p[1], p[2], p[3] + (GROUP_HEIGHT[group] or DOT_HEIGHT), d, who, group, keys[i].icon}
                 end
             end
             if near_any then new_hot[#new_hot + 1] = i end
@@ -1322,11 +1274,10 @@ local function screen_draw(world, world_id, dots)
             if oks and type(w) == 'number' and type(h) == 'number' and w > 0 and h > 0 then cw, ch = w, h end
         end
         local function distance_above(sx, top, d)
-            if cw == nil then return end
+            if cw == nil or d[6] ~= 'vehicles' then return end
             pcall(function()
-                local px = math.max(9, math.floor(ch / 1080 * DISTANCE_PX + 0.5))
+                local px = math.max(6, math.floor(ch / 1080 * DISTANCE_PX + 0.5))
                 local text = string.format('%dm', math.floor(d[4] + 0.5))
-                if d[8] then text = d[8] .. ' ' .. text end   -- a candidate's id (test builds)
                 local c = tint or {255, 255, 255}
                 local color = CHEF.color(c[1], c[2], c[3], math.floor(255 * opacity))
                 local x = sx * cw / width - CHEF.text_width(text, px) / 2
@@ -1373,7 +1324,7 @@ local function screen_draw(world, world_id, dots)
             local size = sx and size_of(d)
             if sx then
                 opacity = opacity_of(d)
-                tint = (d[6] == 'vehicles' and VEHICLE_RGB) or (d[6] == 'probe' and PROBE_RGB) or nil
+                tint = d[6] == 'vehicles' and VEHICLE_RGB or nil
                 ink = ink_of(255 * opacity)
                 if d[6] == 'samples' or d[6] == 'supplies' then sx, sy = sx + ICON_OFFSET[1], sy + ICON_OFFSET[2] end
             end
@@ -1625,7 +1576,6 @@ local function tick()
         last_world, world_seen_at, cursor, found, players, players_read_at, me = world, now, 1, {}, {}, nil, nil
         vehicles_seen = {}
         spots, reached, taken, poses, heads, me_unit = {}, {}, {}, {}, {}, nil
-        census = {list = nil, i = 0, next_at = 0, seen = {}, logged = census.logged}
         hot = {}
         new_main_world()
         traced = 0
@@ -1641,7 +1591,6 @@ local function tick()
         if #players > 0 and can_get then
             detect_id_form()
             sweep_step(world)
-            census_step(world, now)
             head_step(now)
         end
         -- draw every frame; with no helldiver this clears whatever was drawn last
@@ -1661,8 +1610,7 @@ local function tick()
         if #players > 0 then
             log('found: ' .. found_summary())
             local parts = {}
-            for _, group in ipairs({'samples', 'supplies', 'mission', 'carry', 'dropoffs', 'controls', 'vehicles', 'terminals',
-                                    'probe'}) do
+            for _, group in ipairs({'samples', 'supplies', 'mission', 'carry', 'dropoffs', 'controls', 'vehicles'}) do
                 local c = last_counts[group]
                 if c then parts[#parts + 1] = string.format('%s drawn=%d worn=%d far=%d', group, c.drawn, c.worn, c.far) end
             end
@@ -1682,7 +1630,6 @@ local RANGE_OPTIONS = {   -- group, its name in the settings window, the most me
     {'samples', 'Samples', 150}, {'supplies', 'Supplies', 150}, {'mission', 'Mission items', 150},
     {'carry', 'Shells, warheads, batteries', 150}, {'dropoffs', 'Drop-off points, cargo containers', 150},
     {'controls', 'Valves, cranks, generators', 150}, {'vehicles', 'Vehicles', 300},
-    {'terminals', 'Terminals', 150},   -- off by default (SHOW)
 }
 
 -- 2.1.0: how markers look. id, its spec, how a value goes into LOOK.
@@ -1710,8 +1657,8 @@ local LOOK_OPTIONS = {
     {'fade', {type = 'toggle', label = 'Fade markers with distance', default = true,
         description = 'Markers get fainter the farther away they are.'},
         toggle_into('fade')},
-    {'distance', {type = 'toggle', label = 'Show distance above markers', default = true,
-        description = 'How far away each marked thing is, in metres.'},
+    {'distance', {type = 'toggle', label = 'Show distance above vehicles', default = true,
+        description = 'How far away each marked vehicle is, in metres.'},
         toggle_into('distance')},
     {'hide_aiming', {type = 'toggle', label = 'Hide markers while aiming in first person', default = true,
         description = 'While you hold the right mouse button with the camera at your eyes (a scope).'},
@@ -1753,7 +1700,7 @@ local function register_settings()
         local group, id = row[1], 'pickup_dots.range_' .. row[1]
         local show_id = 'pickup_dots.show_' .. group
         local oks, registered6, why6 = pcall(host.register_option, show_id, {
-            type = 'toggle', mod = 'Extended Pickup Icons Range', label = 'Show ' .. row[2], default = SHOW[group] ~= false,
+            type = 'toggle', mod = 'Extended Pickup Icons Range', label = 'Show ' .. row[2], default = true,
             description = 'Off: no markers on ' .. row[2]:lower() .. '.',
         })
         if not oks or registered6 ~= true then   -- left at its default; the others still go in
