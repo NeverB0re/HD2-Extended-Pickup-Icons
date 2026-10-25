@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.1.0-test.10 loading", text)
+            self.assertIn("Pickup Dots 2.1.0-test.11 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -1005,9 +1005,26 @@ class ScreenTests(Case):
         self.assertEqual(len(self.screen_points()), 1)
         self.fake.units[valve][1].turn = 1.0                          # its wheel turns, then stays
         self.frames(300, start=30.0)
-        self.assertIn("control: oil_pump_valve at 3.0 0.0 0.0 - part 3 turned and stopped: taken for finished",
+        self.assertIn("control: oil_pump_valve at 3.0 0.0 0.0 - part 3 turned and stopped: taken for closed",
                       self.log_text())
         self.assertEqual(self.screen_tris(), [])
+        self.fake.units[valve][1].turn = 0.1                          # turned back: open
+        self.frames(120, start=40.0)
+        self.assertIn("control: oil_pump_valve at 3.0 0.0 0.0 - turned back: open again", self.log_text())
+        self.assertEqual(len(self.screen_points()), 1)
+
+    def test_with_chef_a_crank_that_turned_keeps_its_marker(self):
+        crank = "content/objectives/obj_common/colony_relay/colony_relay_01/objective_colony_relay_antenna_crank_01"
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(crank, [unit(3, 0, 0)])
+        self.load_with_chef()
+        self.settle()
+        self.fake.units[crank][1].turn = 1.0
+        self.frames(300, start=30.0)
+        self.assertNotIn("control: ", self.log_text())
+        self.assertEqual(len(self.screen_points()), 1)
 
     def test_with_chef_a_supply_frv_whose_parts_all_change_is_taken_for_destroyed(self):
         frv = "content/fac_helldivers/vehicles/frv_supply/frv_supply"

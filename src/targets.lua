@@ -61,7 +61,7 @@ return {
   {group='vehicles', name='content/fac_helldivers/vehicles/tank/tank', icon='tank'},
   {group='vehicles', name='content/fac_helldivers/vehicles/tank_storm/tank_storm', icon='tank'},
   -- 0.18.0: mission controls you work by hand (valves, cranks, switches, buttons), names from filediver's hash list
-  {group='controls', name='content/objectives/obj_common/oil_pump/oil_pump_valve'},
+  {group='controls', name='content/objectives/obj_common/oil_pump/oil_pump_valve', valve=true},
   {group='controls', name='content/objectives/obj_common/colony_relay/colony_relay_01/objective_colony_relay_antenna_crank_01'},
   {group='controls', name='content/objectives/obj_super_earth/se_orbital_cannon/objective_city_cannon_crank_01'},
   {group='controls', name='content/objectives/obj_super_earth/se_orbital_cannon/objective_city_cannon_crank_02'},

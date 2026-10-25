@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.1.0-test.10'
+local VERSION = '2.1.0-test.11'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -485,10 +485,10 @@ local function build_keys()
     local unnamed = 0
     for _, t in ipairs(TARGETS) do
         if t.name then
-            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, wreck_parts = t.wreck_parts}
+            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, wreck_parts = t.wreck_parts, valve = t.valve}
         elseif t.hex then
             unnamed = unnamed + 1
-            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, wreck_parts = t.wreck_parts}
+            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, wreck_parts = t.wreck_parts, valve = t.valve}
         end
     end
     log(string.format('%d target resources: %d named, %d by id only (looked up if the id self-test passes)',
@@ -729,8 +729,10 @@ end
 
 -- Parts (2.1.0, Chef Shared Loader only): a unit's parts (scene graph nodes), where they are and which way they
 -- face, relative to the unit itself, looked at every PARTS_EVERY_S. What test.3-test.8 logs showed:
---   * a valve or crank turned: one part (a valve's wheel) turns, and stays turned when done. So a control one of
---     whose parts faces another way than when first seen, and none has moved for CONTROL_STILL_S, is finished;
+--   * an oil pump valve turned: one part (its wheel) turns, and stays turned when done. So a valve (targets with
+--     'valve') one of whose parts faces another way than when first seen, none having moved for CONTROL_STILL_S,
+--     is closed; turned back to within PARTS_TURNED of how it was first seen, it is open again. Not cranks or the
+--     radar station's valve: they turn round and round, and end as they began;
 --   * a supply FRV destroyed: in one look, most of its parts (PARTS_WRECKED of them) change, even while it is
 --     thrown about (test.10: no longer only where it stands). Its weapon rack doesn't tell: it stays.
 --   * test.10, to define a wreck by how its parts lie instead: a vehicle's every part is logged when first seen
@@ -832,15 +834,22 @@ local function parts_step(k, p, d, now)
         log(string.format('vehicle: %s at %.1f %.1f %.1f - %d of %d parts changed at once: taken for destroyed',
             name, where[1], where[2], where[3], #moved, count))
     end
-    if k.group == 'controls' and not e.done and now - e.changed_at >= CONTROL_STILL_S then
+    if k.valve then
+        local turned
         for i, v in pairs(nodes) do
             local f = e.first[i]
             if f and v[4] * f[4] + v[5] * f[5] + v[6] * f[6] < PARTS_TURNED then
-                e.done = true
-                log(string.format('control: %s at %.1f %.1f %.1f - part %d turned and stopped: taken for finished',
-                    name, where[1], where[2], where[3], i))
+                turned = i
                 break
             end
+        end
+        if not e.done and turned and now - e.changed_at >= CONTROL_STILL_S then
+            e.done = true
+            log(string.format('control: %s at %.1f %.1f %.1f - part %d turned and stopped: taken for closed',
+                name, where[1], where[2], where[3], turned))
+        elseif e.done and not turned then
+            e.done = false
+            log(string.format('control: %s at %.1f %.1f %.1f - turned back: open again', name, where[1], where[2], where[3]))
         end
     end
     if logging and still and #moved > 0 then
@@ -941,7 +950,7 @@ local function collect_dots(now)
                     c.worn = c.worn + 1
                 elseif keys[i].taken and check_taken(p, now) then
                     c.worn = c.worn + 1
-                elseif state ~= nil and state.done then   -- a valve or crank turned all the way
+                elseif state ~= nil and state.done then   -- an oil pump valve turned all the way (closed)
                     c.worn = c.worn + 1
                 elseif carried and group ~= 'dropoffs' and group ~= 'controls' then   -- never worn; a teammate may stand at it
                     c.worn = c.worn + 1
