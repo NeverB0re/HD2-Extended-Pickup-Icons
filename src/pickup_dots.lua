@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.1.0-test.6'
+local VERSION = '2.1.0-test.7'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -688,11 +688,12 @@ local spots_logged = 0
 
 -- Launch codes and keycards (targets with 'taken'): picked up, the unit stays where it lay, alive and
 -- unchanged in everything the engine lets a mod read (2.1.0-test.1 logs). So they are taken for picked up when
--- you press the interact key (TAKE_KEY) within TAKE_REACH of them, or a teammate has stood that close for
--- TAKE_HOLD_S (their keys can't be read). Walking past them leaves them marked (test.5 took 1 s at them, anyone).
--- Without the loader's keyboard: anyone at them for TAKE_HOLD_S.
+-- you press the interact key (TAKE_KEY) within TAKE_REACH of them, or a teammate has been within
+-- TAKE_TEAMMATE_REACH of them for TAKE_HOLD_S (their keys can't be read; they pick codes up running past, so
+-- briefly). You walking past leaves them marked. Without the loader's keyboard: you count as a teammate.
 local TAKE_REACH = 2
-local TAKE_HOLD_S = 2
+local TAKE_TEAMMATE_REACH = 1.5
+local TAKE_HOLD_S = 0.5
 local TAKE_KEY = 'e'
 local reached = {}            -- per unit: since when a teammate has been at it
 local taken = {}              -- per unit: picked up (this world)
@@ -704,13 +705,14 @@ local function check_taken(p, now)
     local by, other = nil, false
     for _, h in ipairs(players) do
         local dx, dy, dz = p[1] - h[1], p[2] - h[2], p[3] - h[3]
-        if dx * dx + dy * dy + dz * dz < TAKE_REACH * TAKE_REACH then
-            if h == me and keys_known then
+        local d2 = dx * dx + dy * dy + dz * dz
+        if h == me and keys_known then
+            if d2 < TAKE_REACH * TAKE_REACH then
                 local ok, down = pcall(CHEF.key_down, TAKE_KEY)
                 if ok and down then by = 'you, with the interact key' end
-            else
-                other = true
             end
+        elseif d2 < TAKE_TEAMMATE_REACH * TAKE_TEAMMATE_REACH then
+            other = true
         end
     end
     if other then

@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.1.0-test.6 loading", text)
+            self.assertIn("Pickup Dots 2.1.0-test.7 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -885,11 +885,11 @@ class ScreenTests(Case):
     def test_launch_codes_a_helldiver_stood_at_are_taken_for_picked_up(self):
         codes = "content/objectives/obj_common/generic_intel/generic_intel"
         self.set_units(AVATAR, [unit(0, -8, 0), unit(10, 0, 0)], loaded=False)   # you; a teammate at them
-        self.set_units(codes, [unit(10, 1.5, 0), unit(-6, 0, 0)])
+        self.set_units(codes, [unit(10, 1.2, 0), unit(-6, 0, 0)])
         self.load()
         self.settle()                                                  # 9 s on: long enough
         self.assertIn("mission drawn=1 worn=1", self.status_now())
-        self.assertIn("taken: the item at 10.0 1.5 0.0 is taken for picked up (a helldiver standing at it)",
+        self.assertIn("taken: the item at 10.0 1.2 0.0 is taken for picked up (a helldiver standing at it)",
                       self.log_text())
         self.fake.units[AVATAR][2].x = 30                              # the teammate goes: they stay taken
         self.frames(10, start=30.0)
@@ -1036,6 +1036,14 @@ class ScreenTests(Case):
         self.fake.rmb = False                                          # let go: back
         self.frames(5, start=32.0)
         self.assertGreater(len(self.screen_tris()), 0)
+
+    def test_launch_codes_a_teammate_only_passes_by_stay_marked(self):
+        codes = "content/objectives/obj_common/generic_intel/generic_intel"
+        self.set_units(AVATAR, [unit(0, -8, 0), unit(10, 0, 0)], loaded=False)   # you; a teammate 1.8 m off them
+        self.set_units(codes, [unit(10, 1.8, 0)])
+        self.load()
+        self.settle()
+        self.assertNotIn("taken:", self.log_text())
 
     def test_with_chef_launch_codes_you_walk_past_stay_marked_until_you_press_e(self):
         codes = "content/objectives/obj_common/generic_intel/generic_intel"
