@@ -21,7 +21,7 @@ The October 20, 2026 game update broke the old version of this mod, and the load
 
 - Markers get a little smaller the farther away they are.
 - Items someone is carrying get no marker.
-- Items close enough for the game to show its own icon get no marker: samples within 10 m of you (Terminid eggs and Automaton super samples 20 m, sample containers 15 m), supplies within 4 m.
+- Items close enough for the game to show its own icon get no marker: samples within 9 m of you (Terminid eggs and Automaton super samples 20 m, sample containers 15 m), supplies within 4 m.
 - The vehicle you are in, or one a teammate is driving, gets no marker. A parked vehicle shows again after a few seconds.
 - Destroyed exosuits and FRVs lose their marker.
 
@@ -75,7 +75,7 @@ Install **HD2 Mod Setting GUI** (Nexus mod 17756) to turn each kind on or off an
 
 - 멀리 있을수록 마커가 조금 작아집니다.
 - 누군가 들고 있는 아이템에는 마커가 뜨지 않습니다.
-- 게임 자체 아이콘이 뜨는 거리 안에서는 마커가 뜨지 않습니다: 샘플은 나에게서 10m(테르미니드 알과 오토마톤 슈퍼 샘플은 20m, 샘플통은 15m), 보급품은 4m.
+- 게임 자체 아이콘이 뜨는 거리 안에서는 마커가 뜨지 않습니다: 샘플은 나에게서 9m(테르미니드 알과 오토마톤 슈퍼 샘플은 20m, 샘플통은 15m), 보급품은 4m.
 - 내가 탄 차량이나 동료가 운전 중인 차량에는 마커가 뜨지 않습니다. 주차하면 몇 초 뒤 다시 보입니다.
 - 파괴된 엑소슈트와 FRV는 마커가 사라집니다.
 

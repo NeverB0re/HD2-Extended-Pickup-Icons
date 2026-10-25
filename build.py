@@ -59,7 +59,7 @@ What gets a marker (default distance):
 
 Markers get a little smaller farther away and hide while a menu is open. Items someone is
 carrying, and the vehicle you or a teammate are driving, get no marker. Items close enough
-for the game to show its own icon get none either: samples within 10 m (Terminid eggs and
+for the game to show its own icon get none either: samples within 9 m (Terminid eggs and
 Automaton super samples 20 m, sample containers 15 m) and supplies within 4 m.
 
 Settings: turn each kind on or off and set its distance with HD2 Mod Setting GUI

@@ -23,7 +23,7 @@ rawset(_G, MOD_KEY, M)
 local RANGE = {samples = 40, supplies = 25, mission = 40, carry = 25,  -- metres, settings (0 = none shown)
                dropoffs = 40, controls = 40, vehicles = 100}
 local SHOW = {}               -- a setting per kind: false hides it (nil or true: shown)
-local NEAR_ME = {samples = 10, supplies = 4}  -- this close to you: no marker (the game shows its own icon;
+local NEAR_ME = {samples = 9, supplies = 4}   -- this close to you: no marker (the game shows its own icon;
                                                -- a target's own 'near' overrides it)
 local DOT_HEIGHT = 0.6        -- metres above the unit's origin
 local GROUP_HEIGHT = {samples = 0.3, supplies = 0.3, dropoffs = 1.8, controls = 1.2, vehicles = 3.2}
