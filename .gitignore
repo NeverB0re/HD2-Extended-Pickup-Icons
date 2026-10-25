@@ -1,3 +1,4 @@
-work/vendor/
+dist/
+.venv/
 __pycache__/
 *.pyc
