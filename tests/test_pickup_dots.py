@@ -197,14 +197,14 @@ class Case(unittest.TestCase):
 class DrawingTests(Case):
     def test_dots_only_within_range_and_only_loaded_resources_are_looked_up(self):
         self.set_units(AVATAR, [unit(0)], loaded=False)
-        self.set_units(MARK, [unit(10), unit(50)])  # samples: 35 m
+        self.set_units(MARK, [unit(10), unit(60)])  # mission items: 50 m
         self.load()
         self.settle()
         log = self.log_text()
         self.assertNotIn("failed", log, log)
         self.assertEqual(self.dots(), 1)
         cx, cy, cz = self.centre()
-        self.assertAlmostEqual(cx, 10.0, places=6)  # the unit at 10 m, not the one at 50 m
+        self.assertAlmostEqual(cx, 10.0, places=6)  # the unit at 10 m, not the one at 60 m
         self.assertAlmostEqual(cz, 0.6, places=6)   # above the unit
         self.assertEqual(self.fake.temp, 7)
         self.assertGreater(self.fake.updates, 0)
@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.1.0 loading", text)
+            self.assertIn("Pickup Dots 2.2.0-test.1 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -810,7 +810,7 @@ class ScreenTests(Case):
         shell = "content/objectives/obj_common/seaf_artillery/seaf_shell_regular"
         case = "content/objectives/obj_common/briefcase/briefcase"
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(shell, [unit(-1, 0, 0), unit(0, 30, 0)])   # 8 m: in; 38 m: past the 25 m of carried shells
+        self.set_units(shell, [unit(-1, 0, 0), unit(0, 50, 0)])   # 8 m: in; 58 m: past mission items' 50 m
         self.set_units(case, [unit(1, 0, 0)])
         self.load()
         self.settle()
@@ -825,18 +825,18 @@ class ScreenTests(Case):
             local get = ModOptionsMenu.get
             ModOptionsMenu.get = function(id)
               if id == 'pickup_dots.range_mission' then return 15 end
-              if id == 'pickup_dots.range_dropoffs' then return 0 end
+              if id == 'pickup_dots.range_objectives' then return 0 end
               return get(id)
             end
         """)
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(MARK, [unit(-1, 0, 0), unit(0, 20, 0)])        # 8 m: in; 28 m: past the 15 m set
-        self.set_units(self.CONSOLE, [unit(6, 0, 0)])                   # a drop-off: none shown at 0
+        self.set_units(self.CONSOLE, [unit(6, 0, 0)])                   # a drop-off, an objective: none shown at 0
         self.load()
         self.settle()
         self.assertEqual(len(self.screen_points()), 1)
-        spec = self.fake.options["pickup_dots.range_controls"]
-        self.assertEqual((spec.min, spec.max, spec.default), (0, 150, 40))
+        spec = self.fake.options["pickup_dots.range_objectives"]
+        self.assertEqual((spec.min, spec.max, spec.default), (0, 150, 50))
         self.assertEqual(self.fake.options["pickup_dots.range_vehicles"].default, 100)
 
     def test_markers_shrink_with_distance_to_70_percent_at_the_edge_of_range(self):
@@ -846,7 +846,7 @@ class ScreenTests(Case):
         self.settle()
         tris = self.screen_tris()
         near = max(v._x for t in tris for v in (t.a, t.b, t.c)) - min(v._x for t in tris for v in (t.a, t.b, t.c))
-        self.fake.units[MARK][1].y = 32                       # 40 m, the edge of the 40 m mission range
+        self.fake.units[MARK][1].y = 42                       # 50 m, the edge of the 50 m mission range
         self.frames(80, start=30.0)
         tris = self.screen_tris()
         far = max(v._x for t in tris for v in (t.a, t.b, t.c)) - min(v._x for t in tris for v in (t.a, t.b, t.c))
@@ -861,7 +861,8 @@ class ScreenTests(Case):
         self.load()
         self.settle()
         self.assertIn("mission drawn=1 worn=1", self.status_now())
-        self.assertIn("dropoffs drawn=0 worn=1", self.status_now())   # and the drop-off is done
+        self.assertIn("dropoffs drawn=1 worn=0", self.status_now())   # the drop-off keeps its marker: SSSDs are taken
+                                                                         # out of drop-offs in some missions
 
     def test_a_drop_off_keeps_its_marker_while_an_sssd_is_only_carried_past(self):
         sssd = "content/objectives/obj_common/carry_data/carry_data"
@@ -1038,6 +1039,28 @@ class ScreenTests(Case):
         you = [l for l in self.log_text().splitlines() if "you: " in l]
         self.assertEqual(len(you), 2, you)
 
+    def test_settings_come_in_order_kinds_with_what_goes_with_them(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.lua.execute("""local fake = ...
+            fake.order = {}
+            local register = ModOptionsMenu.register_option
+            ModOptionsMenu.register_option = function(id, spec) fake.order[#fake.order + 1] = id; return register(id, spec) end
+        """, self.fake)
+        self.load()
+        order = [i[len("pickup_dots."):] for i in self.fake.order.values()]
+        self.assertEqual(order, ["show_samples", "range_samples", "show_supplies", "range_supplies", "fade",
+                                 "show_mission", "range_mission", "show_objectives", "range_objectives",
+                                 "show_vehicles", "range_vehicles", "distance", "hide_near", "smallest_size", "opacity"])
+
+    def test_with_chef_in_korean_the_settings_are_in_korean(self):
+        self.lua.execute("""local fake = ...
+            fake.chef_lang = true""", self.fake)
+        chef = self.lua.execute(self.FAKE_CHEF, self.fake)
+        chef.lang = self.lua.eval("function() return '한국어', 'ko' end")
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.lua.execute(self.source, chef)
+        self.assertEqual(self.fake.options["pickup_dots.show_mission"].label, "임무 아이템 표시 (SSSD, 발사 코드, 포탄)")
+
     def test_vehicles_are_sky_blue(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(self.VEHICLE, [unit(0, 20, 0)])
@@ -1071,7 +1094,7 @@ class ScreenTests(Case):
         self.set_options({"pickup_dots.smallest_size": 30})
         stim = "content/fac_helldivers/discoverables/health_pack_discoverable_01/health_pack_discoverable_01"
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(MARK, [unit(-2, 31.9, 0)])             # 40 m, the edge of the 40 m mission range
+        self.set_units(MARK, [unit(-2, 41.95, 0)])            # 50 m, the edge of the 50 m mission range
         self.set_units(stim, [unit(2, 0, 0)])                 # 8 m: full size
         self.load()
         self.settle()
@@ -1090,7 +1113,7 @@ class ScreenTests(Case):
         self.set_options({"pickup_dots.opacity": 50, "pickup_dots.fade": True})
         stim = "content/fac_helldivers/discoverables/health_pack_discoverable_01/health_pack_discoverable_01"
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(MARK, [unit(-2, 31.9, 0)])             # a mission item at the edge of its range: no fading
+        self.set_units(MARK, [unit(-2, 41.95, 0)])            # a mission item at the edge of its range: no fading
         self.set_units(stim, [unit(2, 16.9, 0)])              # a stim at the edge of supplies' range
         self.load()
         self.settle()
@@ -1117,9 +1140,11 @@ class ScreenTests(Case):
         self.settle()
         self.assertEqual(self.screen_tris(), [])
         ids = sorted(self.fake.options.keys())
-        look = ["pickup_dots." + n for n in ("distance", "fade", "game_textures", "hide_near", "opacity", "smallest_size")]
+        look = ["pickup_dots." + n for n in ("distance", "fade", "hide_near", "opacity", "smallest_size")]
         self.assertEqual([i for i in ids if not i.startswith(("pickup_dots.range_", "pickup_dots.show_"))], look)
-        self.assertEqual(len(ids), 14 + 6)
+        self.assertEqual(len(ids), 10 + 5)
+        kinds = sorted(i[len("pickup_dots.show_"):] for i in ids if i.startswith("pickup_dots.show_"))
+        self.assertEqual(kinds, ["mission", "objectives", "samples", "supplies", "vehicles"])
         self.assertTrue(self.fake.options["pickup_dots.fade"].default)
         self.assertEqual(self.fake.options["pickup_dots.show_vehicles"].type, "toggle")
 
@@ -1144,7 +1169,7 @@ class ScreenTests(Case):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.load()
         labels = [self.fake.options[k].label for k in self.fake.options.keys()]
-        self.assertIn("Show Samples", labels)
+        self.assertIn("Show mission items (SSSDs, launch codes, shells)", labels)
         self.assertIn("Vehicles distance (m)", labels)
         self.assertTrue(all(ord(ch) < 128 for l in labels for ch in l))
 
@@ -1182,7 +1207,7 @@ class ScreenTests(Case):
 class LifecycleTests(Case):
     def test_a_line_object_only_when_there_is_something_to_draw(self):
         self.set_units(AVATAR, [unit(0)], loaded=False)
-        self.set_units(MARK, [unit(50)])  # out of range
+        self.set_units(MARK, [unit(60)])  # out of range
         self.load()
         self.settle()
         self.assertEqual(self.fake.created, 0)

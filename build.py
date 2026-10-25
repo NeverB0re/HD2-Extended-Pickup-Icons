@@ -50,27 +50,26 @@ See samples, supplies, mission items and vehicles from farther away, marked with
 game's own icons.
 
 What gets a marker (default distance):
-- Samples (40 m): common, rare and super samples, sample containers, Terminid eggs.
+- Samples (50 m): common, rare and super samples, sample containers, Terminid eggs.
 - Supplies (25 m): ammo boxes, grenade boxes, stims and resupply pod crates.
-- Mission items (40 m): SSSDs, data drives, black boxes, larva containers, launch codes,
-  keycards, video cameras and more.
-- Shells, warheads and batteries you carry (25 m).
-- Drop-off points and cargo containers (40 m), and valves and cranks (40 m).
+- Mission items (50 m): SSSDs, data drives, black boxes, larva containers, launch codes,
+  keycards, video cameras, artillery shells, warheads and other things you carry.
+- Mission objectives (50 m): drop-off points, cargo containers, valves and cranks.
 - Vehicles (100 m): exosuits, FRVs and tanks, in sky blue.
 
 Vehicle markers show their distance. Markers get smaller farther away (supply markers
-fainter too), follow the
-game's camera (scopes too), and hide while a menu is open; on your ship mission markers
-are off. Items someone is
-carrying, and the vehicle you or a teammate are driving, get no marker. Items close enough
+fainter too), follow the game's camera (scopes too), and hide while a menu is open; on
+your ship mission markers are off. Items someone is carrying, and the vehicle you or a
+teammate are driving, get no marker. Items close enough
 for the game to show its own icon get none either: samples within 9 m (Terminid eggs and
 Automaton super samples 20 m, sample containers 15 m) and ammo and grenade boxes within
 4 m. Stims have no icon of the game's and keep theirs.
 
 Settings: press F9 in the game (Chef Shared Loader's options menu) and pick Extended
-Pickup Icons Range: turn each kind on or off and set its distance, show or hide vehicles'
-distance, keep markers on up close, and change their smallest size, opacity and the
-supplies' fading.
+Pickup Icons Range: turn each kind on or off and set its distance, fade supplies far away,
+show or hide vehicles' distance, keep markers on up close, and change their size far away
+and opacity. In English, Korean, Japanese, Chinese, German, French, Spanish, Italian,
+Polish, Portuguese and Russian, as picked in F9 > Chef Shared Loader > Language.
 
 Requires Chef Shared Loader 1.2.0 or newer (Nexus mod 17760). Give it the highest priority
 in your mod manager (in Arsenal, by default, the bottom of the list).

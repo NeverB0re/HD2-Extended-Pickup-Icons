@@ -21,14 +21,16 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.1.0'
+local VERSION = '2.2.0-test.1'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
 -- ------------------------------------------------------------------ settings --
-local RANGE = {samples = 40, supplies = 25, mission = 40, carry = 25,  -- metres, settings (0 = none shown)
-               dropoffs = 40, controls = 40, vehicles = 100}
+local RANGE = {samples = 50, supplies = 25, mission = 50, objectives = 50, vehicles = 100}   -- metres, settings
 local SHOW = {}               -- a setting per kind: false hides it (nil or true: shown)
+-- The groups the settings take together (2.2.0): what you carry with mission items, drop-off points with valves.
+local SETTING_OF = {carry = 'mission', dropoffs = 'objectives', controls = 'objectives'}
+local function setting_of(group) return SETTING_OF[group] or group end
 local NEAR_ME = {samples = 9, supplies = 4}   -- this close to you: no marker (the game shows its own icon;
                                                -- a target's own 'near' overrides it; 0: always a marker)
 local NEAR_OVERLAP = 0.5      -- metres: ours goes this much inside where the game's icon comes (no gap between)
@@ -39,11 +41,10 @@ local LOOK = {                -- settings (2.1.0)
     opacity = 1,              -- 0..1
     fade = true,              -- supplies fainter with distance, down to FADE_LEAST of opacity at the edge
     distance = true,          -- the distance above a vehicle's marker, in the game's font (Chef Shared Loader)
-    game_textures = true,     -- icons drawn from the game's own textures (Chef Shared Loader) where it has them
-                              -- loaded, else pixels (both were tried in testing: the textures look better)
 }
 -- The game's icon textures the pixel icons were made from (tools/icons): id, width, height, and the icon's
--- box in it (left, top, right, bottom; from the top). Drawn by Chef Shared Loader when the game has one loaded.
+-- box in it (left, top, right, bottom; from the top). Drawn by Chef Shared Loader when the game has one loaded
+-- (they look sharper than the pixels); else the pixel icon.
 local ICON_TEXTURES = {
     ammo = {'7615d6a35c657087', 192, 192, 24, 24, 168, 168},
     grenade = {'4c3bef8bc16021c9', 52, 72, 4, 4, 47, 68},
@@ -738,21 +739,11 @@ local function collect_dots(now)
             for _, p in ipairs(found[i]) do list[#list + 1] = p end
         end
     end
-    local filled = {}        -- items put into a drop-off: that drop-off is done (2.1.0)
-    for i = 1, #keys do
-        local group = keys[i].group
-        if (group == 'mission' or group == 'carry') and found[i] then
-            for _, p in ipairs(found[i]) do
-                local _, _, carried = measure(p[1], p[2], p[3], keys[i].worn)
-                if not carried and near(dropoffs, p, DELIVERED_NEAR) then filled[#filled + 1] = p end
-            end
-        end
-    end
     -- on the ship: no mission markers (diamonds were seen under the hellpods after a mission, 2.0.1)
     local on_ship = chef_has('in_mission') and not CHEF.in_mission()
     for i = 1, #keys do
         local group = keys[i].group
-        local range = SHOW[group] ~= false and (RANGE[group] or 0) or 0
+        local range = SHOW[setting_of(group)] ~= false and (RANGE[setting_of(group)] or 0) or 0
         if on_ship and SHIP_HIDDEN[group] then range = 0 end
         local points = found[i]
         if points and range > 0 then
@@ -792,8 +783,6 @@ local function collect_dots(now)
                 elseif (group == 'mission' or group == 'carry') and near(dropoffs, p, DELIVERED_NEAR) then
                     c.worn = c.worn + 1
                 elseif group == 'carry' and near(racks, p, LOADED_NEAR) then
-                    c.worn = c.worn + 1
-                elseif group == 'dropoffs' and near(filled, p, DELIVERED_NEAR) then
                     c.worn = c.worn + 1
                 else
                     c.drawn = c.drawn + 1
@@ -1010,7 +999,7 @@ local FADE_LEAST = 0.2
 local POINTER = {gap = 3, half = 9, slope = 0.5, line = 2}   -- the wide V under a vehicle's icon, pixels at full size
 -- 0 up to FULL_SIZE_M away, 1 at the edge of its kind's range
 local function far_share(d)
-    local range = RANGE[d[6]] or 0
+    local range = RANGE[setting_of(d[6])] or 0
     if range <= FULL_SIZE_M then return 0 end
     return math.max(0, math.min(1, (d[4] - FULL_SIZE_M) / (range - FULL_SIZE_M)))
 end
@@ -1208,7 +1197,7 @@ local function screen_draw(world, world_id, dots)
                 local step = math.floor((1 - size) / (1 - SMALLEST) * (#sizes - 1) + 0.5) + 1
                 local list = sizes[math.max(1, math.min(#sizes, step))]
                 local k = size < SMALLEST and size / SMALLEST or 1
-                if not (LOOK.game_textures and texture_icon(d[7], sizes[1], sx, sy, size)) then
+                if not texture_icon(d[7], sizes[1], sx, sy, size) then
                     pixels(list, sx, sy, k)
                 end
                 if d[6] == 'vehicles' then pointer(list, sx, sy, size) end
@@ -1482,56 +1471,277 @@ local function tick()
 end
 
 -- ---------------------------------------------------------------- settings --
--- Through the loader's Mod Options Menu stand-in: Chef Shared Loader shows it in its F9 menu (HD2 Mod Setting GUI, a
--- window outside the game, and a change applies within a second.
--- (a new id: 0.6.0-0.7.1 saved 50 under 'pickup_dots.vertical_fov', which would override the game's value)
--- The settings window shows only these: each kind's on/off and range (field of view comes from the
--- game's own settings; the screen world and layer stay at their defaults).
-local RANGE_OPTIONS = {   -- group, its name in the settings window, the most metres
-    {'samples', 'Samples', 150}, {'supplies', 'Supplies', 150}, {'mission', 'Mission items', 150},
-    {'carry', 'Shells, warheads, batteries', 150}, {'dropoffs', 'Drop-off points, cargo containers', 150},
-    {'controls', 'Valves, cranks', 150}, {'vehicles', 'Vehicles', 300},
+-- Through the loader's Mod Options Menu stand-in: Chef Shared Loader shows them in its F9 menu, in this order,
+-- and a change applies at once. 2.2.0: mission items and the loads you carry are one kind, drop-off points and
+-- valves another (mission objectives); kinds and how they look sit together.
+local ROWS = {   -- {id, kind ('show', 'range' with its most metres, or a LOOK field's)}
+    {'show_samples', 'show', 'samples'}, {'range_samples', 'range', 'samples', 150},
+    {'show_supplies', 'show', 'supplies'}, {'range_supplies', 'range', 'supplies', 150},
+    {'fade', 'toggle', 'fade'},
+    {'show_mission', 'show', 'mission'}, {'range_mission', 'range', 'mission', 150},
+    {'show_objectives', 'show', 'objectives'}, {'range_objectives', 'range', 'objectives', 150},
+    {'show_vehicles', 'show', 'vehicles'}, {'range_vehicles', 'range', 'vehicles', 300},
+    {'distance', 'toggle', 'distance'},
+    {'hide_near', 'toggle', 'hide_near'},
+    {'smallest_size', 'percent', 'smallest', 10, 70},
+    {'opacity', 'percent', 'opacity', 10, 100},
 }
 
--- 2.1.0: how markers look. id, its spec, how a value goes into LOOK.
-local function toggle_into(field)
-    return function(value) if type(value) == 'boolean' then LOOK[field] = value end end
-end
-local function number_into(field, min, max, scale)
-    return function(value)
-        value = tonumber(value)
-        if value == nil or value ~= value then return end
-        LOOK[field] = math.max(min, math.min(max, value)) * scale
+-- Each row's label and description, in English and in the languages of Chef Shared Loader's language files
+-- (F9 > Chef Shared Loader > Language; the game's own language setting is not given to mods). Latin and Cyrillic
+-- texts are in capitals: the loader draws texts in capitals but only makes A-Z capitals.
+local TEXTS = {
+    en = {
+        show_samples = {'Show samples (common, rare, super, Terminid eggs)', 'Samples, sample containers and Terminid eggs.'},
+        range_samples = {'Samples distance (m)', 'Marked within this many metres of you. 0 shows none.'},
+        show_supplies = {'Show supplies (ammo, grenades, stims, resupply)', 'Ammo boxes, grenade boxes, stims and resupply pod crates.'},
+        range_supplies = {'Supplies distance (m)', 'Marked within this many metres of you. 0 shows none.'},
+        fade = {'Fade supplies far away', 'Supply markers get fainter the farther away they are.'},
+        show_mission = {'Show mission items (SSSDs, launch codes, shells)', 'Mission items you pick up or carry: SSSDs, data drives, launch codes, keycards, artillery shells, warheads.'},
+        range_mission = {'Mission items distance (m)', 'Marked within this many metres of you. 0 shows none.'},
+        show_objectives = {'Show mission objectives (drop-off points, valves, cranks)', 'Drop-off points, cargo containers, valves and cranks.'},
+        range_objectives = {'Mission objectives distance (m)', 'Marked within this many metres of you. 0 shows none.'},
+        show_vehicles = {'Show vehicles (exosuits, FRVs, tanks)', 'Exosuits, FRVs and tanks.'},
+        range_vehicles = {'Vehicles distance (m)', 'Marked within this many metres of you. 0 shows none.'},
+        distance = {'Show distance above vehicles', 'How far away each marked vehicle is.'},
+        hide_near = {"Hide markers where the game shows its own icon", "Off: markers stay on up close too (for first-person camera mods)."},
+        smallest_size = {'Marker size far away (%)', 'Full size up to 10 m, shrinking to this at the edge of the distance.'},
+        opacity = {'Marker opacity (%)', '100 is solid.'},
+    },
+    ko = {
+        show_samples = {'샘플 표시 (일반, 희귀, 슈퍼, 테르미니드 알)', '샘플, 샘플통, 테르미니드 알'},
+        range_samples = {'샘플 표시 거리 (m)', '나에게서 이 거리 안에 있으면 표시합니다. 0이면 표시하지 않습니다.'},
+        show_supplies = {'보급품 표시 (탄약, 수류탄, 스팀, 재보급)', '탄약 상자, 수류탄 상자, 스팀, 재보급 포드 상자'},
+        range_supplies = {'보급품 표시 거리 (m)', '나에게서 이 거리 안에 있으면 표시합니다. 0이면 표시하지 않습니다.'},
+        fade = {'먼 보급품 흐리게', '보급품 마커가 멀수록 흐려집니다.'},
+        show_mission = {'임무 아이템 표시 (SSSD, 발사 코드, 포탄)', '줍거나 들고 옮기는 임무 아이템: SSSD, 데이터 드라이브, 발사 코드, 키카드, 야포 포탄, 탄두'},
+        range_mission = {'임무 아이템 표시 거리 (m)', '나에게서 이 거리 안에 있으면 표시합니다. 0이면 표시하지 않습니다.'},
+        show_objectives = {'임무 목표 표시 (반납 지점, 밸브, 크랭크)', '반납 지점, 화물 컨테이너, 밸브, 크랭크'},
+        range_objectives = {'임무 목표 표시 거리 (m)', '나에게서 이 거리 안에 있으면 표시합니다. 0이면 표시하지 않습니다.'},
+        show_vehicles = {'차량 표시 (엑소슈트, FRV, 탱크)', '엑소슈트, FRV, 탱크'},
+        range_vehicles = {'차량 표시 거리 (m)', '나에게서 이 거리 안에 있으면 표시합니다. 0이면 표시하지 않습니다.'},
+        distance = {'차량 위에 거리 표시', '표시된 차량까지의 거리를 보여 줍니다.'},
+        hide_near = {'게임 아이콘이 뜨는 곳에서 마커 숨기기', '끄면 가까이에서도 마커가 남습니다 (1인칭 카메라 모드용).'},
+        smallest_size = {'먼 곳의 마커 크기 (%)', '10m까지는 원래 크기이고, 표시 거리 끝에서 이 크기까지 작아집니다.'},
+        opacity = {'마커 불투명도 (%)', '100이면 불투명합니다.'},
+    },
+    ja = {
+        show_samples = {'サンプルを表示 (通常、レア、スーパー、テルミニドの卵)', 'サンプル、サンプルコンテナ、テルミニドの卵'},
+        range_samples = {'サンプルの表示距離 (m)', 'この距離以内のものを表示します。0で非表示。'},
+        show_supplies = {'補給品を表示 (弾薬、グレネード、スティム、補給)', '弾薬箱、グレネード箱、スティム、補給ポッドの箱'},
+        range_supplies = {'補給品の表示距離 (m)', 'この距離以内のものを表示します。0で非表示。'},
+        fade = {'遠くの補給品を薄くする', '補給品のマーカーは遠いほど薄くなります。'},
+        show_mission = {'任務アイテムを表示 (SSSD、発射コード、砲弾)', '拾ったり運んだりする任務アイテム：SSSD、データドライブ、発射コード、キーカード、砲弾、弾頭'},
+        range_mission = {'任務アイテムの表示距離 (m)', 'この距離以内のものを表示します。0で非表示。'},
+        show_objectives = {'任務目標を表示 (投入地点、バルブ、クランク)', '投入地点、貨物コンテナ、バルブ、クランク'},
+        range_objectives = {'任務目標の表示距離 (m)', 'この距離以内のものを表示します。0で非表示。'},
+        show_vehicles = {'車両を表示 (エクソスーツ、FRV、戦車)', 'エクソスーツ、FRV、戦車'},
+        range_vehicles = {'車両の表示距離 (m)', 'この距離以内のものを表示します。0で非表示。'},
+        distance = {'車両の上に距離を表示', 'マーカーの付いた車両までの距離を表示します。'},
+        hide_near = {'ゲームのアイコンが出る距離ではマーカーを隠す', 'オフにすると近くでもマーカーが残ります（一人称カメラMOD向け）。'},
+        smallest_size = {'遠くのマーカーの大きさ (%)', '10 mまでは元の大きさで、表示距離の端でこの大きさまで小さくなります。'},
+        opacity = {'マーカーの不透明度 (%)', '100で不透明です。'},
+    },
+    zh = {
+        show_samples = {'显示样本（普通、稀有、超级、虫族虫卵）', '样本、样本箱和虫族虫卵'},
+        range_samples = {'样本显示距离（米）', '在此距离内的才显示。0 为不显示。'},
+        show_supplies = {'显示补给（弹药、手雷、治疗针、补给）', '弹药箱、手雷箱、治疗针和补给舱箱'},
+        range_supplies = {'补给显示距离（米）', '在此距离内的才显示。0 为不显示。'},
+        fade = {'远处补给变淡', '补给标记越远越淡。'},
+        show_mission = {'显示任务物品（SSSD、发射密码、炮弹）', '拾取或搬运的任务物品：SSSD、数据驱动器、发射密码、钥匙卡、炮弹、弹头'},
+        range_mission = {'任务物品显示距离（米）', '在此距离内的才显示。0 为不显示。'},
+        show_objectives = {'显示任务目标（投放点、阀门、曲柄）', '投放点、货柜、阀门和曲柄'},
+        range_objectives = {'任务目标显示距离（米）', '在此距离内的才显示。0 为不显示。'},
+        show_vehicles = {'显示载具（机甲、FRV、坦克）', '机甲、FRV 和坦克'},
+        range_vehicles = {'载具显示距离（米）', '在此距离内的才显示。0 为不显示。'},
+        distance = {'在载具上方显示距离', '显示到已标记载具的距离。'},
+        hide_near = {'游戏图标出现时隐藏标记', '关闭后近处也保留标记（适用于第一人称镜头模组）。'},
+        smallest_size = {'远处标记大小（%）', '10 米内为原始大小，在显示距离尽头缩小到此大小。'},
+        opacity = {'标记不透明度（%）', '100 为不透明。'},
+    },
+    de = {
+        show_samples = {'PROBEN ANZEIGEN (GEWÖHNLICH, SELTEN, SUPER, TERMINIDENEIER)', 'PROBEN, PROBENBEHÄLTER UND TERMINIDENEIER.'},
+        range_samples = {'PROBEN: ENTFERNUNG (M)', 'MARKIERT INNERHALB DIESER ENTFERNUNG. 0 ZEIGT KEINE.'},
+        show_supplies = {'VORRÄTE ANZEIGEN (MUNITION, GRANATEN, STIMS, NACHSCHUB)', 'MUNITIONSKISTEN, GRANATENKISTEN, STIMS UND NACHSCHUBKISTEN.'},
+        range_supplies = {'VORRÄTE: ENTFERNUNG (M)', 'MARKIERT INNERHALB DIESER ENTFERNUNG. 0 ZEIGT KEINE.'},
+        fade = {'FERNE VORRÄTE BLASSER', 'VORRATSMARKIERUNGEN WERDEN MIT DER ENTFERNUNG BLASSER.'},
+        show_mission = {'MISSIONSGEGENSTÄNDE ANZEIGEN (SSSDS, STARTCODES, GRANATEN)', 'MISSIONSGEGENSTÄNDE ZUM AUFHEBEN ODER TRAGEN: SSSDS, DATENLAUFWERKE, STARTCODES, SCHLÜSSELKARTEN, ARTILLERIEGRANATEN, SPRENGKÖPFE.'},
+        range_mission = {'MISSIONSGEGENSTÄNDE: ENTFERNUNG (M)', 'MARKIERT INNERHALB DIESER ENTFERNUNG. 0 ZEIGT KEINE.'},
+        show_objectives = {'MISSIONSZIELE ANZEIGEN (ABGABEPUNKTE, VENTILE, KURBELN)', 'ABGABEPUNKTE, FRACHTCONTAINER, VENTILE UND KURBELN.'},
+        range_objectives = {'MISSIONSZIELE: ENTFERNUNG (M)', 'MARKIERT INNERHALB DIESER ENTFERNUNG. 0 ZEIGT KEINE.'},
+        show_vehicles = {'FAHRZEUGE ANZEIGEN (EXOSUITS, FRVS, PANZER)', 'EXOSUITS, FRVS UND PANZER.'},
+        range_vehicles = {'FAHRZEUGE: ENTFERNUNG (M)', 'MARKIERT INNERHALB DIESER ENTFERNUNG. 0 ZEIGT KEINE.'},
+        distance = {'ENTFERNUNG ÜBER FAHRZEUGEN', 'ZEIGT, WIE WEIT JEDES MARKIERTE FAHRZEUG ENTFERNT IST.'},
+        hide_near = {'AUSBLENDEN, WO DAS SPIEL EIGENE SYMBOLE ZEIGT', 'AUS: MARKIERUNGEN BLEIBEN AUCH AUS DER NÄHE (FÜR EGO-KAMERA-MODS).'},
+        smallest_size = {'MARKIERUNGSGRÖSSE IN DER FERNE (%)', 'BIS 10 M VOLLE GRÖSSE, AM ENDE DER ENTFERNUNG SO KLEIN.'},
+        opacity = {'DECKKRAFT DER MARKIERUNGEN (%)', '100 IST VOLL DECKEND.'},
+    },
+    fr = {
+        show_samples = {"AFFICHER LES ÉCHANTILLONS (COMMUNS, RARES, SUPER, ŒUFS DE TERMINIDES)", "ÉCHANTILLONS, CONTENEURS D'ÉCHANTILLONS ET ŒUFS DE TERMINIDES."},
+        range_samples = {"DISTANCE DES ÉCHANTILLONS (M)", "MARQUÉS DANS CETTE DISTANCE. 0 N'EN AFFICHE AUCUN."},
+        show_supplies = {"AFFICHER LES RAVITAILLEMENTS (MUNITIONS, GRENADES, STIMS, RAVITAILLEMENT)", "CAISSES DE MUNITIONS, CAISSES DE GRENADES, STIMS ET CAISSES DE RAVITAILLEMENT."},
+        range_supplies = {"DISTANCE DES RAVITAILLEMENTS (M)", "MARQUÉS DANS CETTE DISTANCE. 0 N'EN AFFICHE AUCUN."},
+        fade = {"ESTOMPER LES RAVITAILLEMENTS LOINTAINS", "LES MARQUEURS DE RAVITAILLEMENT PÂLISSENT AVEC LA DISTANCE."},
+        show_mission = {"AFFICHER LES OBJETS DE MISSION (SSSD, CODES DE LANCEMENT, OBUS)", "OBJETS DE MISSION À RAMASSER OU À PORTER : SSSD, DISQUES DE DONNÉES, CODES DE LANCEMENT, CARTES D'ACCÈS, OBUS, OGIVES."},
+        range_mission = {"DISTANCE DES OBJETS DE MISSION (M)", "MARQUÉS DANS CETTE DISTANCE. 0 N'EN AFFICHE AUCUN."},
+        show_objectives = {"AFFICHER LES OBJECTIFS DE MISSION (POINTS DE DÉPÔT, VANNES, MANIVELLES)", "POINTS DE DÉPÔT, CONTENEURS, VANNES ET MANIVELLES."},
+        range_objectives = {"DISTANCE DES OBJECTIFS DE MISSION (M)", "MARQUÉS DANS CETTE DISTANCE. 0 N'EN AFFICHE AUCUN."},
+        show_vehicles = {"AFFICHER LES VÉHICULES (EXOSQUELETTES, FRV, CHARS)", "EXOSQUELETTES, FRV ET CHARS."},
+        range_vehicles = {"DISTANCE DES VÉHICULES (M)", "MARQUÉS DANS CETTE DISTANCE. 0 N'EN AFFICHE AUCUN."},
+        distance = {"DISTANCE AU-DESSUS DES VÉHICULES", "INDIQUE À QUELLE DISTANCE SE TROUVE CHAQUE VÉHICULE MARQUÉ."},
+        hide_near = {"MASQUER LÀ OÙ LE JEU AFFICHE SA PROPRE ICÔNE", "DÉSACTIVÉ : LES MARQUEURS RESTENT AUSSI DE PRÈS (POUR LES MODS DE CAMÉRA À LA PREMIÈRE PERSONNE)."},
+        smallest_size = {"TAILLE DES MARQUEURS AU LOIN (%)", "TAILLE NORMALE JUSQU'À 10 M, PUIS CETTE TAILLE AU BOUT DE LA DISTANCE."},
+        opacity = {"OPACITÉ DES MARQUEURS (%)", "100 EST OPAQUE."},
+    },
+    es = {
+        show_samples = {'MOSTRAR MUESTRAS (COMUNES, RARAS, SÚPER, HUEVOS DE TERMÍNIDOS)', 'MUESTRAS, CONTENEDORES DE MUESTRAS Y HUEVOS DE TERMÍNIDOS.'},
+        range_samples = {'DISTANCIA DE MUESTRAS (M)', 'SE MARCAN DENTRO DE ESTA DISTANCIA. 0 NO MUESTRA NINGUNO.'},
+        show_supplies = {'MOSTRAR SUMINISTROS (MUNICIÓN, GRANADAS, ESTIMULANTES, REABASTECIMIENTO)', 'CAJAS DE MUNICIÓN, CAJAS DE GRANADAS, ESTIMULANTES Y CAJAS DE REABASTECIMIENTO.'},
+        range_supplies = {'DISTANCIA DE SUMINISTROS (M)', 'SE MARCAN DENTRO DE ESTA DISTANCIA. 0 NO MUESTRA NINGUNO.'},
+        fade = {'ATENUAR SUMINISTROS LEJANOS', 'LOS MARCADORES DE SUMINISTROS SE ATENÚAN CUANTO MÁS LEJOS ESTÁN.'},
+        show_mission = {'MOSTRAR OBJETOS DE MISIÓN (SSSD, CÓDIGOS DE LANZAMIENTO, PROYECTILES)', 'OBJETOS DE MISIÓN QUE SE RECOGEN O TRANSPORTAN: SSSD, UNIDADES DE DATOS, CÓDIGOS DE LANZAMIENTO, TARJETAS DE ACCESO, PROYECTILES DE ARTILLERÍA, OJIVAS.'},
+        range_mission = {'DISTANCIA DE OBJETOS DE MISIÓN (M)', 'SE MARCAN DENTRO DE ESTA DISTANCIA. 0 NO MUESTRA NINGUNO.'},
+        show_objectives = {'MOSTRAR OBJETIVOS DE MISIÓN (PUNTOS DE ENTREGA, VÁLVULAS, MANIVELAS)', 'PUNTOS DE ENTREGA, CONTENEDORES DE CARGA, VÁLVULAS Y MANIVELAS.'},
+        range_objectives = {'DISTANCIA DE OBJETIVOS DE MISIÓN (M)', 'SE MARCAN DENTRO DE ESTA DISTANCIA. 0 NO MUESTRA NINGUNO.'},
+        show_vehicles = {'MOSTRAR VEHÍCULOS (EXOTRAJES, FRV, TANQUES)', 'EXOTRAJES, FRV Y TANQUES.'},
+        range_vehicles = {'DISTANCIA DE VEHÍCULOS (M)', 'SE MARCAN DENTRO DE ESTA DISTANCIA. 0 NO MUESTRA NINGUNO.'},
+        distance = {'DISTANCIA SOBRE LOS VEHÍCULOS', 'MUESTRA A QUÉ DISTANCIA ESTÁ CADA VEHÍCULO MARCADO.'},
+        hide_near = {'OCULTAR DONDE EL JUEGO MUESTRA SU PROPIO ICONO', 'DESACTIVADO: LOS MARCADORES SE QUEDAN TAMBIÉN DE CERCA (PARA MODS DE CÁMARA EN PRIMERA PERSONA).'},
+        smallest_size = {'TAMAÑO DE LOS MARCADORES LEJANOS (%)', 'TAMAÑO COMPLETO HASTA 10 M Y ESTE TAMAÑO AL FINAL DE LA DISTANCIA.'},
+        opacity = {'OPACIDAD DE LOS MARCADORES (%)', '100 ES OPACO.'},
+    },
+    it = {
+        show_samples = {'MOSTRA CAMPIONI (COMUNI, RARI, SUPER, UOVA DI TERMINIDI)', 'CAMPIONI, CONTENITORI DI CAMPIONI E UOVA DI TERMINIDI.'},
+        range_samples = {'DISTANZA CAMPIONI (M)', 'MARCATI ENTRO QUESTA DISTANZA. 0 NON NE MOSTRA NESSUNO.'},
+        show_supplies = {'MOSTRA RIFORNIMENTI (MUNIZIONI, GRANATE, STIMOLANTI, RIFORNIMENTO)', 'CASSE DI MUNIZIONI, CASSE DI GRANATE, STIMOLANTI E CASSE DI RIFORNIMENTO.'},
+        range_supplies = {'DISTANZA RIFORNIMENTI (M)', 'MARCATI ENTRO QUESTA DISTANZA. 0 NON NE MOSTRA NESSUNO.'},
+        fade = {'SFUMA I RIFORNIMENTI LONTANI', 'I MARCATORI DEI RIFORNIMENTI SBIADISCONO CON LA DISTANZA.'},
+        show_mission = {'MOSTRA OGGETTI DI MISSIONE (SSSD, CODICI DI LANCIO, PROIETTILI)', 'OGGETTI DI MISSIONE DA RACCOGLIERE O TRASPORTARE: SSSD, UNITÀ DATI, CODICI DI LANCIO, TESSERE, PROIETTILI DI ARTIGLIERIA, TESTATE.'},
+        range_mission = {'DISTANZA OGGETTI DI MISSIONE (M)', 'MARCATI ENTRO QUESTA DISTANZA. 0 NON NE MOSTRA NESSUNO.'},
+        show_objectives = {'MOSTRA OBIETTIVI DI MISSIONE (PUNTI DI CONSEGNA, VALVOLE, MANOVELLE)', 'PUNTI DI CONSEGNA, CONTAINER, VALVOLE E MANOVELLE.'},
+        range_objectives = {'DISTANZA OBIETTIVI DI MISSIONE (M)', 'MARCATI ENTRO QUESTA DISTANZA. 0 NON NE MOSTRA NESSUNO.'},
+        show_vehicles = {'MOSTRA VEICOLI (ESOSCHELETRI, FRV, CARRI ARMATI)', 'ESOSCHELETRI, FRV E CARRI ARMATI.'},
+        range_vehicles = {'DISTANZA VEICOLI (M)', 'MARCATI ENTRO QUESTA DISTANZA. 0 NON NE MOSTRA NESSUNO.'},
+        distance = {'DISTANZA SOPRA I VEICOLI', 'MOSTRA QUANTO È LONTANO OGNI VEICOLO MARCATO.'},
+        hide_near = {'NASCONDI DOVE IL GIOCO MOSTRA LA SUA ICONA', 'DISATTIVATO: I MARCATORI RESTANO ANCHE DA VICINO (PER MOD DI VISUALE IN PRIMA PERSONA).'},
+        smallest_size = {'DIMENSIONE DEI MARCATORI LONTANI (%)', 'DIMENSIONE PIENA FINO A 10 M, POI QUESTA ALLA FINE DELLA DISTANZA.'},
+        opacity = {'OPACITÀ DEI MARCATORI (%)', '100 È OPACO.'},
+    },
+    pl = {
+        show_samples = {'POKAŻ PRÓBKI (ZWYKŁE, RZADKIE, SUPER, JAJA TERMINIDÓW)', 'PRÓBKI, POJEMNIKI NA PRÓBKI I JAJA TERMINIDÓW.'},
+        range_samples = {'ODLEGŁOŚĆ PRÓBEK (M)', 'OZNACZANE W TEJ ODLEGŁOŚCI. 0 NIE POKAZUJE ŻADNYCH.'},
+        show_supplies = {'POKAŻ ZAOPATRZENIE (AMUNICJA, GRANATY, STYMULANTY, ZAOPATRZENIE)', 'SKRZYNKI Z AMUNICJĄ, SKRZYNKI Z GRANATAMI, STYMULANTY I SKRZYNKI ZAOPATRZENIA.'},
+        range_supplies = {'ODLEGŁOŚĆ ZAOPATRZENIA (M)', 'OZNACZANE W TEJ ODLEGŁOŚCI. 0 NIE POKAZUJE ŻADNYCH.'},
+        fade = {'BLEDNIĘCIE DALEKIEGO ZAOPATRZENIA', 'ZNACZNIKI ZAOPATRZENIA BLEDNĄ IM DALEJ SĄ.'},
+        show_mission = {'POKAŻ PRZEDMIOTY MISJI (SSSD, KODY STARTOWE, POCISKI)', 'PRZEDMIOTY MISJI DO PODNIESIENIA LUB NIESIENIA: SSSD, NOŚNIKI DANYCH, KODY STARTOWE, KARTY DOSTĘPU, POCISKI ARTYLERYJSKIE, GŁOWICE.'},
+        range_mission = {'ODLEGŁOŚĆ PRZEDMIOTÓW MISJI (M)', 'OZNACZANE W TEJ ODLEGŁOŚCI. 0 NIE POKAZUJE ŻADNYCH.'},
+        show_objectives = {'POKAŻ CELE MISJI (PUNKTY ODBIORU, ZAWORY, KORBY)', 'PUNKTY ODBIORU, KONTENERY, ZAWORY I KORBY.'},
+        range_objectives = {'ODLEGŁOŚĆ CELÓW MISJI (M)', 'OZNACZANE W TEJ ODLEGŁOŚCI. 0 NIE POKAZUJE ŻADNYCH.'},
+        show_vehicles = {'POKAŻ POJAZDY (EGZOSZKIELETY, FRV, CZOŁGI)', 'EGZOSZKIELETY, FRV I CZOŁGI.'},
+        range_vehicles = {'ODLEGŁOŚĆ POJAZDÓW (M)', 'OZNACZANE W TEJ ODLEGŁOŚCI. 0 NIE POKAZUJE ŻADNYCH.'},
+        distance = {'ODLEGŁOŚĆ NAD POJAZDAMI', 'POKAZUJE, JAK DALEKO JEST KAŻDY OZNACZONY POJAZD.'},
+        hide_near = {'UKRYJ TAM, GDZIE GRA POKAZUJE WŁASNĄ IKONĘ', 'WYŁĄCZONE: ZNACZNIKI ZOSTAJĄ TEŻ Z BLISKA (DLA MODÓW KAMERY PIERWSZOOSOBOWEJ).'},
+        smallest_size = {'ROZMIAR DALEKICH ZNACZNIKÓW (%)', 'PEŁNY ROZMIAR DO 10 M, NA KOŃCU ODLEGŁOŚCI TEN ROZMIAR.'},
+        opacity = {'KRYCIE ZNACZNIKÓW (%)', '100 TO PEŁNE KRYCIE.'},
+    },
+    pt = {
+        show_samples = {'MOSTRAR AMOSTRAS (COMUNS, RARAS, SUPER, OVOS DE TERMINÍDEOS)', 'AMOSTRAS, CONTÊINERES DE AMOSTRAS E OVOS DE TERMINÍDEOS.'},
+        range_samples = {'DISTÂNCIA DAS AMOSTRAS (M)', 'MARCADOS DENTRO DESTA DISTÂNCIA. 0 NÃO MOSTRA NENHUM.'},
+        show_supplies = {'MOSTRAR SUPRIMENTOS (MUNIÇÃO, GRANADAS, ESTIMULANTES, REABASTECIMENTO)', 'CAIXAS DE MUNIÇÃO, CAIXAS DE GRANADAS, ESTIMULANTES E CAIXAS DE REABASTECIMENTO.'},
+        range_supplies = {'DISTÂNCIA DOS SUPRIMENTOS (M)', 'MARCADOS DENTRO DESTA DISTÂNCIA. 0 NÃO MOSTRA NENHUM.'},
+        fade = {'ESMAECER SUPRIMENTOS DISTANTES', 'OS MARCADORES DE SUPRIMENTOS FICAM MAIS CLAROS QUANTO MAIS LONGE ESTÃO.'},
+        show_mission = {'MOSTRAR ITENS DE MISSÃO (SSSD, CÓDIGOS DE LANÇAMENTO, PROJÉTEIS)', 'ITENS DE MISSÃO PARA PEGAR OU CARREGAR: SSSD, UNIDADES DE DADOS, CÓDIGOS DE LANÇAMENTO, CARTÕES DE ACESSO, PROJÉTEIS DE ARTILHARIA, OGIVAS.'},
+        range_mission = {'DISTÂNCIA DOS ITENS DE MISSÃO (M)', 'MARCADOS DENTRO DESTA DISTÂNCIA. 0 NÃO MOSTRA NENHUM.'},
+        show_objectives = {'MOSTRAR OBJETIVOS DE MISSÃO (PONTOS DE ENTREGA, VÁLVULAS, MANIVELAS)', 'PONTOS DE ENTREGA, CONTÊINERES DE CARGA, VÁLVULAS E MANIVELAS.'},
+        range_objectives = {'DISTÂNCIA DOS OBJETIVOS DE MISSÃO (M)', 'MARCADOS DENTRO DESTA DISTÂNCIA. 0 NÃO MOSTRA NENHUM.'},
+        show_vehicles = {'MOSTRAR VEÍCULOS (EXOTRAJES, FRV, TANQUES)', 'EXOTRAJES, FRV E TANQUES.'},
+        range_vehicles = {'DISTÂNCIA DOS VEÍCULOS (M)', 'MARCADOS DENTRO DESTA DISTÂNCIA. 0 NÃO MOSTRA NENHUM.'},
+        distance = {'DISTÂNCIA ACIMA DOS VEÍCULOS', 'MOSTRA A QUE DISTÂNCIA ESTÁ CADA VEÍCULO MARCADO.'},
+        hide_near = {'OCULTAR ONDE O JOGO MOSTRA O PRÓPRIO ÍCONE', 'DESLIGADO: OS MARCADORES FICAM TAMBÉM DE PERTO (PARA MODS DE CÂMERA EM PRIMEIRA PESSOA).'},
+        smallest_size = {'TAMANHO DOS MARCADORES DISTANTES (%)', 'TAMANHO TOTAL ATÉ 10 M E ESTE TAMANHO NO FIM DA DISTÂNCIA.'},
+        opacity = {'OPACIDADE DOS MARCADORES (%)', '100 É OPACO.'},
+    },
+    ru = {
+        show_samples = {'ПОКАЗЫВАТЬ ОБРАЗЦЫ (ОБЫЧНЫЕ, РЕДКИЕ, СУПЕР, ЯЙЦА ТЕРМИНИДОВ)', 'ОБРАЗЦЫ, КОНТЕЙНЕРЫ С ОБРАЗЦАМИ И ЯЙЦА ТЕРМИНИДОВ.'},
+        range_samples = {'ДАЛЬНОСТЬ: ОБРАЗЦЫ (М)', 'ОТМЕЧАЮТСЯ В ПРЕДЕЛАХ ЭТОГО РАССТОЯНИЯ. 0 — НЕ ПОКАЗЫВАТЬ.'},
+        show_supplies = {'ПОКАЗЫВАТЬ ПРИПАСЫ (ПАТРОНЫ, ГРАНАТЫ, СТИМУЛЯТОРЫ, СНАБЖЕНИЕ)', 'ЯЩИКИ С ПАТРОНАМИ, ЯЩИКИ С ГРАНАТАМИ, СТИМУЛЯТОРЫ И ЯЩИКИ СНАБЖЕНИЯ.'},
+        range_supplies = {'ДАЛЬНОСТЬ: ПРИПАСЫ (М)', 'ОТМЕЧАЮТСЯ В ПРЕДЕЛАХ ЭТОГО РАССТОЯНИЯ. 0 — НЕ ПОКАЗЫВАТЬ.'},
+        fade = {'БЛЕДНЕЕ ДАЛЬНИЕ ПРИПАСЫ', 'МЕТКИ ПРИПАСОВ БЛЕДНЕЮТ С РАССТОЯНИЕМ.'},
+        show_mission = {'ПОКАЗЫВАТЬ ПРЕДМЕТЫ ЗАДАНИЯ (SSSD, КОДЫ ЗАПУСКА, СНАРЯДЫ)', 'ПРЕДМЕТЫ ЗАДАНИЯ, КОТОРЫЕ ПОДБИРАЮТ ИЛИ НЕСУТ: SSSD, НАКОПИТЕЛИ ДАННЫХ, КОДЫ ЗАПУСКА, КЛЮЧ-КАРТЫ, АРТИЛЛЕРИЙСКИЕ СНАРЯДЫ, БОЕГОЛОВКИ.'},
+        range_mission = {'ДАЛЬНОСТЬ: ПРЕДМЕТЫ ЗАДАНИЯ (М)', 'ОТМЕЧАЮТСЯ В ПРЕДЕЛАХ ЭТОГО РАССТОЯНИЯ. 0 — НЕ ПОКАЗЫВАТЬ.'},
+        show_objectives = {'ПОКАЗЫВАТЬ ЦЕЛИ ЗАДАНИЯ (ТОЧКИ СДАЧИ, ВЕНТИЛИ, РУКОЯТКИ)', 'ТОЧКИ СДАЧИ, ГРУЗОВЫЕ КОНТЕЙНЕРЫ, ВЕНТИЛИ И РУКОЯТКИ.'},
+        range_objectives = {'ДАЛЬНОСТЬ: ЦЕЛИ ЗАДАНИЯ (М)', 'ОТМЕЧАЮТСЯ В ПРЕДЕЛАХ ЭТОГО РАССТОЯНИЯ. 0 — НЕ ПОКАЗЫВАТЬ.'},
+        show_vehicles = {'ПОКАЗЫВАТЬ ТЕХНИКУ (ЭКЗОКОСТЮМЫ, FRV, ТАНКИ)', 'ЭКЗОКОСТЮМЫ, FRV И ТАНКИ.'},
+        range_vehicles = {'ДАЛЬНОСТЬ: ТЕХНИКА (М)', 'ОТМЕЧАЮТСЯ В ПРЕДЕЛАХ ЭТОГО РАССТОЯНИЯ. 0 — НЕ ПОКАЗЫВАТЬ.'},
+        distance = {'РАССТОЯНИЕ НАД ТЕХНИКОЙ', 'ПОКАЗЫВАЕТ, КАК ДАЛЕКО КАЖДАЯ ОТМЕЧЕННАЯ МАШИНА.'},
+        hide_near = {'СКРЫВАТЬ ТАМ, ГДЕ ИГРА ПОКАЗЫВАЕТ СВОЙ ЗНАЧОК', 'ВЫКЛ.: МЕТКИ ОСТАЮТСЯ И ВБЛИЗИ (ДЛЯ МОДОВ С ВИДОМ ОТ ПЕРВОГО ЛИЦА).'},
+        smallest_size = {'РАЗМЕР ДАЛЬНИХ МЕТОК (%)', 'ПОЛНЫЙ РАЗМЕР ДО 10 М, НА КРАЮ ДАЛЬНОСТИ — ЭТОТ РАЗМЕР.'},
+        opacity = {'НЕПРОЗРАЧНОСТЬ МЕТОК (%)', '100 — ПОЛНОСТЬЮ НЕПРОЗРАЧНЫЕ.'},
+    },
+}
+
+-- The language picked in Chef Shared Loader, by its code, else by words in its name; nil: English.
+local LANGUAGE_NAMES = {
+    ko = {'한국어', 'korean'}, ja = {'日本語', 'japanese'}, zh = {'中文', '简体', 'chinese'}, de = {'deutsch', 'german'},
+    fr = {'français', 'francais', 'french'}, es = {'español', 'espanol', 'spanish'}, it = {'italiano', 'italian'},
+    pl = {'polski', 'polish'}, pt = {'português', 'portugues', 'portuguese'}, ru = {'русский', 'russian'},
+}
+local function language()
+    if not chef_has('lang') then return nil end
+    local ok, name, code = pcall(CHEF.lang)
+    if not ok or name == nil then return nil end
+    if type(code) == 'string' then
+        local short = string.lower(string.sub(code, 1, 2))
+        if TEXTS[short] then return short end
     end
+    local low = string.lower(tostring(name))
+    for lang, words in pairs(LANGUAGE_NAMES) do
+        for _, w in ipairs(words) do
+            if string.find(low, w, 1, true) then return lang end
+        end
+    end
+    return nil
 end
-local LOOK_OPTIONS = {
-    {'hide_near', {type = 'toggle', label = "Hide markers where the game shows its own icon", default = true,
-        description = "Off: markers stay on up close too (for first-person camera mods)."},
-        toggle_into('hide_near')},
-    {'smallest_size', {type = 'slider', label = 'Marker size at the edge of range (%)', default = 70,
-        min = 10, max = 100, step = 5,
-        description = 'Markers are full size up to 10 m and shrink to this at the edge of their distance.'},
-        number_into('smallest', 10, 100, 0.01)},
-    {'opacity', {type = 'slider', label = 'Marker opacity (%)', default = 100, min = 10, max = 100, step = 5,
-        description = '100 is solid.'},
-        number_into('opacity', 10, 100, 0.01)},
-    {'fade', {type = 'toggle', label = 'Fade supply markers with distance', default = true,
-        description = 'Ammo, grenade, stim and supply markers get fainter the farther away they are.'},
-        toggle_into('fade')},
-    {'distance', {type = 'toggle', label = 'Show distance above vehicles', default = true,
-        description = 'How far away each marked vehicle is, in metres.'},
-        toggle_into('distance')},
-    {'game_textures', {type = 'toggle', label = "Icons from the game's textures", default = true,
-        description = 'Ammo, grenade, stim, package and egg icons drawn from the game textures instead of pixels.'},
-        toggle_into('game_textures')},
-}
 
-local function register_look(host)
-    for _, row in ipairs(LOOK_OPTIONS) do
-        local id, spec, set = 'pickup_dots.' .. row[1], row[2], row[3]
-        spec.mod = 'Extended Pickup Icons Range'
+local function register_settings()
+    local host = rawget(_G, 'ModOptionsMenu')
+    if type(host) ~= 'table' or type(host.register_option) ~= 'function' then
+        log('settings: no Mod Options Menu host; the default ranges')
+        return
+    end
+    local lang = language()
+    local texts = lang and TEXTS[lang] or TEXTS.en
+    if lang then log('settings: in ' .. lang) end
+    for _, row in ipairs(ROWS) do
+        local id, kind, field = 'pickup_dots.' .. row[1], row[2], row[3]
+        local text = texts[row[1]] or TEXTS.en[row[1]]
+        local spec, set
+        if kind == 'show' then
+            spec = {type = 'toggle', default = true}
+            set = function(value) if type(value) == 'boolean' then SHOW[field] = value end end
+        elseif kind == 'range' then
+            local most = row[4]
+            spec = {type = 'slider', default = RANGE[field], min = 0, max = most, step = 5}
+            set = function(value)
+                value = tonumber(value)
+                if value == nil or value ~= value then return end
+                RANGE[field] = math.max(0, math.min(most, math.floor(value + 0.5)))
+            end
+        elseif kind == 'toggle' then
+            spec = {type = 'toggle', default = LOOK[field]}
+            set = function(value) if type(value) == 'boolean' then LOOK[field] = value end end
+        else   -- 'percent': a slider in %, into 0..1
+            local least = row[4]
+            spec = {type = 'slider', default = row[5], min = least, max = 100, step = 5}
+            set = function(value)
+                value = tonumber(value)
+                if value == nil or value ~= value then return end
+                LOOK[field] = math.max(least, math.min(100, value)) / 100
+            end
+        end
+        spec.mod, spec.label, spec.description = 'Extended Pickup Icons Range', text[1], text[2]
         local ok, registered, why = pcall(host.register_option, id, spec)
-        if not ok or registered ~= true then
+        if not ok or registered ~= true then   -- left at its default; the others still go in
             log('settings: register failed: ' .. tostring(ok and why or registered))
         end
         if type(host.get) == 'function' then
@@ -1545,63 +1755,6 @@ local function register_look(host)
             end)
         end
     end
-end
-
-local function register_settings()
-    local host = rawget(_G, 'ModOptionsMenu')
-    if type(host) ~= 'table' or type(host.register_option) ~= 'function' then
-        log('settings: no Mod Options Menu host; the default ranges')
-        return
-    end
-    -- how far away each kind is shown, metres; 0 shows none of that kind
-    for _, row in ipairs(RANGE_OPTIONS) do
-        local group, id = row[1], 'pickup_dots.range_' .. row[1]
-        local show_id = 'pickup_dots.show_' .. group
-        local oks, registered6, why6 = pcall(host.register_option, show_id, {
-            type = 'toggle', mod = 'Extended Pickup Icons Range', label = 'Show ' .. row[2], default = true,
-            description = 'Off: no markers on ' .. row[2]:lower() .. '.',
-        })
-        if not oks or registered6 ~= true then   -- left at its default; the others still go in
-            log('settings: register failed: ' .. tostring(oks and why6 or registered6))
-        end
-        local function set_show(value)
-            if type(value) == 'boolean' then SHOW[group] = value end
-        end
-        if type(host.get) == 'function' then
-            local okg, value = pcall(host.get, show_id)
-            if okg then set_show(value) end
-        end
-        if type(host.on_change) == 'function' then
-            pcall(host.on_change, show_id, function(value)
-                set_show(value)
-                log('settings: ' .. group .. (SHOW[group] == false and ' hidden' or ' shown'))
-            end)
-        end
-        local okr, registered5, why5 = pcall(host.register_option, id, {
-            type = 'slider', mod = 'Extended Pickup Icons Range', label = row[2] .. ' distance (m)', default = RANGE[group],
-            min = 0, max = row[3], step = 5,
-            description = 'Markers on ' .. row[2]:lower() .. ' within this many metres of you. 0 shows none.',
-        })
-        if not okr or registered5 ~= true then
-            log('settings: register failed: ' .. tostring(okr and why5 or registered5))
-        end
-        local function set_range(value)
-            value = tonumber(value)
-            if value == nil or value ~= value then return end
-            RANGE[group] = math.max(0, math.min(row[3], math.floor(value + 0.5)))
-        end
-        if type(host.get) == 'function' then
-            local okg, value = pcall(host.get, id)
-            if okg then set_range(value) end
-        end
-        if type(host.on_change) == 'function' then
-            pcall(host.on_change, id, function(value)
-                set_range(value)
-                log('settings: range ' .. group .. ' ' .. RANGE[group] .. ' m')
-            end)
-        end
-    end
-    register_look(host)
 end
 
 -- ----------------------------------------------------------------- install --
@@ -1656,8 +1809,7 @@ local function install()
     end
     M.status = 'running'
     log('running: ranges samples=' .. RANGE.samples .. ' supplies=' .. RANGE.supplies
-        .. ' mission=' .. RANGE.mission .. ' carry=' .. RANGE.carry .. ' dropoffs=' .. RANGE.dropoffs .. ' controls=' .. RANGE.controls
-        .. ' vehicles=' .. RANGE.vehicles)
+        .. ' mission=' .. RANGE.mission .. ' objectives=' .. RANGE.objectives .. ' vehicles=' .. RANGE.vehicles)
     return M
 end
 

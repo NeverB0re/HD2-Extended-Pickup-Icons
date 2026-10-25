@@ -8,20 +8,18 @@ The October 20, 2026 game update broke the old version of this mod, and the load
 
 [size=5][b]What gets a marker[/b][/size]
 [list]
-[*][b]Samples[/b] (common, rare, super), sample containers, Terminid eggs: sample icons, 40 m
-[*][b]Ammo boxes, grenade boxes, stims, resupply pod crates[/b]: supply icons, 25 m
-[*][b]SSSDs, data drives, black boxes, larva containers[/b]: package / larva icons, 40 m
-[*][b]Launch codes, keycards, video cameras and other mission items[/b]: diamond, 40 m
-[*][b]Artillery shells, warheads and batteries you carry[/b]: diamond, 25 m
-[*][b]Drop-off points and cargo containers[/b]: diamond, 40 m
-[*][b]Valves and cranks you turn in missions[/b]: diamond, 40 m
-[*][b]Exosuits, FRVs and tanks[/b]: sky blue vehicle icons, 100 m
+[*][b]Samples[/b], 50 m: common, rare and super samples, sample containers, Terminid eggs (sample icons)
+[*][b]Supplies[/b], 25 m: ammo boxes, grenade boxes, stims, resupply pod crates (supply icons)
+[*][b]Mission items[/b], 50 m: SSSDs, data drives, black boxes and larva containers (package and larva icons); launch codes, keycards, video cameras, artillery shells, warheads and other things you carry (diamonds)
+[*][b]Mission objectives[/b], 50 m: drop-off points, cargo containers, valves and cranks (diamonds)
+[*][b]Vehicles[/b], 100 m: exosuits, FRVs and tanks (sky blue vehicle icons)
 [/list]
 
 [list]
 [*]Markers get smaller the farther away they are, and supply markers fainter. Vehicle markers also show how far away they are.
+[*]Ammo, grenade, stim, package and egg icons are drawn from the game's own textures.
 [*]Markers follow the game's camera, also when you zoom in with a scope.
-[*]Items someone is carrying get no marker, and neither do items put into a drop-off point or shells loaded into artillery. A drop-off point with an item put in loses its marker too.
+[*]Items someone is carrying get no marker, and neither do items put into a drop-off point or shells loaded into artillery. The drop-off point itself keeps its marker.
 [*]Launch codes and keycards lose their marker when you pick them up, or when a teammate runs right past them.
 [*]Items close enough for the game to show its own icon get no marker: samples within 9 m of you (Terminid eggs and Automaton super samples 20 m, sample containers 15 m), ammo and grenade boxes within 4 m. Stims have no icon of the game's, so they keep their marker.
 [*]The vehicle you are in, or one a teammate is driving, gets no marker. A parked vehicle shows again after a few seconds.
@@ -30,16 +28,14 @@ The October 20, 2026 game update broke the old version of this mod, and the load
 [/list]
 
 [size=5][b]Settings[/b][/size]
-Press [b]F9[/b] in the game to open Chef Shared Loader's options menu, then pick [b]Extended Pickup Icons Range[/b]. You can turn each kind on or off and change its distance while you play.
-
-You can also change how markers look:
+Press [b]F9[/b] in the game to open Chef Shared Loader's options menu, then pick [b]Extended Pickup Icons Range[/b]. Each of the five kinds above can be turned on or off and given its own distance while you play. Also there:
 [list]
+[*][b]Fade supplies far away[/b] (on by default).
 [*][b]Show distance above vehicles[/b] (on by default).
 [*][b]Hide markers where the game shows its own icon[/b]: turn off to keep markers up close too (useful with first-person camera mods).
-[*][b]Marker size at the edge of range[/b]: how small markers get far away.
-[*][b]Marker opacity[/b], and [b]Fade supply markers with distance[/b] (on by default).
-[*][b]Icons from the game's textures[/b] (on by default): sharper ammo, grenade, stim, package and egg icons.
+[*][b]Marker size far away[/b] and [b]Marker opacity[/b].
 [/list]
+The settings are in English, Korean, Japanese, Chinese, German, French, Spanish, Italian, Polish, Portuguese and Russian: they follow the language picked in F9 > Chef Shared Loader > Language (after a restart of the game).
 
 [size=5][b]Requirements[/b][/size]
 [list]
@@ -72,20 +68,18 @@ You can also change how markers look:
 
 [size=5][b]표시 대상[/b][/size]
 [list]
-[*][b]샘플[/b](일반·희귀·슈퍼), 샘플통, 테르미니드 알: 샘플 아이콘, 40m
-[*][b]탄약 상자, 수류탄 상자, 스팀, 재보급 포드 상자[/b]: 보급품 아이콘, 25m
-[*][b]SSSD, 데이터 드라이브, 블랙박스, 유충 용기[/b]: 패키지·유충 아이콘, 40m
-[*][b]발사 코드, 키카드, 비디오 카메라 등 임무 아이템[/b]: 마름모, 40m
-[*][b]들고 옮기는 야포 탄두, 탄두, 배터리[/b]: 마름모, 25m
-[*][b]반납 지점, 화물 컨테이너[/b]: 마름모, 40m
-[*][b]미션에서 돌리는 밸브, 크랭크[/b]: 마름모, 40m
-[*][b]엑소슈트, FRV, 탱크[/b]: 하늘색 차량 아이콘, 100m
+[*][b]샘플[/b], 50m: 일반·희귀·슈퍼 샘플, 샘플통, 테르미니드 알(샘플 아이콘)
+[*][b]보급품[/b], 25m: 탄약 상자, 수류탄 상자, 스팀, 재보급 포드 상자(보급품 아이콘)
+[*][b]임무 아이템[/b], 50m: SSSD, 데이터 드라이브, 블랙박스, 유충 용기(패키지·유충 아이콘), 발사 코드, 키카드, 비디오 카메라, 야포 포탄, 탄두 등 들고 옮기는 것(마름모)
+[*][b]임무 목표[/b], 50m: 반납 지점, 화물 컨테이너, 밸브, 크랭크(마름모)
+[*][b]차량[/b], 100m: 엑소슈트, FRV, 탱크(하늘색 차량 아이콘)
 [/list]
 
 [list]
 [*]멀리 있을수록 마커가 작아지고, 보급품 마커는 흐려집니다. 차량 마커에는 거리도 표시됩니다.
+[*]탄약·수류탄·스팀·패키지·알 아이콘은 게임 텍스처로 그립니다.
 [*]마커는 게임 카메라를 따라가며, 스코프로 확대해도 맞습니다.
-[*]누군가 들고 있는 아이템, 반납 지점에 넣은 아이템, 야포에 장전한 포탄에는 마커가 뜨지 않습니다. 아이템을 넣은 반납 지점도 마커가 사라집니다.
+[*]누군가 들고 있는 아이템, 반납 지점에 넣은 아이템, 야포에 장전한 포탄에는 마커가 뜨지 않습니다. 반납 지점 자체의 마커는 남습니다.
 [*]발사 코드와 키카드는 내가 주우면, 또는 동료가 바로 옆을 지나가면 마커가 사라집니다.
 [*]게임 자체 아이콘이 뜨는 거리 안에서는 마커가 뜨지 않습니다: 샘플은 나에게서 9m(테르미니드 알과 오토마톤 슈퍼 샘플은 20m, 샘플통은 15m), 탄약·수류탄 상자는 4m. 스팀은 게임 아이콘이 없어서 마커가 계속 뜹니다.
 [*]내가 탄 차량이나 동료가 운전 중인 차량에는 마커가 뜨지 않습니다. 주차하면 몇 초 뒤 다시 보입니다.
@@ -94,16 +88,14 @@ You can also change how markers look:
 [/list]
 
 [size=5][b]설정[/b][/size]
-게임 중에 [b]F9[/b]를 누르면 Chef Shared Loader의 옵션 메뉴가 열립니다. [b]Extended Pickup Icons Range[/b]를 고르면 항목별 켜기/끄기와 표시 거리를 바꿀 수 있습니다.
-
-마커 모양도 바꿀 수 있습니다:
+게임 중에 [b]F9[/b]를 누르면 Chef Shared Loader의 옵션 메뉴가 열립니다. [b]Extended Pickup Icons Range[/b]를 고르면 위의 다섯 종류마다 켜기/끄기와 표시 거리를 바꿀 수 있습니다. 그 밖의 설정:
 [list]
+[*][b]먼 보급품 흐리게[/b](기본값 켜짐).
 [*][b]차량 위에 거리 표시[/b](기본값 켜짐).
 [*][b]게임 아이콘이 뜨는 곳에서 마커 숨기기[/b]: 끄면 가까이에서도 마커가 남습니다(1인칭 카메라 모드와 함께 쓸 때 유용).
-[*][b]범위 끝에서의 마커 크기[/b]: 멀리 있을 때 마커가 얼마나 작아질지.
-[*][b]마커 투명도[/b], [b]보급품 마커 거리에 따라 흐려지기[/b](기본값 켜짐).
-[*][b]게임 텍스처로 아이콘 그리기[/b](기본값 켜짐): 탄약·수류탄·스팀·패키지·알 아이콘이 더 선명해집니다.
+[*][b]먼 곳의 마커 크기[/b], [b]마커 불투명도[/b].
 [/list]
+설정 메뉴는 영어, 한국어, 일본어, 중국어, 독일어, 프랑스어, 스페인어, 이탈리아어, 폴란드어, 포르투갈어, 러시아어로 나옵니다. F9 > Chef Shared Loader > Language에서 고른 언어를 따릅니다(게임을 다시 시작하면 적용).
 
 [size=5][b]필요한 것[/b][/size]
 [list]

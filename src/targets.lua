@@ -58,8 +58,8 @@ return {
   {group='vehicles', name='content/fac_helldivers/vehicles/frv/frv', icon='car'},
   {group='vehicles', name='content/fac_helldivers/vehicles/frv_heavy/frv_flamer', icon='car'},
   {group='vehicles', name='content/fac_helldivers/vehicles/frv_supply/frv_supply', icon='car'},
-  {group='vehicles', name='content/fac_helldivers/vehicles/tank/tank', icon='tank'},
-  {group='vehicles', name='content/fac_helldivers/vehicles/tank_storm/tank_storm', icon='tank'},
+  {group='vehicles', name='content/fac_helldivers/vehicles/tank/tank', icon='tank', height=4.2},  -- 2.2.0: higher
+  {group='vehicles', name='content/fac_helldivers/vehicles/tank_storm/tank_storm', icon='tank', height=4.2},
   -- 0.18.0: mission controls you work by hand (valves, cranks, switches, buttons), names from filediver's hash list
   {group='controls', name='content/objectives/obj_common/oil_pump/oil_pump_valve'},
   {group='controls', name='content/objectives/obj_common/colony_relay/colony_relay_01/objective_colony_relay_antenna_crank_01'},
