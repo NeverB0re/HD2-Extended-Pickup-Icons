@@ -16,11 +16,12 @@ The October 20, 2026 game update broke the old version of this mod, and the load
 [*][b]Drop-off points and cargo containers[/b]: diamond, 40 m
 [*][b]Valves and cranks you turn in missions[/b]: diamond, 40 m
 [*][b]Exosuits, FRVs and tanks[/b]: vehicle icons, 100 m
+[*][b]Mission terminals[/b]: diamond, 40 m. Off by default; turn on in the settings.
 [/list]
 
 [list]
 [*]Markers get a little smaller the farther away they are.
-[*]Items someone is carrying get no marker, and neither do items put into a drop-off point.
+[*]Items someone is carrying get no marker, and neither do items put into a drop-off point or shells loaded into artillery. A drop-off point with an item put in loses its marker too.
 [*]Items close enough for the game to show its own icon get no marker: samples within 9 m of you (Terminid eggs and Automaton super samples 20 m, sample containers 15 m), supplies within 4 m.
 [*]The vehicle you are in, or one a teammate is driving, gets no marker. A parked vehicle shows again after a few seconds.
 [*]Destroyed exosuits and FRVs lose their marker.
@@ -53,9 +54,9 @@ You can also change how markers look. By default they look as described above.
 
 [size=5][b]Good to know[/b][/size]
 [list]
-[*]Drop-off points and valves stay marked after you use them. The mod cannot tell whether one is finished.
+[*]Valves and cranks stay marked after you turn them. The mod cannot tell whether one is finished.
 [*]Destroyed [b]tanks[/b] and [b]supply FRVs[/b] keep their marker until the wreck disappears from the map. Exosuits and other FRVs are recognised as destroyed.
-[*]Terminals are not marked; they are easy to spot already.
+[*]Some mission terminals may not be marked yet.
 [/list]
 
 [line]
@@ -78,11 +79,12 @@ You can also change how markers look. By default they look as described above.
 [*][b]반납 지점, 화물 컨테이너[/b]: 마름모, 40m
 [*][b]미션에서 돌리는 밸브, 크랭크[/b]: 마름모, 40m
 [*][b]엑소슈트, FRV, 탱크[/b]: 차량 아이콘, 100m
+[*][b]임무 터미널[/b]: 마름모, 40m. 기본값은 꺼짐이며 설정에서 켤 수 있습니다.
 [/list]
 
 [list]
 [*]멀리 있을수록 마커가 조금 작아집니다.
-[*]누군가 들고 있는 아이템과 반납 지점에 넣은 아이템에는 마커가 뜨지 않습니다.
+[*]누군가 들고 있는 아이템, 반납 지점에 넣은 아이템, 야포에 장전한 포탄에는 마커가 뜨지 않습니다. 아이템을 넣은 반납 지점도 마커가 사라집니다.
 [*]게임 자체 아이콘이 뜨는 거리 안에서는 마커가 뜨지 않습니다: 샘플은 나에게서 9m(테르미니드 알과 오토마톤 슈퍼 샘플은 20m, 샘플통은 15m), 보급품은 4m.
 [*]내가 탄 차량이나 동료가 운전 중인 차량에는 마커가 뜨지 않습니다. 주차하면 몇 초 뒤 다시 보입니다.
 [*]파괴된 엑소슈트와 FRV는 마커가 사라집니다.
@@ -115,7 +117,7 @@ You can also change how markers look. By default they look as described above.
 
 [size=5][b]알아 둘 점[/b][/size]
 [list]
-[*]반납 지점과 밸브는 사용한 뒤에도 표시됩니다. 모드가 완료 여부를 알 수 없습니다.
+[*]밸브와 크랭크는 돌린 뒤에도 표시됩니다. 모드가 완료 여부를 알 수 없습니다.
 [*]파괴된 [b]탱크[/b]와 [b]보급 FRV[/b]는 잔해가 맵에서 사라질 때까지 마커가 남습니다. 엑소슈트와 다른 FRV는 파괴를 인식합니다.
-[*]터미널은 원래 잘 보이므로 표시하지 않습니다.
+[*]일부 임무 터미널은 아직 표시되지 않을 수 있습니다.
 [/list]

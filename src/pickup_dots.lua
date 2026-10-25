@@ -21,8 +21,9 @@ rawset(_G, MOD_KEY, M)
 
 -- ------------------------------------------------------------------ settings --
 local RANGE = {samples = 40, supplies = 25, mission = 40, carry = 25,  -- metres, settings (0 = none shown)
-               dropoffs = 40, controls = 40, vehicles = 100}
-local SHOW = {}               -- a setting per kind: false hides it (nil or true: shown)
+               dropoffs = 40, controls = 40, vehicles = 100, terminals = 40}
+local SHOW = {terminals = false}   -- a setting per kind: false hides it (nil or true: shown); terminals
+                              -- (2.1.0) are off unless switched on
 local NEAR_ME = {samples = 9, supplies = 4}   -- this close to you: no marker (the game shows its own icon;
                                                -- a target's own 'near' overrides it)
 local LOOK = {                -- settings (2.1.0); the defaults draw as 2.0 did
@@ -33,14 +34,15 @@ local LOOK = {                -- settings (2.1.0); the defaults draw as 2.0 did
     offset_x = 0, offset_y = 0,   -- pixels, right and up: sample and supply markers moved by this much
 }
 local DOT_HEIGHT = 0.6        -- metres above the unit's origin
-local GROUP_HEIGHT = {samples = 0.3, supplies = 0.3, dropoffs = 1.8, controls = 1.2, vehicles = 3.2}
+local GROUP_HEIGHT = {samples = 0.3, supplies = 0.3, dropoffs = 1.8, controls = 1.2, vehicles = 3.2, terminals = 1.5}
                               -- icons (samples, supplies) sit lower than diamonds   -- these stand taller: the marker goes above them
 local VEHICLE_BUSY = 4        -- a helldiver this close to a vehicle's origin is in it: no marker while it moves,
                               -- and none ever while you are this close
 local VEHICLE_PARKED_S = 3    -- a vehicle that has not moved this long is parked: teammates beside it do not hide it
 local WRECK_NEAR = 4          -- an exosuit this close to an exosuit wreck is that wreck
 local ARMS_NEAR = 5           -- a vehicle's weapon units (group 'arms') are this close to it
-local DELIVERED_NEAR = 3      -- a mission item or load this close to a drop-off is in it (an SSSD put in)
+local DELIVERED_NEAR = 3      -- a mission item or load this close to a drop-off is in it (an SSSD put in;
+                              -- an artillery shell loaded: group 'loaders', not drawn, counts as a drop-off)
 local DIAMOND_PER_M = 0.008   -- half-height per metre of distance: about the same size on screen at any range
 local DIAMOND_MIN, DIAMOND_MAX = 0.05, 0.4   -- half-height limits, metres
 local DIAMOND_ASPECT = 1      -- half-width / half-height: a square on its corner, like the game's icon
@@ -630,7 +632,7 @@ local last_counts = {}
 -- Diagnostics (2.1.0): where each mission item, load, drop-off and control lies, once per spot and
 -- world, so a log shows items the game keeps out of sight (diamonds under the map and under the ship's
 -- hellpods were reported on 2.0.1). Items on a helldiver are left out.
-local SPOT_KINDS = {mission = true, carry = true, dropoffs = true, controls = true}
+local SPOT_KINDS = {mission = true, carry = true, dropoffs = true, controls = true, terminals = true}
 local SPOT_LOG_MAX = 300      -- lines a launch
 local SPOT_SAME = 2           -- metres: the same spot
 local spots = {}              -- per key: the spots logged in this world
@@ -661,7 +663,7 @@ local function collect_dots(now)
     local dropoffs = {}      -- a mission item or load beside one is delivered (2.1.0)
     for i = 1, #keys do
         local group = keys[i].group
-        local list = (group == 'wrecks' and wrecks) or (group == 'arms' and arms) or (group == 'dropoffs' and dropoffs) or nil
+        local list = (group == 'wrecks' and wrecks) or (group == 'arms' and arms) or ((group == 'dropoffs' or group == 'loaders') and dropoffs) or nil
         if list and found[i] then
             for _, p in ipairs(found[i]) do list[#list + 1] = p end
         end
@@ -711,7 +713,7 @@ local function collect_dots(now)
                 elseif LOOK.hide_near and (keys[i].near or NEAR_ME[group]) and me ~= nil and who == me
                     and d < (keys[i].near or NEAR_ME[group]) then
                     c.worn = c.worn + 1
-                elseif carried and group ~= 'dropoffs' and group ~= 'controls' then   -- never worn; a teammate may stand at it
+                elseif carried and group ~= 'dropoffs' and group ~= 'controls' and group ~= 'terminals' then   -- never worn; a teammate may stand at it
                     c.worn = c.worn + 1
                 elseif (group == 'mission' or group == 'carry') and near(dropoffs, p, DELIVERED_NEAR) then
                     c.worn = c.worn + 1
@@ -1272,7 +1274,7 @@ local function tick()
         if #players > 0 then
             log('found: ' .. found_summary())
             local parts = {}
-            for _, group in ipairs({'samples', 'supplies', 'mission', 'carry', 'dropoffs', 'controls', 'vehicles'}) do
+            for _, group in ipairs({'samples', 'supplies', 'mission', 'carry', 'dropoffs', 'controls', 'vehicles', 'terminals'}) do
                 local c = last_counts[group]
                 if c then parts[#parts + 1] = string.format('%s drawn=%d worn=%d far=%d', group, c.drawn, c.worn, c.far) end
             end
@@ -1292,6 +1294,7 @@ local RANGE_OPTIONS = {   -- group, its name in the settings window, the most me
     {'samples', 'Samples', 150}, {'supplies', 'Supplies', 150}, {'mission', 'Mission items', 150},
     {'carry', 'Shells, warheads, batteries', 150}, {'dropoffs', 'Drop-off points, cargo containers', 150},
     {'controls', 'Valves, cranks', 150}, {'vehicles', 'Vehicles', 300},
+    {'terminals', 'Terminals', 150},   -- off by default (SHOW)
 }
 
 -- 2.1.0: how markers look; each default keeps 2.0's look. id, its spec, how a value goes into LOOK.
@@ -1359,7 +1362,7 @@ local function register_settings()
         local group, id = row[1], 'pickup_dots.range_' .. row[1]
         local show_id = 'pickup_dots.show_' .. group
         local oks, registered6, why6 = pcall(host.register_option, show_id, {
-            type = 'toggle', mod = 'Extended Pickup Icons Range', label = 'Show ' .. row[2], default = true,
+            type = 'toggle', mod = 'Extended Pickup Icons Range', label = 'Show ' .. row[2], default = SHOW[group] ~= false,
             description = 'Off: no markers on ' .. row[2]:lower() .. '.',
         })
         if not oks or registered6 ~= true then   -- left at its default; the others still go in

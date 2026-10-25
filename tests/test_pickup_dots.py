@@ -210,7 +210,7 @@ class DrawingTests(Case):
         self.assertGreater(self.fake.updates, 0)
         self.assertEqual(set(self.fake.lookups.keys()), {AVATAR, MARK})
         self.assertIn("can_get: present", log)
-        self.assertIn("80 target resources: 77 named, 3 by id only (looked up if the id self-test passes)", log)
+        self.assertIn("84 target resources: 80 named, 4 by id only (looked up if the id self-test passes)", log)
         self.frames(1, start=200.0)                   # the next status line, after a full sweep
         log = self.log_text()
         self.assertIn("found: il_sarcophagus=2", log)
@@ -870,6 +870,33 @@ class ScreenTests(Case):
         self.settle()
         self.assertIn("dropoffs drawn=1 worn=0", self.status_now())
 
+    def test_terminals_are_marked_only_when_switched_on(self):
+        terminal = "content/objectives/obj_cyborgs/cyborg_generic_objective_terminal/cy_objective_terminal"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(terminal, [unit(0, 0, 0)])
+        self.load()
+        self.settle()
+        self.assertEqual(self.screen_tris(), [])
+
+    def test_a_switched_on_terminal_gets_a_diamond(self):
+        self.set_options({"pickup_dots.show_terminals": True})
+        terminal = "content/objectives/obj_cyborgs/cyborg_generic_objective_terminal/cy_objective_terminal"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(terminal, [unit(0, 0, 0)])
+        self.load()
+        self.settle()
+        self.assertEqual(len(self.screen_points()), 1)
+
+    def test_a_loaded_artillery_shell_gets_no_marker(self):
+        shell = "content/objectives/obj_common/seaf_artillery/seaf_shell_regular"
+        rack = "content/objectives/obj_common/fire_artillery/ready_rack"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(rack, [unit(-4, 0, 0)])
+        self.set_units(shell, [unit(-4, 0, 1.0), unit(4, 0, 0)])        # one in the rack, one on the ground
+        self.load()
+        self.settle()
+        self.assertIn("carry drawn=1 worn=1", self.status_now())
+
     def test_where_mission_items_lie_is_logged_once_per_spot(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(MARK, [unit(0, 0, -30), unit(0, 1, -30)])          # under the map, 1 m apart: one spot
@@ -952,7 +979,8 @@ class ScreenTests(Case):
         ids = sorted(self.fake.options.keys())
         look = ["pickup_dots." + n for n in ("fade", "hide_near", "offset_x", "offset_y", "opacity", "smallest_size")]
         self.assertEqual([i for i in ids if not i.startswith(("pickup_dots.range_", "pickup_dots.show_"))], look)
-        self.assertEqual(len(ids), 14 + 6)
+        self.assertEqual(len(ids), 16 + 6)
+        self.assertFalse(self.fake.options["pickup_dots.show_terminals"].default)   # terminals: off unless chosen
         self.assertEqual(self.fake.options["pickup_dots.show_vehicles"].type, "toggle")
 
     def test_a_passing_screen_failure_does_not_turn_the_screen_off(self):

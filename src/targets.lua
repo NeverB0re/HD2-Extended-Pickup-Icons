@@ -97,4 +97,11 @@ return {
   {group='arms', name='content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg'},
   {group='arms', name='content/fac_helldivers/vehicles/frv_heavy/armaments/frv_flamethrower/frv_flamethrower'},
   {group='arms', name='content/fac_helldivers/vehicles/tank_storm/armaments/tank_storm_maingun/tank_storm_maingun'},
+  -- 2.1.0: terminals (off unless switched on). The SEAF objective terminal has no name in filediver's
+  -- hash list: its id, found by its 'computer_terminal_screen_new' material, shared by nine objectives.
+  {group='terminals', hex='cd5fb5dc997811bb'},
+  {group='terminals', name='content/objectives/obj_cyborgs/cyborg_generic_objective_terminal/cy_objective_terminal'},
+  -- 2.1.0: not drawn; where artillery shells are loaded: a shell beside one is in it (DELIVERED_NEAR)
+  {group='loaders', name='content/objectives/obj_common/fire_artillery/automated_artillery'},
+  {group='loaders', name='content/objectives/obj_common/fire_artillery/ready_rack'},
 }

@@ -56,6 +56,7 @@ What gets a marker (default distance):
 - Shells, warheads and batteries you carry (25 m).
 - Drop-off points and cargo containers (40 m), and valves and cranks you turn (40 m).
 - Vehicles (100 m): exosuits, FRVs and tanks.
+- Mission terminals (40 m): off by default; turn on in the settings.
 
 Markers get a little smaller farther away and hide while a menu is open. Items someone is
 carrying, and the vehicle you or a teammate are driving, get no marker. Items close enough
