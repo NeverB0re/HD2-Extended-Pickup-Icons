@@ -4,7 +4,7 @@
                                   2.1.0-test.1: copy it to test-builds/; a release: to release/)
 
 The mod is one plain-text Lua resource, mods/codex/pickup_dots, in
-9ba626afa44a3aa3.patch_0, which Boot Mod Loader finds and starts.
+9ba626afa44a3aa3.patch_0, which Chef Shared Loader finds and starts.
 The archive writer below (SCAFFOLD, murmur64, write_module) is taken from
 Boot Mod Loader's build.py, https://github.com/pat-pat-patrick/boot-mod-loader (MIT).
 """
@@ -38,9 +38,9 @@ MANIFEST = {
     "Guid": "453493d3-ffa7-4148-9b30-d6e4ab32b9d1",   # the Nexus mod's own: an update of it, not a new mod
     "Name": NAME,
     "Description": "Shows the game's icons over samples, supplies, mission items and vehicles from farther away. "
-                   "Rebuilt to work again after the 2026-10-20 game update. Requires Boot Mod Loader.",
+                   "Rebuilt to work again after the 2026-10-20 game update. Requires Chef Shared Loader.",
     "IconPath": "icon.png",
-    "Options": [{"Name": NAME, "Description": "Requires Boot Mod Loader.", "Include": [FOLDER]}],
+    "Options": [{"Name": NAME, "Description": "Requires Chef Shared Loader.", "Include": [FOLDER]}],
 }
 
 README = """Extended Pickup Icons Range v{version}
@@ -55,29 +55,29 @@ What gets a marker (default distance):
 - Mission items (40 m): SSSDs, data drives, black boxes, larva containers, launch codes,
   keycards, video cameras and more.
 - Shells, warheads and batteries you carry (25 m).
-- Drop-off points and cargo containers (40 m), and valves and cranks you turn (40 m).
-- Vehicles (100 m): exosuits, FRVs and tanks.
+- Drop-off points and cargo containers (40 m), and valves, cranks and generators (40 m).
+- Vehicles (100 m): exosuits, FRVs and tanks, in sky blue.
 - Mission terminals (40 m): off by default; turn on in the settings.
 
-Markers get a little smaller farther away and hide while a menu is open. Items someone is
+Each marker shows its distance. Markers get smaller and fainter farther away, follow the
+game's camera (scopes too), and hide while a menu is open; on your ship mission markers
+are off. Items someone is
 carrying, and the vehicle you or a teammate are driving, get no marker. Items close enough
 for the game to show its own icon get none either: samples within 9 m (Terminid eggs and
 Automaton super samples 20 m, sample containers 15 m) and ammo and grenade boxes within
 4 m. Stims have no icon of the game's and keep theirs.
 
-Settings: turn each kind on or off and set its distance with HD2 Mod Setting GUI
-(Nexus mod 17756). It can also keep markers on up close, and change their smallest size,
-and opacity, and fade them with distance (on by default).
-Without it, the defaults above are used.
+Settings: press F9 in the game (Chef Shared Loader's options menu) and pick Extended
+Pickup Icons Range: turn each kind on or off and set its distance, show or hide the
+distance, keep markers on up close, and change their smallest size, opacity and fading.
 
-Requires Boot Mod Loader (Nexus mod 17754). In your mod manager's load order, Boot Mod
-Loader must be above this mod (Arsenal may put it below by default: move it up).
+Requires Chef Shared Loader 1.2.0 or newer (Nexus mod 17760). Give it the highest priority
+in your mod manager (in Arsenal, by default, the bottom of the list).
 
 Good to know:
-- Drop-off points and valves stay marked after you use them.
+- Valves, cranks and generators stay marked after you use them.
 - Destroyed exosuits and FRVs lose their marker. Destroyed tanks and supply FRVs keep it
   until the wreck disappears from the map.
-- While aiming down sights, markers may sit slightly off the item.
 """
 
 

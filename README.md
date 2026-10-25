@@ -2,7 +2,7 @@
 
 A **HELLDIVERS 2** mod that marks samples, supplies, mission items, drop-off points, valves and vehicles
 from farther away, using the game's own icons. Since 2.0.0 (numbered as on Nexus) it runs on
-**Boot Mod Loader** (Nexus 17754) and draws its own on-screen markers; the older Bingus Shared Loader
+**Chef Shared Loader** (Nexus 17760) and draws its own on-screen markers; the older Bingus Shared Loader
 versions (released here as v2.4, v2.5 and v3.0) are in this repository's history and releases.
 
 Player-facing description and install steps: [PUBLISH_NEXUS.txt](PUBLISH_NEXUS.txt) (Nexus BBCode).
@@ -11,7 +11,7 @@ Player-facing description and install steps: [PUBLISH_NEXUS.txt](PUBLISH_NEXUS.t
 
 | Path | What |
 | --- | --- |
-| `src/pickup_dots.lua` | The mod (PUC Lua 5.1, runs inside Boot Mod Loader). `VERSION` is set here. |
+| `src/pickup_dots.lua` | The mod (PUC Lua 5.1, runs inside Chef Shared Loader). `VERSION` is set here. |
 | `src/targets.lua` | Which game units get a marker: group, icon and distances per unit. |
 | `src/icon.png` | Mod manager icon. |
 | `build.py` | Builds `dist/Extended Pickup Icons Range v<VERSION>.zip` (Arsenal-importable). |

@@ -78,8 +78,8 @@ return {
   {group='controls', name='content/objectives/obj_cyborgs/cyborg_generic_valve/cy_generic_valve'},  -- Sabotage Orgo-Plasma Synthesis
   {group='controls', name='content/objectives/obj_cyborgs/cyborg_cooling_structure/cyborg_cooling_pipe_valve'},  -- Halt Cyborg Production
   {group='controls', name='content/objectives/obj_cyborgs/cyborg_cooling_structure/cyborg_cooling_pipe_valve_horizontal'},  -- Halt Cyborg Production
-  {group='mission', name='content/objectives/obj_common/generic_intel/generic_intel'},  -- Launch ICBM: launch codes (picked up)
-  {group='mission', name='content/objectives/obj_cyborgs/cyborg_generic_intel/cy_generic_intel'},  -- Commando: Extract Intel: keycard
+  {group='mission', name='content/objectives/obj_common/generic_intel/generic_intel', taken=true},  -- Launch ICBM: launch codes (picked up)
+  {group='mission', name='content/objectives/obj_cyborgs/cyborg_generic_intel/cy_generic_intel', taken=true},  -- Commando: Extract Intel: keycard
   {group='mission', name='content/objectives/obj_common/shoulder_mounted_camera/shoulder_mounted_camera'},  -- Acquire Evidence, Illuminate Lair: video camera
   -- 0.28.0: not drawn; an exosuit within 4 m of its wreck gets no marker
   {group='wrecks', name='content/fac_helldivers/vehicles/combat_walker_wreck/combat_walker_wreck'},
@@ -105,4 +105,6 @@ return {
   -- 2.1.0: not drawn; where artillery shells are loaded: a shell in one is in it (LOADED_NEAR). Not the
   -- artillery itself: it is large, and shells are left beside it to load later.
   {group='loaders', name='content/objectives/obj_common/fire_artillery/ready_rack'},
+  -- 2.1.0: the generator you start in a mission (its lever is on it)
+  {group='controls', name='content/objectives/obj_common/generator/generator'},
 }

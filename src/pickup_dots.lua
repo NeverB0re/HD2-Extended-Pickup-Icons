@@ -1,6 +1,6 @@
 -- HD2-Addon: mods/codex/pickup_dots
 -- Extended Pickup Icons Range (Pickup Dots): markers over samples, supplies, mission items and vehicles near you.
--- Lua-only rebuild of Extended Pickup Icons for Boot Mod Loader (PUC Lua 5.1, no ffi).
+-- Lua-only rebuild of Extended Pickup Icons for Chef Shared Loader (PUC Lua 5.1, no ffi).
 -- It only reads unit positions and draws lines; it changes no game state.
 --
 -- 0.1.0 crashed the game on entering the ship: an access violation inside a native call made
@@ -15,7 +15,13 @@
 local MOD_KEY = 'CodexPickupDots'
 if rawget(_G, MOD_KEY) then return rawget(_G, MOD_KEY) end
 
-local VERSION = '2.1.0-test.1'
+-- Chef Shared Loader (Nexus 17760) hands its helpers in (2.1.0): the game's own camera, whether this is a
+-- mission, text in the game's font, units by kind. Without them (the tests): nil, and the mod does without.
+local CHEF = ...
+if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
+local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
+
+local VERSION = '2.1.0-test.2'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -33,7 +39,20 @@ local LOOK = {                -- settings (2.1.0)
     smallest = 0.7,           -- size at the edge of a kind's range (full size up to FULL_SIZE_M)
     opacity = 1,              -- 0..1
     fade = true,              -- fainter with distance, down to FADE_LEAST of opacity at the edge
+    distance = true,          -- the distance above each marker, in the game's font (Chef Shared Loader)
+    game_textures = false,    -- test: icons drawn from the game's own textures (Chef Shared Loader), not pixels
 }
+-- The game's icon textures the pixel icons were made from (tools/icons): id, width, height, and the icon's
+-- box in it (left, top, right, bottom; from the top). Drawn by Chef Shared Loader when the game has one loaded.
+local ICON_TEXTURES = {
+    ammo = {'7615d6a35c657087', 192, 192, 24, 24, 168, 168},
+    grenade = {'4c3bef8bc16021c9', 52, 72, 4, 4, 47, 68},
+    stim = {'93b43ada76587340', 128, 64, 16, 16, 112, 48},
+    package = {'3a6b4bdd84bc5561', 128, 128, 20, 8, 98, 117},
+    egg = {'460c4e527705db55', 256, 256, 45, 16, 208, 240},
+}
+local VEHICLE_RGB = {110, 205, 255}   -- vehicles: the sky blue of the HUD's support weapon icons
+local DISTANCE_PX = 13        -- the distance's height at 1080 pixels of screen
 local DOT_HEIGHT = 0.6        -- metres above the unit's origin
 local GROUP_HEIGHT = {samples = 0.3, supplies = 0.3, dropoffs = 1.8, controls = 1.2, vehicles = 3.2, terminals = 1.5}
                               -- icons (samples, supplies) sit lower than diamonds   -- these stand taller: the marker goes above them
@@ -442,10 +461,10 @@ local function build_keys()
     local unnamed = 0
     for _, t in ipairs(TARGETS) do
         if t.name then
-            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, height = t.height}
+            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height}
         elseif t.hex then
             unnamed = unnamed + 1
-            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, height = t.height}
+            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height}
         end
     end
     log(string.format('%d target resources: %d named, %d by id only (looked up if the id self-test passes)',
@@ -627,6 +646,8 @@ local function near(list, p, r)
     return false
 end
 
+local SHIP_HIDDEN = {mission = true, carry = true, dropoffs = true, controls = true, terminals = true}
+
 -- Last frame's counts per group, for the status line: drawn, hidden as worn/held, out of range.
 local last_counts = {}
 
@@ -639,59 +660,81 @@ local SPOT_SAME = 2           -- metres: the same spot
 local spots = {}              -- per key: the spots logged in this world
 local spots_logged = 0
 
--- Diagnostics (2.1.0-test.2): a picked-up launch code (generic_intel) stays where it lay, alive (ICBM
--- mission, test.1). What changes on a mission item when it is picked up is logged, so it can be told apart:
--- for each one within STATE_NEAR of you, a line whenever its state below changes.
-local STATE_NEAR = 15
-local STATE_LOG_MAX = 300
-local states = {}             -- per unit (tostring): its last state line
-local states_logged = 0
+-- Launch codes and keycards (targets with 'taken'): picked up, the unit stays where it lay, alive and
+-- unchanged in everything the engine lets a mod read (2.1.0-test.1 logs). So one a helldiver stood at, within
+-- TAKE_REACH for TAKE_HOLD_S, is taken for picked up; up close the game shows its own icon anyway.
+local TAKE_REACH = 2
+local TAKE_HOLD_S = 1
+local reached = {}            -- per unit: since when a helldiver has been at it
+local taken = {}              -- per unit: picked up (this world)
 
-local function state_of(unit)
-    local parts = {}
-    local function add(name, fn, ...)
-        if type(fn) ~= 'function' then return end
-        local ok, a, b, c = pcall(fn, unit, ...)
-        if not ok then a = 'err' end
-        if type(a) == 'userdata' then a = tostring(a):gsub('0x%x+', '#') end
-        parts[#parts + 1] = name .. '=' .. tostring(a) .. (b ~= nil and (',' .. tostring(b)) or '')
-            .. (c ~= nil and (',' .. tostring(c)) or '')
+local function check_taken(p, now)
+    local id = p.unit ~= nil and tostring(p.unit) or string.format('%.0f %.0f %.0f', p[1], p[2], p[3])
+    if taken[id] then return true end
+    local at = false
+    for _, h in ipairs(players) do
+        local dx, dy, dz = p[1] - h[1], p[2] - h[2], p[3] - h[3]
+        if dx * dx + dy * dy + dz * dz < TAKE_REACH * TAKE_REACH then
+            at = true
+            break
+        end
     end
-    local U = sr.Unit
-    add('scale', U.local_scale)
-    add('meshes', U.num_meshes)
-    add('child', U.is_child)
-    add('graph', U.num_scene_graph_items)
-    add('actors', U.num_actors)
-    add('lods', U.num_lod_objects)
-    add('moving', U.is_moving)
-    local Mesh = sr.Mesh
-    if Mesh and type(U.mesh) == 'function' then
-        local okn, n = pcall(U.num_meshes, unit)
-        for m = 1, (okn and type(n) == 'number') and math.min(n, 3) or 0 do
-            local okm, mesh = pcall(U.mesh, unit, m)
-            if okm and mesh ~= nil then
-                for _, f in ipairs({'is_visible', 'visible', 'is_hidden'}) do
-                    if type(Mesh[f]) == 'function' then
-                        local okv, v = pcall(Mesh[f], mesh)
-                        parts[#parts + 1] = 'mesh' .. m .. '.' .. f .. '=' .. tostring(okv and v or 'err')
-                    end
+    if not at then
+        reached[id] = nil
+        return false
+    end
+    reached[id] = reached[id] or now
+    if now - reached[id] >= TAKE_HOLD_S then
+        taken[id] = true
+        log(string.format('taken: the item at %.1f %.1f %.1f is taken for picked up', p[1], p[2], p[3]))
+        return true
+    end
+    return false
+end
+
+-- Diagnostics (2.1.0-test.2, Chef Shared Loader only): every kind of unit within CENSUS_NEAR of you, once a
+-- world, by its resource id: terminals and levers the hash list has no name for show up when you stand at one.
+local CENSUS_NEAR = 4
+local CENSUS_PER_FRAME = 300
+local CENSUS_EVERY_S = 2
+local CENSUS_LOG_MAX = 400
+local RUNTIME_KIND = '46cab355bd8d4d37'   -- units built at run time: asking where one is ends the game
+local census = {list = nil, i = 0, next_at = 0, seen = {}, logged = 0}
+
+local function census_step(world, now)
+    if me == nil or census.logged >= CENSUS_LOG_MAX
+        or not (chef_has('call') and chef_has('unit_kind') and chef_has('unit_position') and chef_has('unit_alive')) then
+        return
+    end
+    if census.list == nil then
+        if now < census.next_at then return end
+        local units = CHEF.call('World.units', world)
+        if type(units) ~= 'table' then
+            census.next_at = now + 30
+            return
+        end
+        census.list, census.i = units, 0
+    end
+    local list = census.list
+    local stop = math.min(#list, census.i + CENSUS_PER_FRAME)
+    for j = census.i + 1, stop do
+        local u = list[j]
+        local kind = CHEF.unit_alive(u) and CHEF.unit_kind(u)
+        if kind and kind ~= RUNTIME_KIND and not census.seen[kind] then
+            local x, y, z = CHEF.unit_position(u)
+            if x then
+                local dx, dy, dz = x - me[1], y - me[2], z - me[3]
+                local d = math.sqrt(dx * dx + dy * dy + dz * dz)
+                if d < CENSUS_NEAR then
+                    census.seen[kind] = true
+                    census.logged = census.logged + 1
+                    log(string.format('near: %s at %.1f m (%.1f %.1f %.1f)', kind, d, x, y, z))
                 end
             end
         end
     end
-    return table.concat(parts, ' ')
-end
-
-local function note_state(k, p, d)
-    if states_logged >= STATE_LOG_MAX or p.unit == nil or d == nil or d > STATE_NEAR then return end
-    local id = tostring(p.unit)
-    local now_state = state_of(p.unit)
-    if states[id] == now_state then return end
-    states[id] = now_state
-    states_logged = states_logged + 1
-    log(string.format('state: %s at %.1f %.1f %.1f (%.1f m): %s', string.match(k.label, '([^/]+)$') or k.label,
-        p[1], p[2], p[3], d, now_state))
+    census.i = stop
+    if stop >= #list then census.list, census.next_at = nil, now + CENSUS_EVERY_S end
 end
 
 local function note_spot(k, p)
@@ -735,9 +778,12 @@ local function collect_dots(now)
             end
         end
     end
+    -- on the ship: no mission markers (diamonds were seen under the hellpods after a mission, 2.0.1)
+    local on_ship = chef_has('in_mission') and not CHEF.in_mission()
     for i = 1, #keys do
         local group = keys[i].group
         local range = SHOW[group] ~= false and (RANGE[group] or 0) or 0
+        if on_ship and SHIP_HIDDEN[group] then range = 0 end
         local points = found[i]
         if points and range > 0 then
             local c = counts[group] or {drawn = 0, worn = 0, far = 0}
@@ -746,7 +792,6 @@ local function collect_dots(now)
             for _, p in ipairs(points) do
                 local d, who, carried, mine, others = measure(p[1], p[2], p[3], keys[i].worn)
                 if SPOT_KINDS[group] and not carried then note_spot(keys[i], p) end
-                if group == 'mission' then note_state(keys[i], p, d) end
                 if d ~= nil and d <= range + HOT_MARGIN then near_any = true end
                 if d == nil or d > range then
                     c.far = c.far + 1
@@ -770,6 +815,8 @@ local function collect_dots(now)
                     end
                 elseif LOOK.hide_near and (keys[i].near or NEAR_ME[group]) and me ~= nil and who == me
                     and d < (keys[i].near or NEAR_ME[group]) - NEAR_OVERLAP then
+                    c.worn = c.worn + 1
+                elseif keys[i].taken and check_taken(p, now) then
                     c.worn = c.worn + 1
                 elseif carried and group ~= 'dropoffs' and group ~= 'controls' and group ~= 'terminals' then   -- never worn; a teammate may stand at it
                     c.worn = c.worn + 1
@@ -891,7 +938,34 @@ local function xyz_of(v)
     if ok and type(x) == 'number' and type(y) == 'number' and type(z) == 'number' then return {x, y, z} end
 end
 
+-- The game's own camera, through Chef Shared Loader (2.1.0): where it is, where it looks, and its real field
+-- of view (a scope or a speeding vehicle changes it; the settings file's does not). Level: no roll.
+local function camera_from_chef()
+    local ok, d = pcall(CHEF.camera)
+    if not ok or type(d) ~= 'table' or type(d.x) ~= 'number' or type(d.fx) ~= 'number' then return nil end
+    local fx, fy, fz = d.fx, d.fy, d.fz
+    local level = math.sqrt(fx * fx + fy * fy)
+    if level < 1e-6 then return nil end                 -- straight up or down
+    local rx, ry = fy / level, -fx / level              -- right: forward x up
+    local cam = {translation = {d.x, d.y, d.z}, forward = {fx, fy, fz}, right = {rx, ry, 0},
+                 up = {ry * fz, -rx * fz, rx * fy - ry * fx}}   -- right x forward
+    if type(d.fov) == 'number' and d.fov > 0 then
+        cam.fov = d.fov < 3.2 and math.deg(d.fov) or d.fov   -- the engine gives radians
+    end
+    return cam
+end
+
 local function camera_of(world)
+    if CHEF then
+        local cam = camera_from_chef()
+        if cam then
+            if not screen.chef_camera_logged then
+                screen.chef_camera_logged = true
+                log("camera: the game's own (Chef Shared Loader), field of view " .. tostring(cam.fov))
+            end
+            return cam
+        end
+    end
     if not (type(sr.World.debug_camera_pose) == 'function' and sr.Matrix4x4) then return nil end
     local M4 = sr.Matrix4x4
     local ok, pose = pcall(sr.World.debug_camera_pose, world)
@@ -1026,13 +1100,19 @@ local function screen_draw(world, world_id, dots)
             for _, id in ipairs(screen.ids) do pcall(sr.Gui.destroy_triangle, g, id) end
             screen.ids = {}
         end
-        local inks = {}             -- white, by alpha (0..255)
+        local inks = {}             -- by tint, then alpha (0..255)
+        local tint = nil            -- this marker's colour: nil white, else {r, g, b}
         local function ink_of(alpha)
             alpha = math.floor(alpha)
-            local c = inks[alpha]
+            local by = inks[tint or 'white']
+            if by == nil then
+                by = {}
+                inks[tint or 'white'] = by
+            end
+            local c = by[alpha]
             if c == nil then
-                c = sr.Color(alpha, 255, 255, 255)  -- ARGB
-                inks[alpha] = c
+                c = tint and sr.Color(alpha, tint[1], tint[2], tint[3]) or sr.Color(alpha, 255, 255, 255)  -- ARGB
+                by[alpha] = c
             end
             return c
         end
@@ -1089,13 +1169,65 @@ local function screen_draw(world, world_id, dots)
         end
         -- an outline: the band between an outer and an inner diamond, one quad (two triangles) per side;
         -- the lower half filled
-        local f = (height / 2) / math.tan(math.rad(current_fov()) / 2)   -- once a frame
+        local f = (height / 2) / math.tan(math.rad(cam.fov or current_fov()) / 2)   -- once a frame
+        -- the distance above a marker, in the game's font (Chef Shared Loader draws it, on its own screen size)
+        local cw, ch
+        if LOOK.distance and chef_has('text') and chef_has('screen') and chef_has('color') and chef_has('text_width') then
+            local oks, w, h = pcall(CHEF.screen)
+            if oks and type(w) == 'number' and type(h) == 'number' and w > 0 and h > 0 then cw, ch = w, h end
+        end
+        local function distance_above(sx, top, d)
+            if cw == nil then return end
+            pcall(function()
+                local px = math.max(9, math.floor(ch / 1080 * DISTANCE_PX + 0.5))
+                local text = string.format('%dm', math.floor(d[4] + 0.5))
+                local c = tint or {255, 255, 255}
+                local color = CHEF.color(c[1], c[2], c[3], math.floor(255 * opacity))
+                local x = sx * cw / width - CHEF.text_width(text, px) / 2
+                CHEF.text(x, (top + 3) * ch / height, text, px, color)
+            end)
+        end
+        -- an icon from the game's texture, as tall as its pixel icon at this size; false when it can't be drawn
+        local function texture_icon(name, full, sx, sy, size)
+            local t = ICON_TEXTURES[name]
+            if t == nil or cw == nil and not chef_has('screen') or not chef_has('bitmap') then return false end
+            if full.span == nil then
+                local lo, hi = math.huge, -math.huge
+                for _, r in ipairs(full) do lo, hi = math.min(lo, r[2]), math.max(hi, r[4]) end
+                full.span = hi - lo
+            end
+            local okd, drawn = pcall(function()
+                local w, h = cw, ch
+                if w == nil then w, h = CHEF.screen() end
+                local k = full.span * size / (t[7] - t[5])          -- texture pixels to screen pixels
+                local cx, cy = (t[4] + t[6]) / 2, (t[5] + t[7]) / 2  -- the icon's centre in the texture
+                local x0, y1 = sx - cx * k, sy + cy * k              -- the texture's left and top edge
+                local c = CHEF.color(255, 255, 255, math.floor(255 * opacity))
+                return CHEF.bitmap(t[1], x0 * w / width, (y1 - t[3] * k) * h / height,
+                    t[2] * k * w / width, t[3] * k * h / height, c)
+            end)
+            if okd and drawn then return true end
+            if not screen.texture_note then
+                screen.texture_note = true
+                log('icons: a game texture could not be drawn (' .. tostring(drawn) .. ') - pixel icons instead')
+            end
+            return false
+        end
+        local function top_of(list, k)   -- the highest pixel of an icon, at this scale
+            if list.top == nil then
+                local top = -math.huge
+                for _, r in ipairs(list) do top = math.max(top, r[4]) end
+                list.top = top
+            end
+            return list.top * k
+        end
         local CORNERS = {{0, 1}, {1, 0}, {0, -1}, {-1, 0}}        -- top, right, bottom, left
         for _, d in ipairs(dots) do
             local sx, sy = project(cam, d, width, height, f)
             local size = sx and size_of(d)
             if sx then
                 opacity = opacity_of(d)
+                tint = d[6] == 'vehicles' and VEHICLE_RGB or nil
                 ink = ink_of(255 * opacity)
                 if d[6] == 'samples' or d[6] == 'supplies' then sx, sy = sx + ICON_OFFSET[1], sy + ICON_OFFSET[2] end
             end
@@ -1103,10 +1235,22 @@ local function screen_draw(world, world_id, dots)
                 local sizes = ICON_PIXELS[d[7]]   -- full size first, then a pixel smaller each
                 local step = math.floor((1 - size) / (1 - SMALLEST) * (#sizes - 1) + 0.5) + 1
                 local list = sizes[math.max(1, math.min(#sizes, step))]
-                pixels(list, sx, sy, size < SMALLEST and size / SMALLEST or 1)
+                local k = size < SMALLEST and size / SMALLEST or 1
+                if not (LOOK.game_textures and texture_icon(d[7], sizes[1], sx, sy, size)) then
+                    pixels(list, sx, sy, k)
+                end
                 if d[6] == 'vehicles' then pointer(list, sx, sy, size) end
+                distance_above(sx, sy + top_of(list, k), d)
             elseif sx and d[7] and ICON_SHAPES[d[7]] then
-                icon(ICON_SHAPES[d[7]], sx, sy, size)
+                local shape = ICON_SHAPES[d[7]]
+                icon(shape, sx, sy, size)
+                if shape.top == nil then
+                    shape.top = -math.huge
+                    for _, poly in ipairs(shape.polys) do
+                        for _, v in ipairs(poly) do shape.top = math.max(shape.top, v[2]) end
+                    end
+                end
+                distance_above(sx, sy + shape.top * shape.scale * size, d)
             elseif sx then
                 local outer = SCREEN_DIAMOND * size
                 local inner = math.max(0, outer - math.max(1.5, SCREEN_LINE * size) * math.sqrt(2))  -- the band
@@ -1123,6 +1267,7 @@ local function screen_draw(world, world_id, dots)
                     tri(o[k], i[n], i[k])
                 end
                 tri(o[2], o[3], o[4])   -- right, bottom, left: the lower half
+                distance_above(sx, sy + outer, d)
             end
         end
     end)
@@ -1300,7 +1445,8 @@ local function tick()
         world_id = 'world #' .. world_seq
         last_world, world_seen_at, cursor, found, players, players_read_at, me = world, now, 1, {}, {}, nil, nil
         vehicles_seen = {}
-        spots, states = {}, {}
+        spots, reached, taken = {}, {}, {}
+        census = {list = nil, i = 0, next_at = 0, seen = {}, logged = census.logged}
         hot = {}
         new_main_world()
         traced = 0
@@ -1316,6 +1462,7 @@ local function tick()
         if #players > 0 and can_get then
             detect_id_form()
             sweep_step(world)
+            census_step(world, now)
         end
         -- draw every frame; with no helldiver this clears whatever was drawn last
         if #players > 0 or shown() then draw(world, world_id, now) end
@@ -1345,7 +1492,7 @@ local function tick()
 end
 
 -- ---------------------------------------------------------------- settings --
--- Through Boot Mod Loader's Mod Options Menu stand-in: the value shows in HD2 Mod Setting GUI, a
+-- Through the loader's Mod Options Menu stand-in: Chef Shared Loader shows it in its F9 menu (HD2 Mod Setting GUI, a
 -- window outside the game, and a change applies within a second.
 -- (a new id: 0.6.0-0.7.1 saved 50 under 'pickup_dots.vertical_fov', which would override the game's value)
 -- The settings window shows only these: each kind's on/off and range (field of view comes from the
@@ -1382,6 +1529,12 @@ local LOOK_OPTIONS = {
     {'fade', {type = 'toggle', label = 'Fade markers with distance', default = true,
         description = 'Markers get fainter the farther away they are.'},
         toggle_into('fade')},
+    {'distance', {type = 'toggle', label = 'Show distance above markers', default = true,
+        description = 'How far away each marked thing is, in metres.'},
+        toggle_into('distance')},
+    {'game_textures', {type = 'toggle', label = "Test: icons from the game's textures", default = false,
+        description = 'Ammo, grenade, stim, package and egg icons drawn from the game textures instead of pixels.'},
+        toggle_into('game_textures')},
 }
 
 local function register_look(host)

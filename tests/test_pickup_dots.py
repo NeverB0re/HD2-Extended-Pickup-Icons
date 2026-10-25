@@ -210,7 +210,7 @@ class DrawingTests(Case):
         self.assertGreater(self.fake.updates, 0)
         self.assertEqual(set(self.fake.lookups.keys()), {AVATAR, MARK})
         self.assertIn("can_get: present", log)
-        self.assertIn("83 target resources: 79 named, 4 by id only (looked up if the id self-test passes)", log)
+        self.assertIn("84 target resources: 80 named, 4 by id only (looked up if the id self-test passes)", log)
         self.frames(1, start=200.0)                   # the next status line, after a full sweep
         log = self.log_text()
         self.assertIn("found: il_sarcophagus=2", log)
@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.1.0-test.1 loading", text)
+            self.assertIn("Pickup Dots 2.1.0-test.2 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -899,14 +899,108 @@ class ScreenTests(Case):
         self.settle()
         self.assertIn("carry drawn=1 worn=1", self.status_now())
 
-    def test_a_mission_items_state_is_logged_when_it_changes(self):
+    def test_launch_codes_a_helldiver_stood_at_are_taken_for_picked_up(self):
+        codes = "content/objectives/obj_common/generic_intel/generic_intel"
+        self.set_units(AVATAR, [unit(0, -8, 0), unit(10, 0, 0)], loaded=False)   # you; a teammate at them
+        self.set_units(codes, [unit(10, 1.5, 0), unit(-6, 0, 0)])
+        self.load()
+        self.settle()                                                  # 9 s on: long enough
+        self.assertIn("mission drawn=1 worn=1", self.status_now())
+        self.assertIn("taken: the item at 10.0 1.5 0.0 is taken for picked up", self.log_text())
+        self.fake.units[AVATAR][2].x = 30                              # the teammate goes: they stay taken
+        self.frames(10, start=30.0)
+        self.assertIn("mission drawn=1 worn=1", self.status_now())
+
+    # Chef Shared Loader hands the mod its helpers as the chunk's argument.
+    FAKE_CHEF = """
+        local fake = ...
+        fake.texts = {}
+        fake.mission = true
+        return {
+          api = 3,
+          camera = function() return fake.chef_cam end,
+          in_mission = function() return fake.mission end,
+          screen = function() return 1920, 1200 end,
+          color = function(r, g, b, a) return {r = r, g = g, b = b, a = a} end,
+          text_width = function(s, px) return #s * px / 2 end,
+          text = function(x, y, s, px, c) fake.texts[#fake.texts + 1] = {x = x, y = y, s = s, px = px, c = c} end,
+          bitmap = function(tex, x, y, w, h, c)
+            fake.bitmaps = fake.bitmaps or {}
+            fake.bitmaps[#fake.bitmaps + 1] = {tex = tex, x = x, y = y, w = w, h = h}
+            return fake.textures_loaded == true
+          end,
+        }
+    """
+
+    def load_with_chef(self):
+        chef = self.lua.execute(self.FAKE_CHEF, self.fake)
+        mod = self.lua.execute(self.source, chef)
+        self.assertEqual(mod.status, "running", self.log_text())
+        return mod
+
+    def test_with_chef_the_cameras_real_field_of_view_is_used(self):
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(25)})    # zoomed in: a scope
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(MARK, [unit(0, 0, 0), unit(0, 30, 0)])            # 8 m: logged; 38 m: too far
+        self.set_units(MARK, [unit(1, 0, 0)])                         # 1 m right, 10 m ahead
+        self.load_with_chef()
+        self.settle()
+        (pt,) = self.screen_points()
+        f25 = 600 / math.tan(math.radians(25) / 2)
+        self.assertAlmostEqual(pt[0], 960 + f25 / 10, delta=1)
+        self.assertIn("camera: the game's own (Chef Shared Loader)", self.log_text())
+
+    def test_with_chef_the_distance_shows_above_each_marker(self):
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(MARK, [unit(0, 0, 0)])
+        self.load_with_chef()
+        self.settle()
+        texts = list(self.fake.texts.values())
+        self.assertGreater(len(texts), 0)
+        last = texts[-1]
+        self.assertEqual(last.s, "8m")
+        self.assertGreater(last.y, 600)                               # above the diamond's centre
+
+    def test_with_chef_on_the_ship_mission_markers_are_off(self):
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(MARK, [unit(0, 0, 0)])
+        self.set_units(SAMPLE, [unit(5, 0, 0)])
+        self.load_with_chef()
+        self.fake.mission = False
+        self.settle()
+        status = self.status_now()
+        self.assertNotIn("mission drawn=1", status)
+        self.assertIn("samples drawn=1", status)
+
+    def test_with_chef_icons_can_come_from_the_games_textures(self):
+        self.set_options({"pickup_dots.game_textures": True})
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.fake.textures_loaded = True
+        ammo = "content/fac_helldivers/discoverables/ammo_box_discoverable_01/ammo_box_discoverable_01"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(ammo, [unit(0, 0, 0)])
+        self.load_with_chef()
+        self.settle()
+        last = list(self.fake.bitmaps.values())[-1]
+        self.assertEqual(last.tex, "7615d6a35c657087")
+        self.assertAlmostEqual(last.h * 144 / 192, 19, delta=1)       # the icon in it: as tall as the pixel one
+        self.assertEqual(self.screen_tris(), [])                       # no pixel icon besides
+        self.fake.textures_loaded = False                              # not loaded: the pixel icon after all
+        self.frames(5, start=30.0)
+        self.assertGreater(len(self.screen_tris()), 0)
+
+    def test_vehicles_are_sky_blue(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(self.VEHICLE, [unit(0, 20, 0)])
         self.load()
         self.settle()
-        lines = [l for l in self.log_text().splitlines() if "state: " in l]
-        self.assertEqual(len(lines), 1, lines)
-        self.assertIn("state: il_sarcophagus at 0.0 0.0 0.0 (8.0 m): ", lines[0])
+        colours = {(t.color.r, t.color.g, t.color.b) for t in self.screen_tris()}
+        self.assertEqual(colours, {(110, 205, 255)})
 
     def test_where_mission_items_lie_is_logged_once_per_spot(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
@@ -987,9 +1081,9 @@ class ScreenTests(Case):
         self.settle()
         self.assertEqual(self.screen_tris(), [])
         ids = sorted(self.fake.options.keys())
-        look = ["pickup_dots." + n for n in ("fade", "hide_near", "opacity", "smallest_size")]
+        look = ["pickup_dots." + n for n in ("distance", "fade", "game_textures", "hide_near", "opacity", "smallest_size")]
         self.assertEqual([i for i in ids if not i.startswith(("pickup_dots.range_", "pickup_dots.show_"))], look)
-        self.assertEqual(len(ids), 16 + 4)
+        self.assertEqual(len(ids), 16 + 6)
         self.assertTrue(self.fake.options["pickup_dots.fade"].default)
         self.assertFalse(self.fake.options["pickup_dots.show_terminals"].default)   # terminals: off unless chosen
         self.assertEqual(self.fake.options["pickup_dots.show_vehicles"].type, "toggle")
