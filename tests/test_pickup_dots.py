@@ -859,6 +859,16 @@ class ScreenTests(Case):
         self.load()
         self.settle()
         self.assertIn("mission drawn=1 worn=1", self.status_now())
+        self.assertIn("dropoffs drawn=0 worn=1", self.status_now())   # and the drop-off is done
+
+    def test_a_drop_off_keeps_its_marker_while_an_sssd_is_only_carried_past(self):
+        sssd = "content/objectives/obj_common/carry_data/carry_data"
+        self.set_units(AVATAR, [unit(0, -8, 0), unit(-4, 1, 0)], loaded=False)   # you; a teammate at it
+        self.set_units(self.CONSOLE, [unit(-4, 0, 0)])
+        self.set_units(sssd, [unit(-4, 1, 1.0)])                         # in the teammate's hands
+        self.load()
+        self.settle()
+        self.assertIn("dropoffs drawn=1 worn=0", self.status_now())
 
     def test_where_mission_items_lie_is_logged_once_per_spot(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)

@@ -666,6 +666,16 @@ local function collect_dots(now)
             for _, p in ipairs(found[i]) do list[#list + 1] = p end
         end
     end
+    local filled = {}        -- items put into a drop-off: that drop-off is done (2.1.0)
+    for i = 1, #keys do
+        local group = keys[i].group
+        if (group == 'mission' or group == 'carry') and found[i] then
+            for _, p in ipairs(found[i]) do
+                local _, _, carried = measure(p[1], p[2], p[3], keys[i].worn)
+                if not carried and near(dropoffs, p, DELIVERED_NEAR) then filled[#filled + 1] = p end
+            end
+        end
+    end
     for i = 1, #keys do
         local group = keys[i].group
         local range = SHOW[group] ~= false and (RANGE[group] or 0) or 0
@@ -704,6 +714,8 @@ local function collect_dots(now)
                 elseif carried and group ~= 'dropoffs' and group ~= 'controls' then   -- never worn; a teammate may stand at it
                     c.worn = c.worn + 1
                 elseif (group == 'mission' or group == 'carry') and near(dropoffs, p, DELIVERED_NEAR) then
+                    c.worn = c.worn + 1
+                elseif group == 'dropoffs' and near(filled, p, DELIVERED_NEAR) then
                     c.worn = c.worn + 1
                 else
                     c.drawn = c.drawn + 1
