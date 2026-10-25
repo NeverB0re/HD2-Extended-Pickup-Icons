@@ -15,7 +15,7 @@
 local MOD_KEY = 'CodexPickupDots'
 if rawget(_G, MOD_KEY) then return rawget(_G, MOD_KEY) end
 
-local VERSION = '2.0.1'
+local VERSION = '2.1.0'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -25,6 +25,13 @@ local RANGE = {samples = 40, supplies = 25, mission = 40, carry = 25,  -- metres
 local SHOW = {}               -- a setting per kind: false hides it (nil or true: shown)
 local NEAR_ME = {samples = 9, supplies = 4}   -- this close to you: no marker (the game shows its own icon;
                                                -- a target's own 'near' overrides it)
+local LOOK = {                -- settings (2.1.0); the defaults draw as 2.0 did
+    hide_near = true,         -- false: markers stay on where the game shows its own icon (NEAR_ME)
+    smallest = 0.7,           -- size at the edge of a kind's range (full size up to FULL_SIZE_M)
+    opacity = 1,              -- 0..1
+    fade = false,             -- true: fainter with distance, down to FADE_LEAST of opacity at the edge
+    offset_x = 0, offset_y = 0,   -- pixels, right and up: sample and supply markers moved by this much
+}
 local DOT_HEIGHT = 0.6        -- metres above the unit's origin
 local GROUP_HEIGHT = {samples = 0.3, supplies = 0.3, dropoffs = 1.8, controls = 1.2, vehicles = 3.2}
                               -- icons (samples, supplies) sit lower than diamonds   -- these stand taller: the marker goes above them
@@ -663,7 +670,7 @@ local function collect_dots(now)
                         c.drawn = c.drawn + 1
                         dots[#dots + 1] = {p[1], p[2], p[3] + (keys[i].height or GROUP_HEIGHT.vehicles), d, who, group, keys[i].icon}
                     end
-                elseif (keys[i].near or NEAR_ME[group]) and me ~= nil and who == me
+                elseif LOOK.hide_near and (keys[i].near or NEAR_ME[group]) and me ~= nil and who == me
                     and d < (keys[i].near or NEAR_ME[group]) then
                     c.worn = c.worn + 1
                 elseif carried and group ~= 'dropoffs' and group ~= 'controls' then   -- never worn; a teammate may stand at it
@@ -849,14 +856,21 @@ end
 
 local function dot3(a, b) return a[1] * b[1] + a[2] * b[2] + a[3] * b[3] end
 
--- How big a marker is drawn: full size up to FULL_SIZE_M away, SMALLEST at the edge of its kind's range.
+-- How big a marker is drawn: full size up to FULL_SIZE_M away, LOOK.smallest at the edge of its kind's range.
 local FULL_SIZE_M = 10
-local SMALLEST = 0.7
+local SMALLEST = 0.7          -- the smallest of the game icons' pixel sizes (ICON_PIXELS); smaller: scaled from it
+local FADE_LEAST = 0.2
 local POINTER = {gap = 3, half = 9, slope = 0.5, line = 2}   -- the wide V under a vehicle's icon, pixels at full size
-local function size_of(d)
+-- 0 up to FULL_SIZE_M away, 1 at the edge of its kind's range
+local function far_share(d)
     local range = RANGE[d[6]] or 0
-    if range <= FULL_SIZE_M then return 1 end
-    return 1 - (1 - SMALLEST) * math.max(0, math.min(1, (d[4] - FULL_SIZE_M) / (range - FULL_SIZE_M)))
+    if range <= FULL_SIZE_M then return 0 end
+    return math.max(0, math.min(1, (d[4] - FULL_SIZE_M) / (range - FULL_SIZE_M)))
+end
+local function size_of(d) return 1 - (1 - LOOK.smallest) * far_share(d) end
+local function opacity_of(d)
+    if not LOOK.fade then return LOOK.opacity end
+    return LOOK.opacity * (1 - (1 - FADE_LEAST) * far_share(d))
 end
 
 -- Screen position (pixels, origin bottom-left, y up) of a dot, or nil if it is behind or off screen.
@@ -908,22 +922,29 @@ local function screen_draw(world, world_id, dots)
             for _, id in ipairs(screen.ids) do pcall(sr.Gui.destroy_triangle, g, id) end
             screen.ids = {}
         end
-        local white = sr.Color(255, 255, 255, 255)  -- ARGB
+        local inks = {}             -- white, by alpha (0..255)
+        local function ink_of(alpha)
+            alpha = math.floor(alpha)
+            local c = inks[alpha]
+            if c == nil then
+                c = sr.Color(alpha, 255, 255, 255)  -- ARGB
+                inks[alpha] = c
+            end
+            return c
+        end
+        local ink = ink_of(255)     -- this marker's: its opacity (LOOK)
+        local opacity = 1
         local function tri(a, b, c)
-            local id = sr.Gui.triangle(g, a, b, c, SCREEN_LAYER, white)
+            local id = sr.Gui.triangle(g, a, b, c, SCREEN_LAYER, ink)
             if not screen.immediate and id ~= nil then screen.ids[#screen.ids + 1] = id end
         end
         -- an icon: each polygon as a fan of triangles
-        local shades = {}
-        local function pixels(list, sx, sy)
+        local function pixels(list, sx, sy, k)   -- k: scale (below the smallest pixel size), else 1
             for _, r in ipairs(list) do
-                local shade = shades[r[5]]
-                if shade == nil then
-                    shade = sr.Color(math.floor(255 * r[5] / 4), 255, 255, 255)
-                    shades[r[5]] = shade
-                end
-                local a, b = sr.Vector3(sx + r[1], 0, sy + r[2]), sr.Vector3(sx + r[3], 0, sy + r[2])
-                local c, d = sr.Vector3(sx + r[3], 0, sy + r[4]), sr.Vector3(sx + r[1], 0, sy + r[4])
+                local shade = ink_of(255 * r[5] / 4 * opacity)
+                local x0, y0, x1, y1 = sx + r[1] * k, sy + r[2] * k, sx + r[3] * k, sy + r[4] * k
+                local a, b = sr.Vector3(x0, 0, y0), sr.Vector3(x1, 0, y0)
+                local c, d = sr.Vector3(x1, 0, y1), sr.Vector3(x0, 0, y1)
                 local id1 = sr.Gui.triangle(g, a, b, c, SCREEN_LAYER, shade)
                 local id2 = sr.Gui.triangle(g, a, c, d, SCREEN_LAYER, shade)
                 if not screen.immediate then
@@ -951,7 +972,7 @@ local function screen_draw(world, world_id, dots)
             end
         end
         local function icon(shape, sx, sy, size)
-            local color = white
+            local color = ink
             local k = shape.scale * size
             for _, poly in ipairs(shape.polys) do
                 local first = sr.Vector3(sx + poly[1][1] * k, 0, sy + poly[1][2] * k)
@@ -969,17 +990,23 @@ local function screen_draw(world, world_id, dots)
         for _, d in ipairs(dots) do
             local sx, sy = project(cam, d, width, height, f)
             local size = sx and size_of(d)
+            if sx then
+                opacity = opacity_of(d)
+                ink = ink_of(255 * opacity)
+                if d[6] == 'samples' or d[6] == 'supplies' then sx, sy = sx + LOOK.offset_x, sy + LOOK.offset_y end
+            end
             if sx and d[7] and ICON_PIXELS[d[7]] then
                 local sizes = ICON_PIXELS[d[7]]   -- full size first, then a pixel smaller each
                 local step = math.floor((1 - size) / (1 - SMALLEST) * (#sizes - 1) + 0.5) + 1
                 local list = sizes[math.max(1, math.min(#sizes, step))]
-                pixels(list, sx, sy)
+                pixels(list, sx, sy, size < SMALLEST and size / SMALLEST or 1)
                 if d[6] == 'vehicles' then pointer(list, sx, sy, size) end
             elseif sx and d[7] and ICON_SHAPES[d[7]] then
                 icon(ICON_SHAPES[d[7]], sx, sy, size)
             elseif sx then
                 local outer = SCREEN_DIAMOND * size
-                local inner = outer - math.max(1.5, SCREEN_LINE * size) * math.sqrt(2)  -- the band at right angles
+                local inner = math.max(0, outer - math.max(1.5, SCREEN_LINE * size) * math.sqrt(2))  -- the band
+                -- at right angles; a small one is filled
                 -- screen GUI points are Vector3(x, 0, y)
                 local o, i = {}, {}
                 for k, c in ipairs(CORNERS) do
@@ -1224,6 +1251,60 @@ local RANGE_OPTIONS = {   -- group, its name in the settings window, the most me
     {'controls', 'Valves, cranks', 150}, {'vehicles', 'Vehicles', 300},
 }
 
+-- 2.1.0: how markers look; each default keeps 2.0's look. id, its spec, how a value goes into LOOK.
+local function toggle_into(field)
+    return function(value) if type(value) == 'boolean' then LOOK[field] = value end end
+end
+local function number_into(field, min, max, scale)
+    return function(value)
+        value = tonumber(value)
+        if value == nil or value ~= value then return end
+        LOOK[field] = math.max(min, math.min(max, value)) * scale
+    end
+end
+local LOOK_OPTIONS = {
+    {'hide_near', {type = 'toggle', label = "Hide markers where the game shows its own icon", default = true,
+        description = "Off: markers stay on up close too (for first-person camera mods)."},
+        toggle_into('hide_near')},
+    {'smallest_size', {type = 'slider', label = 'Marker size at the edge of range (%)', default = 70,
+        min = 10, max = 100, step = 5,
+        description = 'Markers are full size up to 10 m and shrink to this at the edge of their distance.'},
+        number_into('smallest', 10, 100, 0.01)},
+    {'opacity', {type = 'slider', label = 'Marker opacity (%)', default = 100, min = 10, max = 100, step = 5,
+        description = '100 is solid.'},
+        number_into('opacity', 10, 100, 0.01)},
+    {'fade', {type = 'toggle', label = 'Fade markers with distance', default = false,
+        description = 'On: markers get fainter the farther away they are.'},
+        toggle_into('fade')},
+    {'offset_x', {type = 'slider', label = 'Sample and supply markers: move right (px)', default = 0,
+        min = -40, max = 40, step = 1, description = 'Negative moves them left.'},
+        number_into('offset_x', -40, 40, 1)},
+    {'offset_y', {type = 'slider', label = 'Sample and supply markers: move up (px)', default = 0,
+        min = -40, max = 40, step = 1, description = 'Negative moves them down.'},
+        number_into('offset_y', -40, 40, 1)},
+}
+
+local function register_look(host)
+    for _, row in ipairs(LOOK_OPTIONS) do
+        local id, spec, set = 'pickup_dots.' .. row[1], row[2], row[3]
+        spec.mod = 'Extended Pickup Icons Range'
+        local ok, registered, why = pcall(host.register_option, id, spec)
+        if not ok or registered ~= true then
+            log('settings: register failed: ' .. tostring(ok and why or registered))
+        end
+        if type(host.get) == 'function' then
+            local okg, value = pcall(host.get, id)
+            if okg then set(value) end
+        end
+        if type(host.on_change) == 'function' then
+            pcall(host.on_change, id, function(value)
+                set(value)
+                log('settings: ' .. row[1] .. ' ' .. tostring(value))
+            end)
+        end
+    end
+end
+
 local function register_settings()
     local host = rawget(_G, 'ModOptionsMenu')
     if type(host) ~= 'table' or type(host.register_option) ~= 'function' then
@@ -1278,6 +1359,7 @@ local function register_settings()
             end)
         end
     end
+    register_look(host)
 end
 
 -- ----------------------------------------------------------------- install --

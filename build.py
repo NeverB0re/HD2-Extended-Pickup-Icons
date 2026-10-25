@@ -63,7 +63,9 @@ for the game to show its own icon get none either: samples within 9 m (Terminid 
 Automaton super samples 20 m, sample containers 15 m) and supplies within 4 m.
 
 Settings: turn each kind on or off and set its distance with HD2 Mod Setting GUI
-(Nexus mod 17756). Without it, the defaults above are used.
+(Nexus mod 17756). It can also keep markers on up close, and change their smallest size,
+opacity (optionally fading with distance) and the position of sample and supply markers.
+Without it, the defaults above are used.
 
 Requires Boot Mod Loader (Nexus mod 17754). In your mod manager's load order, Boot Mod
 Loader must be above this mod (Arsenal may put it below by default: move it up).

@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.0.1 loading", text)
+            self.assertIn("Pickup Dots 2.1.0 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker(self):
@@ -851,7 +851,67 @@ class ScreenTests(Case):
         self.assertAlmostEqual(near, 14.4, places=3)
         self.assertAlmostEqual(far, 14.4 * 0.7, places=3)     # 70 %
 
-    def test_kinds_can_be_switched_off_and_only_ranges_and_switches_are_settings(self):
+    def set_options(self, values):
+        self.fake.option_values = self.lua.table_from(values)
+        self.lua.execute("""local fake = ...
+            local get = ModOptionsMenu.get
+            ModOptionsMenu.get = function(id)
+              local v = fake.option_values[id]
+              if v ~= nil then return v end
+              return get(id)
+            end""", self.fake)
+
+    def xs(self):
+        return [v._x for t in self.screen_tris() for v in (t.a, t.b, t.c)]
+
+    def test_markers_can_stay_on_where_the_game_shows_its_own_icon(self):
+        self.set_options({"pickup_dots.hide_near": False})
+        self.set_units(AVATAR, [unit(0)], loaded=False)
+        self.set_units(SAMPLE, [unit(8)])                     # inside the game's own 9 m
+        self.load()
+        self.settle()
+        self.assertIn("samples drawn=1 worn=0", self.status_now())
+
+    def test_the_size_at_the_edge_of_range_is_a_setting(self):
+        self.set_options({"pickup_dots.smallest_size": 30})
+        stim = "content/fac_helldivers/discoverables/health_pack_discoverable_01/health_pack_discoverable_01"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(MARK, [unit(-2, 31.9, 0)])             # 40 m, the edge of the 40 m mission range
+        self.set_units(stim, [unit(2, 0, 0)])                 # 8 m: full size
+        self.load()
+        self.settle()
+        def widths():
+            tris = self.screen_tris()
+            left = [v._x for t in tris if t.a._x < 960 for v in (t.a, t.b, t.c)]
+            right = [v._x for t in tris if t.a._x > 960 for v in (t.a, t.b, t.c)]
+            return max(left) - min(left), max(right) - min(right)
+        diamond, full = widths()
+        self.assertAlmostEqual(diamond, 14.4 * 0.3, delta=0.05)
+        self.fake.units[stim][1].y = 16.9                     # 25 m, the edge of supplies: below its smallest pixels
+        self.frames(80, start=30.0)
+        self.assertAlmostEqual(widths()[1] / full, 0.3, delta=0.02)
+
+    def test_opacity_is_a_setting_and_can_fade_with_distance(self):
+        self.set_options({"pickup_dots.opacity": 50, "pickup_dots.fade": True})
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(MARK, [unit(0, 0, 0)])                 # 8 m: no fading yet
+        self.load()
+        self.settle()
+        self.assertEqual({t.color.a for t in self.screen_tris()}, {127})
+        self.fake.units[MARK][1].y = 32                       # the edge of range: a fifth of that
+        self.frames(80, start=30.0)
+        self.assertEqual({t.color.a for t in self.screen_tris()}, {25})
+
+    def test_sample_and_supply_markers_can_be_moved(self):
+        self.set_options({"pickup_dots.offset_x": -6, "pickup_dots.offset_y": -4})
+        self.set_units(AVATAR, [unit(0, -11, 0)], loaded=False)
+        self.set_units(SAMPLE, [unit(0, 0, 0)])               # straight ahead: centred at 960 without the setting
+        self.load()
+        self.settle()
+        xs = self.xs()
+        self.assertAlmostEqual((max(xs) + min(xs)) / 2, 954, places=3)
+
+    def test_kinds_can_be_switched_off_and_the_settings_are_ranges_switches_and_look(self):
         self.lua.execute("""
             local get = ModOptionsMenu.get
             ModOptionsMenu.get = function(id) if id == 'pickup_dots.show_mission' then return false end return get(id) end
@@ -862,8 +922,9 @@ class ScreenTests(Case):
         self.settle()
         self.assertEqual(self.screen_tris(), [])
         ids = sorted(self.fake.options.keys())
-        self.assertTrue(all(i.startswith(("pickup_dots.range_", "pickup_dots.show_")) for i in ids), ids)
-        self.assertEqual(len(ids), 14)
+        look = ["pickup_dots." + n for n in ("fade", "hide_near", "offset_x", "offset_y", "opacity", "smallest_size")]
+        self.assertEqual([i for i in ids if not i.startswith(("pickup_dots.range_", "pickup_dots.show_"))], look)
+        self.assertEqual(len(ids), 14 + 6)
         self.assertEqual(self.fake.options["pickup_dots.show_vehicles"].type, "toggle")
 
     def test_a_passing_screen_failure_does_not_turn_the_screen_off(self):
