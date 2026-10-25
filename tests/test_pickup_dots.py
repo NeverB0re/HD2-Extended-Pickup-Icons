@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.2.0-test.1 loading", text)
+            self.assertIn("Pickup Dots 2.2.0-test.2 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -1051,15 +1051,6 @@ class ScreenTests(Case):
         self.assertEqual(order, ["show_samples", "range_samples", "show_supplies", "range_supplies", "fade",
                                  "show_mission", "range_mission", "show_objectives", "range_objectives",
                                  "show_vehicles", "range_vehicles", "distance", "hide_near", "smallest_size", "opacity"])
-
-    def test_with_chef_in_korean_the_settings_are_in_korean(self):
-        self.lua.execute("""local fake = ...
-            fake.chef_lang = true""", self.fake)
-        chef = self.lua.execute(self.FAKE_CHEF, self.fake)
-        chef.lang = self.lua.eval("function() return '한국어', 'ko' end")
-        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.lua.execute(self.source, chef)
-        self.assertEqual(self.fake.options["pickup_dots.show_mission"].label, "임무 아이템 표시 (SSSD, 발사 코드, 포탄)")
 
     def test_vehicles_are_sky_blue(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)

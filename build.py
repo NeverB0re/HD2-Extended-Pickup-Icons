@@ -68,8 +68,7 @@ Automaton super samples 20 m, sample containers 15 m) and ammo and grenade boxes
 Settings: press F9 in the game (Chef Shared Loader's options menu) and pick Extended
 Pickup Icons Range: turn each kind on or off and set its distance, fade supplies far away,
 show or hide vehicles' distance, keep markers on up close, and change their size far away
-and opacity. In English, Korean, Japanese, Chinese, German, French, Spanish, Italian,
-Polish, Portuguese and Russian, as picked in F9 > Chef Shared Loader > Language.
+and opacity.
 
 Requires Chef Shared Loader 1.2.0 or newer (Nexus mod 17760). Give it the highest priority
 in your mod manager (in Arsenal, by default, the bottom of the list).
