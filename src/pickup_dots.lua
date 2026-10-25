@@ -21,13 +21,13 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.1.0-test.3'
+local VERSION = '2.1.0-test.4'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
 -- ------------------------------------------------------------------ settings --
 local RANGE = {samples = 40, supplies = 25, mission = 40, carry = 25,  -- metres, settings (0 = none shown)
-               dropoffs = 40, controls = 40, vehicles = 100, terminals = 40}
+               dropoffs = 40, controls = 40, vehicles = 100, terminals = 40, probe = 60}
 local SHOW = {terminals = false}   -- a setting per kind: false hides it (nil or true: shown); terminals
                               -- (2.1.0) are off unless switched on
 local NEAR_ME = {samples = 9, supplies = 4}   -- this close to you: no marker (the game shows its own icon;
@@ -54,6 +54,7 @@ local ICON_TEXTURES = {
     egg = {'460c4e527705db55', 256, 256, 45, 16, 208, 240},
 }
 local VEHICLE_RGB = {110, 205, 255}   -- vehicles: the sky blue of the HUD's support weapon icons
+local PROBE_RGB = {255, 150, 40}      -- test builds: candidates for terminals (group 'probe'), orange, with their id
 local DISTANCE_PX = 13        -- the distance's height at 1080 pixels of screen
 local DOT_HEIGHT = 0.6        -- metres above the unit's origin
 local GROUP_HEIGHT = {samples = 0.3, supplies = 0.3, dropoffs = 1.8, controls = 1.2, vehicles = 3.2, terminals = 1.5}
@@ -488,10 +489,10 @@ local function build_keys()
     local unnamed = 0
     for _, t in ipairs(TARGETS) do
         if t.name then
-            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height}
+            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, probe = t.probe}
         elseif t.hex then
             unnamed = unnamed + 1
-            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height}
+            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, probe = t.probe}
         end
     end
     log(string.format('%d target resources: %d named, %d by id only (looked up if the id self-test passes)',
@@ -673,7 +674,7 @@ local function near(list, p, r)
     return false
 end
 
-local SHIP_HIDDEN = {mission = true, carry = true, dropoffs = true, controls = true, terminals = true}
+local SHIP_HIDDEN = {mission = true, carry = true, dropoffs = true, controls = true, terminals = true, probe = true}
 
 -- Last frame's counts per group, for the status line: drawn, hidden as worn/held, out of range.
 local last_counts = {}
@@ -961,7 +962,7 @@ local function collect_dots(now)
                     c.worn = c.worn + 1
                 elseif keys[i].taken and check_taken(p, now) then
                     c.worn = c.worn + 1
-                elseif carried and group ~= 'dropoffs' and group ~= 'controls' and group ~= 'terminals' then   -- never worn; a teammate may stand at it
+                elseif carried and group ~= 'dropoffs' and group ~= 'controls' and group ~= 'terminals' and group ~= 'probe' then   -- never worn; a teammate may stand at it
                     c.worn = c.worn + 1
                 elseif (group == 'mission' or group == 'carry') and near(dropoffs, p, DELIVERED_NEAR) then
                     c.worn = c.worn + 1
@@ -971,7 +972,8 @@ local function collect_dots(now)
                     c.worn = c.worn + 1
                 else
                     c.drawn = c.drawn + 1
-                    dots[#dots + 1] = {p[1], p[2], p[3] + (GROUP_HEIGHT[group] or DOT_HEIGHT), d, who, group, keys[i].icon}
+                    dots[#dots + 1] = {p[1], p[2], p[3] + (GROUP_HEIGHT[group] or DOT_HEIGHT), d, who, group, keys[i].icon,
+                                       group == 'probe' and keys[i].probe or nil}
                 end
             end
             if near_any then new_hot[#new_hot + 1] = i end
@@ -1324,6 +1326,7 @@ local function screen_draw(world, world_id, dots)
             pcall(function()
                 local px = math.max(9, math.floor(ch / 1080 * DISTANCE_PX + 0.5))
                 local text = string.format('%dm', math.floor(d[4] + 0.5))
+                if d[8] then text = d[8] .. ' ' .. text end   -- a candidate's id (test builds)
                 local c = tint or {255, 255, 255}
                 local color = CHEF.color(c[1], c[2], c[3], math.floor(255 * opacity))
                 local x = sx * cw / width - CHEF.text_width(text, px) / 2
@@ -1370,7 +1373,7 @@ local function screen_draw(world, world_id, dots)
             local size = sx and size_of(d)
             if sx then
                 opacity = opacity_of(d)
-                tint = d[6] == 'vehicles' and VEHICLE_RGB or nil
+                tint = (d[6] == 'vehicles' and VEHICLE_RGB) or (d[6] == 'probe' and PROBE_RGB) or nil
                 ink = ink_of(255 * opacity)
                 if d[6] == 'samples' or d[6] == 'supplies' then sx, sy = sx + ICON_OFFSET[1], sy + ICON_OFFSET[2] end
             end
@@ -1658,7 +1661,8 @@ local function tick()
         if #players > 0 then
             log('found: ' .. found_summary())
             local parts = {}
-            for _, group in ipairs({'samples', 'supplies', 'mission', 'carry', 'dropoffs', 'controls', 'vehicles', 'terminals'}) do
+            for _, group in ipairs({'samples', 'supplies', 'mission', 'carry', 'dropoffs', 'controls', 'vehicles', 'terminals',
+                                    'probe'}) do
                 local c = last_counts[group]
                 if c then parts[#parts + 1] = string.format('%s drawn=%d worn=%d far=%d', group, c.drawn, c.worn, c.far) end
             end

@@ -210,7 +210,7 @@ class DrawingTests(Case):
         self.assertGreater(self.fake.updates, 0)
         self.assertEqual(set(self.fake.lookups.keys()), {AVATAR, MARK})
         self.assertIn("can_get: present", log)
-        self.assertIn("84 target resources: 80 named, 4 by id only (looked up if the id self-test passes)", log)
+        self.assertIn("126 target resources: 80 named, 46 by id only (looked up if the id self-test passes)", log)
         self.frames(1, start=200.0)                   # the next status line, after a full sweep
         log = self.log_text()
         self.assertIn("found: il_sarcophagus=2", log)
@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.1.0-test.3 loading", text)
+            self.assertIn("Pickup Dots 2.1.0-test.4 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -1051,6 +1051,18 @@ class ScreenTests(Case):
         self.fake.rmb = False                                          # let go: back
         self.frames(5, start=32.0)
         self.assertGreater(len(self.screen_tris()), 0)
+
+    def test_with_chef_a_terminal_candidate_is_orange_with_its_name(self):
+        self.lua.execute("stingray.IdString64 = { from_hex = function(hex) return { hex = hex } end }")
+        self.fake.loaded["hex:4d1c334d294dfa97"] = True
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units("hex:c05cd3cee446b74e", [unit(0, 0, 0)])
+        self.load_with_chef()
+        self.settle()
+        self.assertEqual({(t.color.r, t.color.g, t.color.b) for t in self.screen_tris()}, {(255, 150, 40)})
+        self.assertEqual(list(self.fake.texts.values())[-1].s, "GEN 8m")
 
     def test_vehicles_are_sky_blue(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
