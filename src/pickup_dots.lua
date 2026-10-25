@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.1.0-test.11'
+local VERSION = '2.1.0-test.12'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -39,7 +39,8 @@ local LOOK = {                -- settings (2.1.0)
     opacity = 1,              -- 0..1
     fade = true,              -- supplies fainter with distance, down to FADE_LEAST of opacity at the edge
     distance = true,          -- the distance above a vehicle's marker, in the game's font (Chef Shared Loader)
-    game_textures = false,    -- test: icons drawn from the game's own textures (Chef Shared Loader), not pixels
+    game_textures = true,     -- icons drawn from the game's own textures (Chef Shared Loader) where it has them
+                              -- loaded, else pixels (test.6-test.11 tried both: the textures look better)
 }
 -- The game's icon textures the pixel icons were made from (tools/icons): id, width, height, and the icon's
 -- box in it (left, top, right, bottom; from the top). Drawn by Chef Shared Loader when the game has one loaded.
@@ -1683,7 +1684,7 @@ local LOOK_OPTIONS = {
     {'distance', {type = 'toggle', label = 'Show distance above vehicles', default = true,
         description = 'How far away each marked vehicle is, in metres.'},
         toggle_into('distance')},
-    {'game_textures', {type = 'toggle', label = "Test: icons from the game's textures", default = false,
+    {'game_textures', {type = 'toggle', label = "Icons from the game's textures", default = true,
         description = 'Ammo, grenade, stim, package and egg icons drawn from the game textures instead of pixels.'},
         toggle_into('game_textures')},
 }
