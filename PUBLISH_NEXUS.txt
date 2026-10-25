@@ -36,6 +36,7 @@ Press [b]F9[/b] in the game to open Chef Shared Loader's options menu, then pick
 You can also change how markers look:
 [list]
 [*][b]Show distance above markers[/b] (on by default).
+[*][b]Hide markers while aiming in first person[/b] (on by default): while you look down a scope.
 [*][b]Hide markers where the game shows its own icon[/b]: turn off to keep markers up close too (useful with first-person camera mods).
 [*][b]Marker size at the edge of range[/b]: how small markers get far away.
 [*][b]Marker opacity[/b], and [b]Fade markers with distance[/b] (on by default).
@@ -101,6 +102,7 @@ You can also change how markers look:
 마커 모양도 바꿀 수 있습니다:
 [list]
 [*][b]마커 위에 거리 표시[/b](기본값 켜짐).
+[*][b]1인칭 조준 중 마커 숨기기[/b](기본값 켜짐): 스코프로 조준하는 동안.
 [*][b]게임 아이콘이 뜨는 곳에서 마커 숨기기[/b]: 끄면 가까이에서도 마커가 남습니다(1인칭 카메라 모드와 함께 쓸 때 유용).
 [*][b]범위 끝에서의 마커 크기[/b]: 멀리 있을 때 마커가 얼마나 작아질지.
 [*][b]마커 투명도[/b], [b]거리에 따라 흐려지기[/b](기본값 켜짐).

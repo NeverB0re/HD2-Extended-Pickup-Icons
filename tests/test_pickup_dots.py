@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.1.0-test.2 loading", text)
+            self.assertIn("Pickup Dots 2.1.0-test.3 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -924,6 +924,18 @@ class ScreenTests(Case):
           color = function(r, g, b, a) return {r = r, g = g, b = b, a = a} end,
           text_width = function(s, px) return #s * px / 2 end,
           text = function(x, y, s, px, c) fake.texts[#fake.texts + 1] = {x = x, y = y, s = s, px = px, c = c} end,
+          unit_alive = function(u) return true end,
+          mouse_down = function(name) return name == 'right' and fake.rmb == true end,
+          unit_position = function(u, node)
+            if node and node > 1 then return u.x, u.y + node, u.z + (node == 3 and (u.turn or 0) or 0) end
+            return u.x, u.y, u.z
+          end,
+          unit_rotation = function(u, node) return 0, 1, 0, 0 end,
+          unit_node = function(u, name) return nil end,
+          call = function(name, ...)
+            if name == 'Unit.num_scene_graph_items' then return 3 end
+            return nil, 'not in the fake'
+          end,
           bitmap = function(tex, x, y, w, h, c)
             fake.bitmaps = fake.bitmaps or {}
             fake.bitmaps[#fake.bitmaps + 1] = {tex = tex, x = x, y = y, w = w, h = h}
@@ -992,6 +1004,52 @@ class ScreenTests(Case):
         self.assertEqual(self.screen_tris(), [])                       # no pixel icon besides
         self.fake.textures_loaded = False                              # not loaded: the pixel icon after all
         self.frames(5, start=30.0)
+        self.assertGreater(len(self.screen_tris()), 0)
+
+    def test_with_chef_a_moving_part_of_a_generator_is_logged(self):
+        generator = "content/objectives/obj_common/generator/generator"
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(generator, [unit(3, 0, 0)])
+        self.load_with_chef()
+        self.settle()
+        self.assertIn("pose: generator at 3.0 0.0 0.0: 3 parts", self.log_text())
+        self.fake.units[generator][1].turn = 0.5                      # its lever moves
+        self.frames(80, start=30.0)
+        self.assertIn("pose: generator at 3.0 0.0 0.0: 1 of 3 parts moved: 3:", self.log_text())
+
+    def test_you_stay_the_same_helldiver_while_a_teammate_passes_the_camera(self):
+        self.set_units(AVATAR, [unit(0, -8, 0), unit(0, -12.5, 0)], loaded=False)   # the camera: 0 -10 0.6
+        self.set_units(MARK, [unit(0, 0, 0)])
+        self.load()
+        self.settle()
+        self.fake.units[AVATAR][2].y = -11.2                           # nearer the camera than you, but not much
+        self.frames(20, start=30.0)
+        you = [l for l in self.log_text().splitlines() if "you: " in l]
+        self.assertEqual(len(you), 1, you)
+        self.assertIn("you: the helldiver at 0.0 -8.0 0.0", you[0])
+        self.fake.units[AVATAR][2].y = -10.2                           # right at the camera: the camera's on them
+        self.frames(20, start=40.0)
+        you = [l for l in self.log_text().splitlines() if "you: " in l]
+        self.assertEqual(len(you), 2, you)
+
+    def test_with_chef_markers_hide_while_aiming_in_first_person(self):
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(MARK, [unit(0, 0, 0)])
+        self.load_with_chef()
+        self.settle()
+        self.fake.rmb = True                                           # aiming, the camera behind you: shown
+        self.frames(5, start=30.0)
+        self.assertEqual(len(self.screen_points()), 1)
+        self.fake.chef_cam = self.lua.table_from({"x": 0.1, "y": -7.9, "z": 1.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(20)})   # at your eyes: a scope
+        self.frames(5, start=31.0)
+        self.assertEqual(self.screen_tris(), [])
+        self.fake.rmb = False                                          # let go: back
+        self.frames(5, start=32.0)
         self.assertGreater(len(self.screen_tris()), 0)
 
     def test_vehicles_are_sky_blue(self):
@@ -1081,9 +1139,10 @@ class ScreenTests(Case):
         self.settle()
         self.assertEqual(self.screen_tris(), [])
         ids = sorted(self.fake.options.keys())
-        look = ["pickup_dots." + n for n in ("distance", "fade", "game_textures", "hide_near", "opacity", "smallest_size")]
+        look = ["pickup_dots." + n for n in ("distance", "fade", "game_textures", "hide_aiming", "hide_near", "opacity",
+                                             "smallest_size")]
         self.assertEqual([i for i in ids if not i.startswith(("pickup_dots.range_", "pickup_dots.show_"))], look)
-        self.assertEqual(len(ids), 16 + 6)
+        self.assertEqual(len(ids), 16 + 7)
         self.assertTrue(self.fake.options["pickup_dots.fade"].default)
         self.assertFalse(self.fake.options["pickup_dots.show_terminals"].default)   # terminals: off unless chosen
         self.assertEqual(self.fake.options["pickup_dots.show_vehicles"].type, "toggle")

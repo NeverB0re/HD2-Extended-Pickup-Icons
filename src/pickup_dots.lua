@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.1.0-test.2'
+local VERSION = '2.1.0-test.3'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -41,7 +41,9 @@ local LOOK = {                -- settings (2.1.0)
     fade = true,              -- fainter with distance, down to FADE_LEAST of opacity at the edge
     distance = true,          -- the distance above each marker, in the game's font (Chef Shared Loader)
     game_textures = false,    -- test: icons drawn from the game's own textures (Chef Shared Loader), not pixels
+    hide_aiming = true,       -- no markers while aiming in first person (Chef Shared Loader)
 }
+local FIRST_PERSON_NEAR = 0.8 -- metres, level: a camera this close to you is first person (a scope)
 -- The game's icon textures the pixel icons were made from (tools/icons): id, width, height, and the icon's
 -- box in it (left, top, right, bottom; from the top). Drawn by Chef Shared Loader when the game has one loaded.
 local ICON_TEXTURES = {
@@ -253,8 +255,15 @@ local logfile, tracefile
 do
     -- Written fresh each launch, the last one kept as .previous (the loader's open_log only appends, and
     -- 0.1-0.15 grew the log without end). The loader's open_log if the folder cannot be written directly.
+    -- Under Chef Shared Loader: straight in its folder (%APPDATA%\Arrowhead\Helldivers2), where a mod may write.
     local okd, base = pcall(os.getenv, 'LOCALAPPDATA')
-    if okd and type(base) == 'string' then
+    local chef_dir = CHEF and type(CHEF.log_directory) == 'string' and CHEF.log_directory or nil
+    if chef_dir then
+        local ok, file = pcall(io.open, chef_dir .. '\\PickupDots.log', 'w')
+        if ok then logfile = file end
+        local ok2, file2 = pcall(io.open, chef_dir .. '\\PickupDots.trace.log', 'w')
+        if ok2 then tracefile = file2 end
+    elseif okd and type(base) == 'string' then
         local dir = base .. '\\CowboyBingus\\Helldivers2\\Logs\\'
         if type(os.remove) == 'function' and type(os.rename) == 'function' then
             pcall(os.remove, dir .. 'PickupDots.previous.log')
@@ -303,7 +312,8 @@ local sr = rawget(_G, 'stingray')
 -- Names only: walking the tables is plain Lua and calls nothing in the engine.
 local function log_api_inventory()
     for _, lib in ipairs({'Application', 'World', 'Unit', 'LineObject', 'IdString64', 'Script', 'Gui', 'Matrix4x4', 'Camera', 'Mesh', 'Actor',
-                          'Window', 'Mouse', 'Keyboard'}) do
+                          'Window', 'Mouse', 'Keyboard', 'GameSession', 'Network', 'Entity', 'EntityManager',
+                          'PhysicsWorld', 'Material'}) do
         local t = sr[lib]
         if type(t) == 'table' then
             local names = {}
@@ -427,6 +437,12 @@ end
 
 local function units_of(world, key, label)
     trace('units_by_resource ', label)
+    if chef_has('call_kind') then
+        -- through Chef Shared Loader's guard: a call that ever ends the game is skipped from then on (per kind)
+        local value, why = CHEF.call_kind('World.units_by_resource', label, world, key)
+        if value == nil then return {}, why end
+        return as_list(value)
+    end
     local ok, value = pcall(sr.World.units_by_resource, world, key)
     if not ok then return {}, value end
     return as_list(value)
@@ -434,6 +450,17 @@ end
 
 -- Position of a unit returned this very frame, as plain numbers (handles are never kept).
 local function position_of(unit)
+    if chef_has('unit_alive') and chef_has('unit_position') then
+        -- Chef Shared Loader's own: it refuses units that can't be asked (one built at run time, one from a
+        -- world that's gone) instead of ending the game
+        if not CHEF.unit_alive(unit) then return nil end
+        local x, y, z = CHEF.unit_position(unit)
+        if type(x) ~= 'number' or type(y) ~= 'number' or type(z) ~= 'number' then return nil end
+        for _, v in ipairs({x, y, z}) do
+            if v ~= v or math.abs(v) > 1e7 then return nil end
+        end
+        return x, y, z
+    end
     trace('alive')
     local alive_ok, alive = pcall(sr.Unit.alive, unit)
     if not alive_ok or alive ~= true then return nil end
@@ -523,7 +550,7 @@ local function read_players(world, now)
     -- The avatar is in every world with a helldiver (the ship too); that is how 0.1.0's reference mod uses it.
     for _, unit in ipairs(units_of(world, AVATAR, 'avatar')) do
         local x, y, z = position_of(unit)
-        if x then list[#list + 1] = {x, y, z} end
+        if x then list[#list + 1] = {x, y, z, unit = unit} end
     end
     -- An empty read for a moment (a ragdoll, a respawn) must not blank every dot: keep the last positions briefly.
     if #list > 0 then
@@ -737,6 +764,121 @@ local function census_step(world, now)
     if stop >= #list then census.list, census.next_at = nil, now + CENSUS_EVERY_S end
 end
 
+-- Diagnostics (2.1.0-test.3, Chef Shared Loader only): what moves inside a valve, crank, generator or vehicle
+-- near you, so a finished valve or a destroyed tank can be told by its parts: for each one within POSE_NEAR,
+-- every POSE_EVERY_S, the parts (scene graph nodes) that moved or turned since the last look, relative to the
+-- unit itself. Nothing is logged while the whole unit moves (a vehicle driving).
+local POSE_NEAR = 15
+local POSE_EVERY_S = 1
+local POSE_LOG_MAX = 800
+local POSE_MOVE = 0.05        -- metres
+local POSE_TURN = 0.05        -- of the forward vector
+local POSE_NODES = 160
+local POSE_KINDS = {controls = true, vehicles = true}
+local poses = {}              -- per unit: {at, root = {x, y, z, yaw}, nodes}
+local poses_logged = 0
+
+local function pose_step(k, p, d, now)
+    if p.unit == nil or d == nil or d > POSE_NEAR or poses_logged >= POSE_LOG_MAX
+        or not (chef_has('call') and chef_has('unit_position') and chef_has('unit_rotation')) then
+        return
+    end
+    local id = tostring(p.unit)
+    local last = poses[id]
+    if last and now - last.at < POSE_EVERY_S then return end
+    local rx, ry, rz = CHEF.unit_position(p.unit, 1)
+    local _, _, _, yaw = CHEF.unit_rotation(p.unit, 1)
+    local n = CHEF.call('Unit.num_scene_graph_items', p.unit)
+    if type(rx) ~= 'number' or type(yaw) ~= 'number' or type(n) ~= 'number' then return end
+    local c, sn = math.cos(-yaw), math.sin(-yaw)
+    local function flat(x, y) return x * c - y * sn, x * sn + y * c end   -- turned into the unit's own frame
+    local nodes, moved = {}, {}
+    for i = 2, math.min(n, POSE_NODES) do
+        local x, y, z = CHEF.unit_position(p.unit, i)
+        local fx, fy, fz = CHEF.unit_rotation(p.unit, i)
+        if type(x) == 'number' and type(fx) == 'number' then
+            local lx, ly = flat(x - rx, y - ry)
+            local lfx, lfy = flat(fx, fy)
+            local v = {lx, ly, z - rz, lfx, lfy, fz}
+            nodes[i] = v
+            local o = last and last.nodes[i]
+            if o and (math.abs(v[1] - o[1]) > POSE_MOVE or math.abs(v[2] - o[2]) > POSE_MOVE
+                    or math.abs(v[3] - o[3]) > POSE_MOVE or math.abs(v[4] - o[4]) > POSE_TURN
+                    or math.abs(v[5] - o[5]) > POSE_TURN or math.abs(v[6] - o[6]) > POSE_TURN)
+                or (last and o == nil) then
+                moved[#moved + 1] = string.format('%d:%.2f,%.2f,%.2f/%.2f,%.2f,%.2f', i, v[1], v[2], v[3], v[4], v[5], v[6])
+            end
+        elseif last and last.nodes[i] then
+            moved[#moved + 1] = i .. ':gone'
+        end
+    end
+    local name = string.match(k.label, '([^/]+)$') or k.label
+    local still = last and math.abs(rx - last.root[1]) < 0.2 and math.abs(ry - last.root[2]) < 0.2
+        and math.abs(rz - last.root[3]) < 0.2
+    if last == nil then
+        poses_logged = poses_logged + 1
+        log(string.format('pose: %s at %.1f %.1f %.1f: %d parts', name, rx, ry, rz, n))
+    elseif still and #moved > 0 then
+        poses_logged = poses_logged + 1
+        local shown = {}
+        for j = 1, math.min(#moved, 12) do shown[j] = moved[j] end
+        log(string.format('pose: %s at %.1f %.1f %.1f: %d of %d parts moved: %s%s', name, rx, ry, rz, #moved, n,
+            table.concat(shown, ' '), #moved > 12 and ' ...' or ''))
+    end
+    poses[id] = {at = now, root = {rx, ry, rz}, nodes = nodes}
+end
+
+-- Diagnostics (2.1.0-test.3): how high each helldiver's head is over its feet, so a body (lying) can be told
+-- from a living helldiver: a line when it changes by HEAD_STEP.
+local HEAD_NODES = {'head', 'Head', 'j_head', 'b_head', 'bn_head', 'head_jnt', 'Bip01_Head'}
+local HEAD_STEP = 0.4
+local HEAD_EVERY_S = 1
+local heads = {}              -- per unit: {at, dz}
+local head_node               -- the name that worked, once found
+local heads_logged = 0
+
+local function head_step(now)
+    if heads_logged >= 400 or not (chef_has('unit_node') and chef_has('unit_position')) then return end
+    for k, h in ipairs(players) do
+        local u = h.unit
+        if u ~= nil then
+            local id = tostring(u)
+            local e = heads[id]
+            if e == nil or now - e.at >= HEAD_EVERY_S then
+                local node
+                if head_node then node = CHEF.unit_node(u, head_node) end
+                if node == nil and head_node == nil then
+                    for _, name in ipairs(HEAD_NODES) do
+                        node = CHEF.unit_node(u, name)
+                        if node then
+                            head_node = name
+                            log('heads: the head is node "' .. name .. '"')
+                            break
+                        end
+                    end
+                    if node == nil and not heads.none_logged then
+                        heads.none_logged = true
+                        log('heads: none of the usual head node names found')
+                    end
+                end
+                local dz
+                if node then
+                    local _, _, z = CHEF.unit_position(u, node)
+                    if type(z) == 'number' then dz = z - h[3] end
+                end
+                if dz and (e == nil or e.dz == nil or math.abs(dz - e.dz) >= HEAD_STEP) then
+                    heads_logged = heads_logged + 1
+                    log(string.format('head: helldiver %d%s at %.1f %.1f %.1f: head %.2f m over the feet', k,
+                        h == me and ' (you)' or '', h[1], h[2], h[3], dz))
+                    heads[id] = {at = now, dz = dz}
+                else
+                    heads[id] = {at = now, dz = e and e.dz or dz}
+                end
+            end
+        end
+    end
+end
+
 local function note_spot(k, p)
     if spots_logged >= SPOT_LOG_MAX then return end
     local seen = spots[k]
@@ -792,6 +934,7 @@ local function collect_dots(now)
             for _, p in ipairs(points) do
                 local d, who, carried, mine, others = measure(p[1], p[2], p[3], keys[i].worn)
                 if SPOT_KINDS[group] and not carried then note_spot(keys[i], p) end
+                if POSE_KINDS[group] then pose_step(keys[i], p, d, now) end
                 if d ~= nil and d <= range + HOT_MARGIN then near_any = true end
                 if d == nil or d > range then
                     c.far = c.far + 1
@@ -1354,8 +1497,21 @@ end
 
 local menus_released = 0
 
+-- Aiming in first person (2.1.0, Chef Shared Loader): the right mouse button held and the camera at your
+-- eyes. A first-person camera mod's camera is there all the time: the button keeps markers on until you aim.
+local function aiming_first_person(world)
+    if not (me and chef_has('mouse_down')) then return false end
+    local okm, down = pcall(CHEF.mouse_down, 'right')
+    if not okm or not down then return false end
+    local cam = camera_of(world)
+    if cam == nil then return false end
+    local dx, dy = cam.translation[1] - me[1], cam.translation[2] - me[2]
+    return dx * dx + dy * dy < FIRST_PERSON_NEAR * FIRST_PERSON_NEAR
+end
+
 local function draw(world, world_id, now)
     local dots = collect_dots(now)
+    if LOOK.hide_aiming and aiming_first_person(world) then dots = {} end
     if menu_open() then
         -- a menu is open: take the screen GUI away altogether, not just empty. Quitting goes through a
         -- menu, and a screen GUI still there when the game shuts down crashed its renderer on quitting
@@ -1407,16 +1563,36 @@ menu_open = function()
 end
 
 -- You: the helldiver nearest the camera (third or first person alike); nil without a camera pose.
+-- You: the helldiver nearest the camera. 2.1.0: and the same one from frame to frame, by its unit, unless
+-- another is clearly nearer (under ME_SWITCH of your distance): a teammate passing the camera no longer
+-- takes your place for a moment; after a respawn the camera is on the new one, far from the body.
+local ME_SWITCH = 0.5
+local me_unit
+local me_changes = 0
+
 local function pick_me(world)
     if #players == 0 then return nil end
-    if #players == 1 then return players[1] end
+    if #players == 1 then
+        me_unit = players[1].unit and tostring(players[1].unit) or nil
+        return players[1]
+    end
     local cam = camera_of(world)
     if cam == nil then return nil end
-    local best, who
+    local best, who, mine, mine_d
     for _, p in ipairs(players) do
         local dx, dy, dz = p[1] - cam.translation[1], p[2] - cam.translation[2], p[3] - cam.translation[3]
-        local d = dx * dx + dy * dy + dz * dz
+        local d = math.sqrt(dx * dx + dy * dy + dz * dz)
         if best == nil or d < best then best, who = d, p end
+        if me_unit ~= nil and p.unit ~= nil and tostring(p.unit) == me_unit then mine, mine_d = p, d end
+    end
+    if mine ~= nil and (who == mine or best >= ME_SWITCH * mine_d) then return mine end
+    local id = who.unit and tostring(who.unit) or nil
+    if id ~= me_unit then
+        me_unit = id
+        me_changes = me_changes + 1
+        if me_changes <= 50 then
+            log(string.format('you: the helldiver at %.1f %.1f %.1f (%d helldivers)', who[1], who[2], who[3], #players))
+        end
     end
     return who
 end
@@ -1445,7 +1621,7 @@ local function tick()
         world_id = 'world #' .. world_seq
         last_world, world_seen_at, cursor, found, players, players_read_at, me = world, now, 1, {}, {}, nil, nil
         vehicles_seen = {}
-        spots, reached, taken = {}, {}, {}
+        spots, reached, taken, poses, heads, me_unit = {}, {}, {}, {}, {}, nil
         census = {list = nil, i = 0, next_at = 0, seen = {}, logged = census.logged}
         hot = {}
         new_main_world()
@@ -1463,6 +1639,7 @@ local function tick()
             detect_id_form()
             sweep_step(world)
             census_step(world, now)
+            head_step(now)
         end
         -- draw every frame; with no helldiver this clears whatever was drawn last
         if #players > 0 or shown() then draw(world, world_id, now) end
@@ -1532,6 +1709,9 @@ local LOOK_OPTIONS = {
     {'distance', {type = 'toggle', label = 'Show distance above markers', default = true,
         description = 'How far away each marked thing is, in metres.'},
         toggle_into('distance')},
+    {'hide_aiming', {type = 'toggle', label = 'Hide markers while aiming in first person', default = true,
+        description = 'While you hold the right mouse button with the camera at your eyes (a scope).'},
+        toggle_into('hide_aiming')},
     {'game_textures', {type = 'toggle', label = "Test: icons from the game's textures", default = false,
         description = 'Ammo, grenade, stim, package and egg icons drawn from the game textures instead of pixels.'},
         toggle_into('game_textures')},
