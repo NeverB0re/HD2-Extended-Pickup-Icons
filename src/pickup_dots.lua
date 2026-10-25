@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.2.0-test.2'
+local VERSION = '2.2.0'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
