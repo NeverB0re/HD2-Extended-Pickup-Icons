@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.1.0-test.7'
+local VERSION = '2.1.0-test.8'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -793,57 +793,6 @@ local function pose_step(k, p, d, now)
     poses[id] = {at = now, root = {rx, ry, rz}, nodes = nodes}
 end
 
--- Diagnostics (2.1.0-test.3): how high each helldiver's head is over its feet, so a body (lying) can be told
--- from a living helldiver: a line when it changes by HEAD_STEP.
-local HEAD_NODES = {'head', 'Head', 'j_head', 'b_head', 'bn_head', 'head_jnt', 'Bip01_Head'}
-local HEAD_STEP = 0.4
-local HEAD_EVERY_S = 1
-local heads = {}              -- per unit: {at, dz}
-local head_node               -- the name that worked, once found
-local heads_logged = 0
-
-local function head_step(now)
-    if heads_logged >= 400 or not (chef_has('unit_node') and chef_has('unit_position')) then return end
-    for k, h in ipairs(players) do
-        local u = h.unit
-        if u ~= nil then
-            local id = tostring(u)
-            local e = heads[id]
-            if e == nil or now - e.at >= HEAD_EVERY_S then
-                local node
-                if head_node then node = CHEF.unit_node(u, head_node) end
-                if node == nil and head_node == nil then
-                    for _, name in ipairs(HEAD_NODES) do
-                        node = CHEF.unit_node(u, name)
-                        if node then
-                            head_node = name
-                            log('heads: the head is node "' .. name .. '"')
-                            break
-                        end
-                    end
-                    if node == nil and not heads.none_logged then
-                        heads.none_logged = true
-                        log('heads: none of the usual head node names found')
-                    end
-                end
-                local dz
-                if node then
-                    local _, _, z = CHEF.unit_position(u, node)
-                    if type(z) == 'number' then dz = z - h[3] end
-                end
-                if dz and (e == nil or e.dz == nil or math.abs(dz - e.dz) >= HEAD_STEP) then
-                    heads_logged = heads_logged + 1
-                    log(string.format('head: helldiver %d%s at %.1f %.1f %.1f: head %.2f m over the feet', k,
-                        h == me and ' (you)' or '', h[1], h[2], h[3], dz))
-                    heads[id] = {at = now, dz = dz}
-                else
-                    heads[id] = {at = now, dz = e and e.dz or dz}
-                end
-            end
-        end
-    end
-end
-
 local function note_spot(k, p)
     if spots_logged >= SPOT_LOG_MAX then return end
     local seen = spots[k]
@@ -1586,7 +1535,7 @@ local function tick()
         world_id = 'world #' .. world_seq
         last_world, world_seen_at, cursor, found, players, players_read_at, me = world, now, 1, {}, {}, nil, nil
         vehicles_seen = {}
-        spots, reached, taken, poses, heads, me_unit = {}, {}, {}, {}, {}, nil
+        spots, reached, taken, poses, me_unit = {}, {}, {}, {}, nil
         hot = {}
         new_main_world()
         traced = 0
@@ -1602,7 +1551,6 @@ local function tick()
         if #players > 0 and can_get then
             detect_id_form()
             sweep_step(world)
-            head_step(now)
         end
         -- draw every frame; with no helldiver this clears whatever was drawn last
         if #players > 0 or shown() then draw(world, world_id, now) end
