@@ -210,7 +210,7 @@ class DrawingTests(Case):
         self.assertGreater(self.fake.updates, 0)
         self.assertEqual(set(self.fake.lookups.keys()), {AVATAR, MARK})
         self.assertIn("can_get: present", log)
-        self.assertIn("82 target resources: 79 named, 3 by id only (looked up if the id self-test passes)", log)
+        self.assertIn("84 target resources: 81 named, 3 by id only (looked up if the id self-test passes)", log)
         self.frames(1, start=200.0)                   # the next status line, after a full sweep
         log = self.log_text()
         self.assertIn("found: il_sarcophagus=2", log)
@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.3.0-test.2 loading", text)
+            self.assertIn("Pickup Dots 2.3.0-test.3 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):

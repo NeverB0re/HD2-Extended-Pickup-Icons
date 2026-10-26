@@ -43,6 +43,9 @@ return {
   {group='samples', name='content/env_shared/assets/samples/legendarium_sample_01/legendarium_sample_01', icon='rare'},
   {group='samples', name='content/env_bugs/assets/samples/bug_intel_sample_01', icon='common', height=1.9},  -- 2.3.0: its
   -- 'interact' node is 1.59 m up
+  -- 2.3.0-test.3: what may come off them, in the same packages (the models: a loose bulb)
+  {group='samples', name='content/env_bugs/assets/samples/bug_sample_pickup_01', icon='common'},
+  {group='samples', name='content/env_bugs/assets/samples/bug_intel_sample_01_pickup', icon='common'},
   {group='supplies', name='content/fac_helldivers/hellpod/ammo_rack/ammo_box', icon='supply'},
   {group='mission', hex='2d3bc1683a54298d'},  -- unresolved_mission_carryable_2d3bc1683a54298d
   {group='carry', name='content/objectives/obj_common/carry_warhead/warhead_01'},

@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.3.0-test.2'
+local VERSION = '2.3.0-test.3'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -603,6 +603,63 @@ local function refresh_hot(world, first, last)
         end
     end
     hot_reads = hot_reads + done
+end
+
+-- 2.3.0-test.3, a probe: what changes on a Terminid sample shot off its stalk, and on a hellbomb that blew up
+-- (the engine says neither). Every PROBE_EVERY_S, each such unit within PROBE_NEAR of you: its nodes'
+-- heights above its root and their way from it, logged when any changed by over 0.1 m (PROBE_LINES at most).
+local PROBE = {
+    bug_sample_01 = {'interact', 'bulb', 'bulb_base', 'stem_5', 'boss'},
+    bug_sample_pickup_01 = {'bulb'},
+    bug_intel_sample_01 = {'interact', 'boss', 'sample_handle', 'rotation'},
+    bug_intel_sample_01_pickup = {},
+    hellbomb_defunct = {'top', 'nuke', 'console', 'console_rotator', 'shield_prong_1', 'debris', 'rubble', 'explode_node',
+                        'target_node', 'g_hellbomb', 'Bone_a745e83c'},
+}
+local PROBE_EVERY_S, PROBE_NEAR, PROBE_LINES = 2, 60, 400
+local probe_at, probe_lines = nil, 0
+local probed = setmetatable({}, {__mode = 'k'})   -- per unit (by the unit itself, as by_unit): its last line
+
+local function probe(now)
+    if probe_lines >= PROBE_LINES or not (chef_has('unit_node') and chef_has('unit_position')) or me == nil then return end
+    if probe_at ~= nil and now - probe_at < PROBE_EVERY_S then return end
+    probe_at = now
+    for i = 1, #keys do
+        local short = string.match(keys[i].label, '([^/]+)$') or keys[i].label
+        local nodes = PROBE[short]
+        if nodes and found[i] then
+            for _, q in ipairs(found[i]) do
+                local dx, dy, dz = q[1] - me[1], q[2] - me[2], q[3] - me[3]
+                if q.unit ~= nil and dx * dx + dy * dy + dz * dz < PROBE_NEAR * PROBE_NEAR then
+                    pcall(function()
+                        local parts = {string.format('alive=%s at %.1f %.1f %.1f', tostring(CHEF.unit_alive(q.unit)), q[1], q[2], q[3])}
+                        if chef_has('unit_rotation') then
+                            local fx, fy, fz = CHEF.unit_rotation(q.unit)
+                            if type(fz) == 'number' then parts[#parts + 1] = string.format('fwd z=%.2f', fz) end
+                        end
+                        for _, name in ipairs(nodes) do
+                            local n = CHEF.unit_node(q.unit, name)
+                            if n == nil then
+                                parts[#parts + 1] = name .. '=none'
+                            else
+                                local x, y, z = CHEF.unit_position(q.unit, n)
+                                if type(x) == 'number' then
+                                    parts[#parts + 1] = string.format('%s=%.1f(%.1f,%.1f)', name, z - q[3], x - q[1], y - q[2])
+                                end
+                            end
+                        end
+                        local line = table.concat(parts, ' ')
+                        -- the same within 0.1 m: not logged again (positions in the line are rounded to 0.1)
+                        if probed[q.unit] ~= line then
+                            probed[q.unit] = line
+                            probe_lines = probe_lines + 1
+                            log('probe ' .. short .. ': ' .. line)
+                        end
+                    end)
+                end
+            end
+        end
+    end
 end
 
 local function sweep_step(world)
@@ -1496,6 +1553,7 @@ local function tick()
         if #players > 0 and can_get then
             detect_id_form()
             sweep_step(world)
+            probe(now)
         end
         -- draw every frame; with no helldiver this clears whatever was drawn last
         if #players > 0 or shown() then draw(world, world_id, now) end
