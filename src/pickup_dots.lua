@@ -21,12 +21,12 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.2.0'
+local VERSION = '2.3.0'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
 -- ------------------------------------------------------------------ settings --
-local RANGE = {samples = 50, supplies = 25, mission = 50, objectives = 50, vehicles = 100}   -- metres, settings
+local RANGE = {samples = 50, supplies = 25, mission = 50, objectives = 50, hellbombs = 100, vehicles = 100}   -- metres, settings
 local SHOW = {}               -- a setting per kind: false hides it (nil or true: shown)
 -- The groups the settings take together (2.2.0): what you carry with mission items, drop-off points with valves.
 local SETTING_OF = {carry = 'mission', dropoffs = 'objectives', controls = 'objectives'}
@@ -53,16 +53,32 @@ local ICON_TEXTURES = {
     egg = {'460c4e527705db55', 256, 256, 45, 16, 208, 240},
 }
 local VEHICLE_RGB = {110, 205, 255}   -- vehicles: the sky blue of the HUD's support weapon icons
+local HELLBOMB_RGB = {255, 90, 70}    -- hellbombs lying about the map (2.3.0): red, they blow up when shot
+-- The icons drawn in a colour (the rest white); 2.3.0: what you carry on your back too, like the vehicles
+local ICON_RGB = {tank = VEHICLE_RGB, walker = VEHICLE_RGB, car = VEHICLE_RGB, package = VEHICLE_RGB,
+                  larva = VEHICLE_RGB, hellbomb = HELLBOMB_RGB}
 local DISTANCE_PX = 1.6       -- the loader's text size at 1080 pixels of screen (8 drew far too big)
 local BOLD = {{0, 0}, {1, 0}, {0, 1}, {1, 1}}   -- the distance drawn at each, in the loader's screen pixels
 local DOT_HEIGHT = 0.6        -- metres above the unit's origin
-local GROUP_HEIGHT = {samples = 0.3, supplies = 0.3, dropoffs = 1.8, controls = 1.2, vehicles = 3.2}
+-- Above a target's node (its 'node': where the game shows its interact icon), instead: icons as high above it as
+-- above a sample's root, diamonds as DOT_HEIGHT (a drop-off's is 1.2 m up: 1.8, as GROUP_HEIGHT had it)
+local ABOVE_NODE = {samples = 0.3, supplies = 0.3}
+local GROUP_HEIGHT = {samples = 0.3, supplies = 0.3, dropoffs = 1.8, controls = 1.2, hellbombs = 3, vehicles = 3.2}
                               -- icons (samples, supplies) sit lower than diamonds   -- these stand taller: the marker goes above them
 local VEHICLE_BUSY = 4        -- a helldiver this close to a vehicle's origin is in it: no marker while it moves,
                               -- and none ever while you are this close
 local VEHICLE_PARKED_S = 3    -- a vehicle that has not moved this long is parked: teammates beside it do not hide it
 local WRECK_NEAR = 4          -- an exosuit this close to an exosuit wreck is that wreck
 local ARMS_NEAR = 5           -- a vehicle's weapon units (group 'arms') are this close to it
+-- (A weapon gone counts once the vehicle has stood still ARMS_STILL_S: falling from orbit, its weapons, read on
+-- other frames, lag metres behind it.)
+-- 2.3.0: a destroyed supply FRV's gun (and maybe a tank's turret) comes off and may lie beside it, still within
+-- ARMS_NEAR. So how far its nearest weapon is from the point it is mounted at (the vehicle's 'mount' node, else
+-- its root: two points of one body, the same however it leans) is kept once it has stood still ARMS_STILL_S
+-- (weapons are read on other frames than the vehicle); off by more than ARM_MOVED while it stands still: come
+-- off, destroyed.
+local ARMS_STILL_S = 1
+local ARM_MOVED = 0.6
 local DELIVERED_NEAR = 3      -- a mission item or load this close to a drop-off is in it (an SSSD put in)
 local LOADED_NEAR = 1         -- an artillery shell this close to a ready rack (group 'loaders', not drawn) is in it
 local DIAMOND_PER_M = 0.008   -- half-height per metre of distance: about the same size on screen at any range
@@ -104,7 +120,8 @@ local ICON_SHAPES = {
 -- mission items) from the game's textures (0x7615d6a35c657087, 0x4c3bef8bc16021c9, 0x93b43ada76587340,
 -- 0x3a6b4bdd84bc5561; extracted with filediver), supply and larva (the larva backpack) from a
 -- screenshot of the icon; egg from 0x460c4e527705db55; tube (the sample container) from a screenshot of its icon; tank, walker and car from the game's vehicle
--- stratagem icons (their red part). Each in every size a pixel apart along its longest side, from full
+-- stratagem icons (their red part); hellbomb (2.3.0) from the hellbomb backpack's stratagem icon, its green part
+-- (icon_strat_hud_backpack_hellbomb; the red part is the backpack). Each in every size a pixel apart along its longest side, from full
 -- down to SMALLEST, as rectangles
 -- {x0, y0, x1, y1, coverage in quarters} in whole pixels around the item (y up), drawn that see-through,
 -- as the game draws its scaled icon (scaled from those images).
@@ -225,6 +242,16 @@ local ICON_PIXELS = {
         {{-10, -8, -9, -7, 1}, {-10, -7, -6, -6, 4}, {-10, -6, -6, -5, 1}, {-10, -5, 11, -4, 2}, {-10, -4, 11, -1, 4}, {-10, -1, -8, 0, 3}, {-9, -8, -7, -7, 4}, {-8, -1, 6, 0, 4}, {-8, 0, -7, 1, 1}, {-8, 4, -3, 5, 3}, {-8, 5, 2, 6, 4}, {-8, 6, -3, 7, 4}, {-7, -8, -6, -7, 2}, {-7, 0, 4, 1, 4}, {-7, 1, -6, 2, 1}, {-6, 1, 3, 2, 4}, {-6, 2, -5, 3, 1}, {-5, 2, 3, 3, 3}, {-3, 4, -2, 5, 2}, {-3, 6, -2, 7, 2}, {-2, 4, 2, 5, 1}, {-2, 6, 3, 7, 1}, {2, 5, 3, 6, 2}, {3, 1, 4, 2, 3}, {4, 0, 5, 1, 3}, {6, -1, 11, 0, 3}, {7, -8, 8, -7, 2}, {7, -7, 11, -6, 4}, {7, -6, 11, -5, 1}, {8, -8, 10, -7, 4}, {10, -8, 11, -7, 1}},
         {{-10, -7, -9, -6, 1}, {-10, -6, -6, -5, 4}, {-10, -4, 10, -3, 3}, {-10, -3, 10, 0, 4}, {-10, 0, -8, 1, 1}, {-9, -7, -7, -6, 4}, {-8, 0, -7, 1, 3}, {-8, 4, -4, 5, 3}, {-8, 5, 2, 6, 4}, {-8, 6, -3, 7, 4}, {-7, -7, -6, -6, 1}, {-7, 0, 4, 1, 4}, {-7, 1, -6, 2, 3}, {-6, 1, 3, 2, 4}, {-6, 2, -5, 3, 3}, {-5, 2, 2, 3, 4}, {-4, 4, -3, 5, 2}, {-3, 6, -2, 7, 2}, {-2, 6, 2, 7, 1}, {2, 2, 3, 3, 2}, {3, 1, 4, 2, 2}, {4, 0, 5, 1, 2}, {5, 0, 10, 1, 1}, {6, -7, 7, -6, 1}, {6, -6, 10, -5, 4}, {7, -7, 9, -6, 4}, {9, -7, 10, -6, 1}},
     },
+    hellbomb = {
+        {{-10, -9, -9, -8, 2}, {-9, -10, -8, -9, 3}, {-9, -9, -7, -8, 3}, {-8, -11, -7, -10, 3}, {-8, -10, 8, -9, 4}, {-8, -8, -7, -6, 1}, {-8, 0, -7, 1, 1}, {-7, -11, 7, -10, 4}, {-7, -9, 7, -8, 4}, {-7, -8, -6, -7, 4}, {-7, -7, -6, -6, 2}, {-7, -1, -6, 0, 1}, {-7, 0, -5, 1, 4}, {-7, 1, -6, 2, 1}, {-7, 6, -6, 7, 1}, {-6, -8, -4, -7, 2}, {-6, -1, -4, 0, 3}, {-6, 1, -5, 2, 2}, {-6, 4, -5, 5, 1}, {-6, 5, 5, 6, 4}, {-6, 6, 6, 7, 4}, {-6, 7, -5, 8, 3}, {-5, -7, -4, -4, 2}, {-5, -4, -4, -3, 1}, {-5, 0, -4, 1, 2}, {-5, 1, -4, 2, 3}, {-5, 4, -2, 5, 2}, {-5, 7, 5, 8, 4}, {-5, 8, -4, 9, 1}, {-4, -8, 4, -7, 4}, {-4, -7, -2, -6, 4}, {-4, -6, -3, -5, 4}, {-4, -5, -3, -4, 3}, {-4, -1, 4, 0, 4}, {-4, 0, -3, 1, 1}, {-4, 1, 4, 2, 4}, {-4, 8, 4, 9, 4}, {-4, 9, -3, 10, 1}, {-3, -6, -2, -5, 3}, {-3, 9, -2, 10, 3}, {-2, -7, -1, -6, 3}, {-2, 2, -1, 3, 1}, {-2, 3, -1, 4, 2}, {-2, 4, 1, 5, 4}, {-2, 9, 2, 10, 4}, {-2, 10, -1, 11, 2}, {-1, -7, 1, -6, 4}, {-1, -6, 0, -5, 4}, {-1, -5, 1, -4, 3}, {-1, -4, 0, -1, 3}, {-1, 0, 0, 1, 3}, {-1, 2, 1, 4, 4}, {-1, 10, 1, 11, 4}, {0, -6, 1, -5, 3}, {0, -4, 1, -1, 2}, {0, 0, 1, 1, 2}, {1, -7, 2, -6, 3}, {1, 2, 2, 4, 1}, {1, 4, 2, 5, 3}, {1, 10, 2, 11, 1}, {2, -7, 4, -6, 4}, {2, -6, 3, -5, 3}, {2, 4, 5, 5, 2}, {2, 9, 3, 10, 3}, {3, -6, 4, -5, 4}, {3, -5, 4, -4, 3}, {3, 0, 4, 1, 1}, {3, 9, 4, 10, 1}, {4, -8, 5, -4, 2}, {4, -4, 5, -3, 1}, {4, -1, 5, 0, 3}, {4, 0, 5, 1, 2}, {4, 1, 5, 2, 3}, {4, 8, 5, 9, 1}, {5, -8, 6, -7, 3}, {5, -1, 6, 0, 2}, {5, 0, 7, 1, 4}, {5, 1, 6, 2, 2}, {5, 5, 6, 6, 3}, {5, 7, 6, 8, 3}, {6, -8, 7, -7, 4}, {6, -7, 7, -6, 3}, {6, -1, 7, 0, 1}, {6, 1, 7, 2, 1}, {7, -11, 8, -10, 3}, {7, -9, 9, -8, 3}, {7, -8, 8, -6, 1}, {7, 0, 8, 1, 1}, {8, -10, 9, -9, 3}, {9, -9, 10, -8, 2}},
+        {{-9, -10, -8, -9, 1}, {-9, -9, -7, -8, 2}, {-8, -11, -7, -10, 1}, {-8, -10, -7, -9, 3}, {-7, -11, -6, -10, 3}, {-7, -10, 8, -9, 4}, {-7, -9, -6, -8, 3}, {-7, -8, -6, -6, 2}, {-7, -1, -6, 1, 1}, {-6, -11, 7, -10, 4}, {-6, -9, 7, -8, 4}, {-6, -8, -5, -7, 4}, {-6, -7, -5, -6, 1}, {-6, -1, -5, 1, 3}, {-6, 4, -5, 5, 1}, {-6, 5, -5, 6, 2}, {-6, 6, -5, 7, 1}, {-5, -8, -4, -7, 1}, {-5, -2, -3, -1, 1}, {-5, -1, -4, 1, 4}, {-5, 4, 5, 5, 4}, {-5, 5, 6, 7, 4}, {-5, 7, -4, 8, 1}, {-4, -8, -3, -4, 3}, {-4, -1, -3, 1, 3}, {-4, 1, -3, 2, 1}, {-4, 3, -2, 4, 1}, {-4, 7, -3, 8, 3}, {-3, -8, 4, -7, 4}, {-3, -7, -1, -6, 4}, {-3, -6, -2, -5, 4}, {-3, -5, -2, -4, 1}, {-3, -2, 0, 1, 2}, {-3, 1, -1, 2, 2}, {-3, 7, 4, 8, 4}, {-3, 8, -2, 9, 2}, {-2, -6, -1, -5, 1}, {-2, 3, -1, 4, 2}, {-2, 8, -1, 9, 3}, {-1, -7, 0, -6, 3}, {-1, -6, 0, -5, 2}, {-1, -5, 0, -3, 1}, {-1, 1, 0, 3, 3}, {-1, 3, 2, 4, 4}, {-1, 8, 2, 9, 4}, {-1, 9, 0, 10, 3}, {0, -7, 1, 3, 4}, {0, 9, 1, 10, 4}, {1, -7, 2, -6, 3}, {1, -6, 3, -5, 1}, {1, -2, 4, 1, 2}, {1, 1, 2, 2, 3}, {1, 2, 2, 3, 2}, {1, 9, 2, 10, 3}, {2, -7, 4, -6, 4}, {2, 1, 4, 2, 2}, {2, 3, 5, 4, 1}, {2, 8, 3, 9, 3}, {3, -6, 4, -5, 4}, {3, -5, 4, -4, 1}, {3, 8, 4, 9, 2}, {4, -8, 5, -4, 3}, {4, -2, 5, -1, 1}, {4, -1, 5, 1, 3}, {4, 1, 5, 2, 1}, {4, 7, 5, 8, 2}, {5, -8, 6, -7, 1}, {5, -1, 6, 1, 4}, {5, 4, 6, 5, 3}, {6, -8, 7, -7, 4}, {6, -7, 8, -6, 1}, {6, -1, 7, 1, 3}, {6, 5, 7, 6, 1}, {7, -11, 8, -10, 3}, {7, -9, 8, -8, 3}, {7, -8, 8, -7, 2}, {7, -1, 8, 1, 1}, {8, -10, 9, -9, 3}, {8, -9, 10, -8, 2}},
+        {{-9, -9, -8, -8, 1}, {-9, -8, -7, -7, 2}, {-8, -10, -7, -9, 1}, {-8, -9, 8, -8, 4}, {-7, -10, 6, -9, 4}, {-7, -8, -6, -7, 3}, {-7, -7, -6, -6, 2}, {-7, -6, -6, -5, 1}, {-7, 0, -6, 1, 2}, {-6, -8, -5, -7, 4}, {-6, -7, -5, -6, 3}, {-6, -1, -5, 0, 2}, {-6, 0, -5, 1, 4}, {-6, 1, -5, 2, 1}, {-6, 4, -5, 5, 1}, {-6, 5, -5, 7, 2}, {-5, -8, -4, -7, 3}, {-5, -7, -4, -6, 1}, {-5, -1, -3, 0, 3}, {-5, 0, -4, 1, 3}, {-5, 1, -4, 2, 2}, {-5, 4, -4, 5, 3}, {-5, 5, 5, 7, 4}, {-5, 7, -4, 8, 1}, {-4, -8, 6, -7, 4}, {-4, -7, 4, -6, 4}, {-4, -6, -2, -5, 4}, {-4, -5, -3, -4, 4}, {-4, -4, -3, -3, 2}, {-4, 0, -3, 1, 1}, {-4, 1, -2, 2, 3}, {-4, 4, 4, 5, 4}, {-4, 7, 3, 8, 4}, {-4, 8, -3, 9, 1}, {-3, -5, -2, -4, 2}, {-3, -1, 3, 0, 4}, {-3, 8, -2, 9, 3}, {-2, -6, -1, -5, 2}, {-2, 1, 2, 2, 4}, {-2, 3, -1, 4, 2}, {-2, 8, 2, 9, 4}, {-2, 9, -1, 10, 1}, {-1, -6, 0, -5, 4}, {-1, -5, 1, -4, 3}, {-1, -4, 0, -3, 3}, {-1, -3, 1, -1, 2}, {-1, 0, 0, 1, 3}, {-1, 2, 1, 4, 4}, {-1, 9, 1, 10, 4}, {0, -6, 1, -5, 3}, {0, -4, 1, -3, 2}, {0, 0, 1, 1, 2}, {1, -6, 2, -5, 2}, {1, 3, 2, 4, 1}, {1, 9, 2, 10, 1}, {2, -6, 4, -5, 4}, {2, -5, 3, -4, 2}, {2, 0, 3, 1, 1}, {2, 1, 4, 2, 3}, {2, 8, 3, 9, 3}, {3, -5, 4, -4, 4}, {3, -4, 4, -3, 2}, {3, -1, 5, 0, 3}, {3, 0, 4, 1, 2}, {3, 7, 4, 8, 3}, {3, 8, 4, 9, 1}, {4, -7, 5, -6, 1}, {4, 0, 5, 1, 3}, {4, 1, 5, 2, 2}, {4, 4, 5, 5, 3}, {4, 7, 5, 8, 1}, {5, -7, 6, -6, 3}, {5, -1, 6, 0, 1}, {5, 0, 6, 1, 4}, {5, 1, 6, 2, 1}, {5, 5, 6, 6, 2}, {5, 6, 6, 7, 1}, {6, -10, 7, -9, 3}, {6, -8, 7, -7, 3}, {6, -7, 7, -6, 2}, {6, -6, 7, -5, 1}, {6, 0, 7, 1, 2}, {7, -10, 8, -9, 1}, {7, -8, 8, -7, 2}, {8, -9, 9, -7, 1}},
+        {{-8, -9, -7, -8, 1}, {-8, -8, -6, -7, 1}, {-7, -10, -6, -9, 1}, {-7, -9, 8, -8, 4}, {-6, -10, 7, -9, 4}, {-6, -8, -5, -6, 3}, {-6, -6, -5, -5, 1}, {-6, -1, -5, 0, 2}, {-6, 0, -5, 1, 1}, {-5, -8, -4, -7, 4}, {-5, -7, -4, -6, 2}, {-5, -1, -4, 0, 4}, {-5, 0, -2, 1, 3}, {-5, 4, -4, 6, 3}, {-4, -8, -3, -7, 3}, {-4, -7, -3, -3, 1}, {-4, -2, -2, -1, 1}, {-4, -1, -3, 0, 3}, {-4, 3, -3, 4, 2}, {-4, 4, 5, 6, 4}, {-4, 6, -3, 7, 2}, {-3, -8, 4, -6, 4}, {-3, -6, -2, -5, 4}, {-3, -5, -2, -4, 3}, {-3, -1, 0, 0, 2}, {-3, 1, -1, 2, 1}, {-3, 3, -1, 4, 3}, {-3, 6, 4, 7, 4}, {-3, 7, -2, 8, 2}, {-2, -6, -1, -5, 3}, {-2, -2, 0, -1, 2}, {-2, 0, -1, 1, 2}, {-2, 7, 3, 8, 4}, {-1, -6, 0, -5, 2}, {-1, -5, 0, -3, 1}, {-1, 0, 0, 3, 3}, {-1, 3, 2, 4, 4}, {-1, 8, 0, 9, 3}, {0, -6, 1, 3, 4}, {0, 8, 1, 9, 4}, {1, -6, 2, -5, 1}, {1, -2, 3, -1, 2}, {1, -1, 4, 0, 2}, {1, 0, 2, 3, 2}, {1, 8, 2, 9, 2}, {2, -6, 3, -5, 3}, {2, 0, 4, 1, 3}, {2, 1, 4, 2, 1}, {2, 3, 4, 4, 3}, {3, -6, 4, -5, 4}, {3, -5, 4, -4, 3}, {3, -2, 5, -1, 1}, {3, 7, 4, 8, 2}, {4, -8, 5, -7, 3}, {4, -7, 5, -3, 1}, {4, -1, 5, 0, 3}, {4, 0, 5, 1, 4}, {4, 3, 5, 4, 2}, {4, 6, 5, 7, 2}, {5, -8, 6, -7, 4}, {5, -7, 6, -6, 2}, {5, -1, 6, 0, 4}, {5, 0, 6, 1, 3}, {5, 4, 6, 6, 2}, {6, -8, 7, -6, 3}, {6, -6, 7, -5, 1}, {6, -1, 7, 1, 1}, {7, -10, 8, -9, 1}, {7, -8, 9, -7, 1}, {8, -9, 9, -8, 1}},
+        {{-8, -8, -7, -7, 2}, {-8, -7, -6, -6, 1}, {-7, -9, -6, -8, 2}, {-7, -8, 7, -7, 4}, {-6, -9, 6, -8, 4}, {-6, -7, -4, -6, 4}, {-6, -6, -5, -5, 3}, {-6, -1, -5, 0, 1}, {-6, 0, -5, 1, 3}, {-5, -6, -4, -5, 1}, {-5, -1, -4, 0, 2}, {-5, 0, -4, 1, 4}, {-5, 1, -4, 2, 1}, {-5, 4, -4, 5, 3}, {-5, 5, 4, 6, 4}, {-5, 6, -4, 7, 1}, {-4, -7, -3, -6, 3}, {-4, -6, -3, -3, 2}, {-4, -1, -1, 0, 3}, {-4, 0, -3, 2, 2}, {-4, 3, -3, 4, 1}, {-4, 4, 4, 5, 4}, {-4, 6, -3, 7, 3}, {-3, -7, 3, -5, 4}, {-3, -5, -2, -4, 4}, {-3, -4, -2, -3, 1}, {-3, 0, -1, 1, 1}, {-3, 1, -1, 2, 3}, {-3, 3, -2, 4, 2}, {-3, 6, 3, 7, 4}, {-3, 7, -2, 8, 3}, {-2, -5, -1, -4, 1}, {-2, 3, -1, 4, 3}, {-2, 7, 2, 8, 4}, {-2, 8, -1, 9, 1}, {-1, -5, 1, -4, 3}, {-1, -4, 0, -3, 3}, {-1, -3, 1, -2, 2}, {-1, -2, 0, -1, 2}, {-1, -1, 1, 0, 4}, {-1, 0, 0, 1, 3}, {-1, 1, 1, 4, 4}, {-1, 8, 1, 9, 4}, {0, -4, 1, -3, 2}, {0, -2, 1, -1, 1}, {0, 0, 1, 1, 2}, {1, -5, 2, -4, 1}, {1, -1, 4, 0, 3}, {1, 0, 3, 1, 1}, {1, 1, 2, 2, 3}, {1, 3, 3, 4, 2}, {1, 8, 2, 9, 1}, {2, -5, 3, -4, 4}, {2, -4, 3, -3, 1}, {2, 1, 4, 2, 2}, {2, 7, 3, 8, 3}, {3, -7, 4, -6, 3}, {3, -6, 4, -3, 2}, {3, 0, 4, 1, 2}, {3, 3, 4, 4, 1}, {3, 6, 4, 7, 3}, {4, -7, 5, -6, 4}, {4, -6, 5, -5, 1}, {4, -1, 5, 0, 2}, {4, 0, 5, 1, 4}, {4, 1, 5, 2, 1}, {4, 4, 5, 6, 3}, {4, 6, 5, 7, 1}, {5, -7, 6, -5, 3}, {5, 0, 6, 1, 3}, {6, -9, 7, -8, 1}, {6, -7, 8, -6, 1}, {7, -8, 8, -7, 1}},
+        {{-7, -8, -6, -7, 2}, {-6, -9, -5, -8, 2}, {-6, -8, 7, -7, 4}, {-5, -9, 6, -8, 4}, {-5, -7, -4, -6, 4}, {-5, -6, -4, -5, 2}, {-5, -1, -2, 0, 3}, {-5, 0, -4, 1, 2}, {-5, 4, -4, 5, 1}, {-4, -7, -3, -6, 3}, {-4, 0, 0, 1, 3}, {-4, 3, -3, 4, 3}, {-4, 4, 5, 5, 4}, {-4, 5, -3, 6, 2}, {-3, -7, 3, -6, 4}, {-3, -6, -1, -5, 4}, {-3, -5, -2, -4, 4}, {-3, -4, -2, -3, 2}, {-3, -2, 0, -1, 1}, {-3, 3, 4, 4, 4}, {-3, 5, 4, 6, 4}, {-3, 6, -2, 7, 1}, {-2, -5, -1, -4, 2}, {-2, -1, 0, 0, 2}, {-2, 6, 3, 7, 4}, {-1, -6, 0, -5, 3}, {-1, -5, 0, -4, 1}, {-1, 1, 0, 2, 2}, {-1, 2, 0, 3, 3}, {-1, 7, 0, 8, 3}, {0, -6, 1, -3, 4}, {0, -3, 1, -2, 3}, {0, -2, 1, 3, 4}, {0, 7, 1, 8, 4}, {1, -6, 2, -5, 3}, {1, -2, 4, -1, 1}, {1, -1, 3, 0, 2}, {1, 0, 5, 1, 3}, {1, 1, 2, 2, 2}, {1, 2, 2, 3, 3}, {1, 7, 2, 8, 2}, {2, -6, 3, -5, 4}, {2, -5, 3, -4, 2}, {3, -7, 5, -6, 3}, {3, -6, 4, -4, 3}, {3, -4, 4, -3, 2}, {3, -1, 4, 0, 3}, {3, 6, 4, 7, 1}, {4, -1, 5, 0, 4}, {4, 3, 5, 4, 3}, {4, 5, 5, 6, 2}, {5, -7, 6, -6, 4}, {5, -6, 6, -5, 3}, {5, -1, 6, 0, 2}, {5, 0, 6, 1, 1}, {6, -9, 7, -8, 2}, {7, -8, 8, -7, 2}},
+        {{-7, -7, -6, -6, 2}, {-6, -8, -5, -7, 3}, {-6, -7, 6, -6, 4}, {-6, -6, -5, -5, 1}, {-5, -8, 5, -7, 4}, {-5, -6, -4, -5, 4}, {-5, -5, -3, -4, 1}, {-5, -1, -4, 0, 1}, {-5, 0, -4, 1, 4}, {-5, 4, -4, 5, 1}, {-4, -6, -3, -5, 2}, {-4, -4, -3, -3, 1}, {-4, -1, -3, 0, 2}, {-4, 0, -3, 1, 3}, {-4, 1, -3, 2, 1}, {-4, 3, -1, 4, 3}, {-4, 4, 4, 5, 4}, {-4, 5, -3, 6, 3}, {-3, -6, 3, -5, 4}, {-3, -5, -2, -4, 4}, {-3, -4, -2, -3, 3}, {-3, -1, 3, 0, 3}, {-3, 0, -2, 1, 2}, {-3, 1, -1, 2, 2}, {-3, 5, 3, 6, 4}, {-3, 6, -2, 7, 3}, {-2, -5, 2, -4, 3}, {-2, 0, -1, 1, 1}, {-2, 6, 2, 7, 4}, {-2, 7, -1, 8, 1}, {-1, -4, 0, -3, 3}, {-1, -3, 1, -2, 2}, {-1, -2, 0, -1, 2}, {-1, 0, 0, 1, 3}, {-1, 1, 0, 2, 4}, {-1, 2, 1, 4, 4}, {-1, 7, 0, 8, 4}, {0, -4, 1, -3, 2}, {0, -2, 1, -1, 1}, {0, 0, 1, 1, 2}, {0, 1, 1, 2, 3}, {0, 7, 1, 8, 3}, {1, 0, 2, 1, 1}, {1, 1, 3, 2, 2}, {1, 3, 3, 4, 3}, {1, 7, 2, 8, 1}, {2, -5, 3, -4, 4}, {2, -4, 3, -3, 3}, {2, -3, 3, -2, 1}, {2, 0, 3, 1, 2}, {2, 6, 3, 7, 2}, {3, -6, 4, -5, 2}, {3, -1, 4, 0, 2}, {3, 0, 5, 1, 3}, {3, 1, 4, 2, 1}, {3, 3, 4, 4, 2}, {3, 5, 4, 6, 3}, {4, -6, 5, -5, 4}, {4, -5, 5, -4, 2}, {4, -1, 5, 0, 1}, {4, 4, 5, 5, 1}, {5, -8, 6, -7, 2}, {6, -7, 7, -6, 2}},
+        {{-6, -7, -5, -6, 2}, {-5, -8, -4, -7, 3}, {-5, -7, 6, -6, 4}, {-5, -6, -4, -4, 1}, {-5, -1, -4, 0, 1}, {-4, -8, 5, -7, 4}, {-4, -6, -3, -5, 3}, {-4, -1, -2, 0, 3}, {-4, 0, -3, 1, 2}, {-4, 3, -3, 4, 2}, {-4, 4, -3, 5, 1}, {-3, -6, -2, -3, 2}, {-3, 0, 0, 1, 3}, {-3, 2, -1, 3, 2}, {-3, 3, 4, 5, 4}, {-3, 5, -2, 6, 1}, {-2, -6, 3, -5, 4}, {-2, -5, -1, -4, 4}, {-2, -4, -1, -3, 1}, {-2, -2, 0, -1, 1}, {-2, -1, 0, 0, 2}, {-2, 5, 3, 6, 4}, {-1, -5, 0, -4, 2}, {-1, 1, 0, 2, 1}, {-1, 2, 0, 3, 3}, {-1, 6, 0, 7, 2}, {0, -5, 1, -3, 4}, {0, -3, 1, -1, 3}, {0, -1, 1, 3, 4}, {0, 6, 1, 7, 4}, {1, -5, 2, -4, 2}, {1, -2, 3, -1, 1}, {1, -1, 3, 0, 2}, {1, 0, 4, 1, 3}, {1, 1, 2, 2, 1}, {1, 2, 2, 3, 3}, {1, 6, 2, 7, 2}, {2, -5, 3, -4, 4}, {2, -4, 3, -3, 1}, {2, 2, 4, 3, 2}, {3, -6, 4, -3, 2}, {3, -1, 5, 0, 3}, {4, -6, 5, -5, 3}, {4, 0, 5, 1, 2}, {4, 3, 5, 5, 1}, {5, -8, 6, -7, 3}, {5, -6, 6, -4, 1}, {6, -7, 7, -6, 2}},
+    },
 }
 
 local SCREEN_WORLD = 1        -- which world the screen GUI goes on: 0 the main one, n the n-th other one
@@ -312,7 +339,7 @@ local sr = rawget(_G, 'stingray')
 -- Names only: walking the tables is plain Lua and calls nothing in the engine.
 local function log_api_inventory()
     for _, lib in ipairs({'Application', 'World', 'Unit', 'LineObject', 'IdString64', 'Script', 'Gui', 'Matrix4x4', 'Camera',
-                          'Window', 'Mouse', 'Keyboard'}) do
+                          'Window', 'Mouse', 'Keyboard', 'Mesh'}) do
         local t = sr[lib]
         if type(t) == 'table' then
             local names = {}
@@ -487,10 +514,10 @@ local function build_keys()
     local unnamed = 0
     for _, t in ipairs(TARGETS) do
         if t.name then
-            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height}
+            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount}
         elseif t.hex then
             unnamed = unnamed + 1
-            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height}
+            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount}
         end
     end
     log(string.format('%d target resources: %d named, %d by id only (looked up if the id self-test passes)',
@@ -535,13 +562,16 @@ local function track(previous, x, y, z, now)
         if d < best_d then best, best_d = q, d end
     end
     local armed = best ~= nil and best.armed or nil   -- it had weapons on it (kept while it is followed)
+    local arm = best ~= nil and best.arm or nil       -- how far from its mount its weapon sat (2.3.0)
+    local off = best ~= nil and best.off or nil       -- its weapon came off (2.3.0)
     if best ~= nil and best.anchor ~= nil then
         local a = best.anchor
         if math.abs(a[1] - x) < STILL_EPS and math.abs(a[2] - y) < STILL_EPS and math.abs(a[3] - z) < STILL_EPS then
-            return {x, y, z, still_since = best.still_since, anchor = a, armed = armed, lost = best.lost}
+            return {x, y, z, still_since = best.still_since, anchor = a, armed = armed, lost = best.lost, arm = arm, off = off}
         end
     end
-    return {x, y, z, still_since = now, anchor = {x, y, z}, armed = armed, lost = best ~= nil and best.lost or nil}
+    return {x, y, z, still_since = now, anchor = {x, y, z}, armed = armed, lost = best ~= nil and best.lost or nil,
+            arm = arm, off = off}
 end
 
 local function read_players(world, now)
@@ -663,6 +693,20 @@ local function follow_vehicle(p, now, seen_now)
     return t
 end
 
+-- How far the nearest of these points within r of p is from point m; nil if none is.
+local function nearest_from(list, p, r, m)
+    local best, from = r * r, nil
+    for _, v in ipairs(list) do
+        local dx, dy, dz = v[1] - p[1], v[2] - p[2], v[3] - p[3]
+        local d = dx * dx + dy * dy + dz * dz
+        if d < best then
+            local mx, my, mz = v[1] - m[1], v[2] - m[2], v[3] - m[3]
+            best, from = d, math.sqrt(mx * mx + my * my + mz * mz)
+        end
+    end
+    return from
+end
+
 -- Is any of these points within r of p?
 local function near(list, p, r)
     for _, v in ipairs(list) do
@@ -677,47 +721,89 @@ local SHIP_HIDDEN = {mission = true, carry = true, dropoffs = true, controls = t
 -- Last frame's counts per group, for the status line: drawn, hidden as worn/held, out of range.
 local last_counts = {}
 
--- Launch codes and keycards (targets with 'taken'): picked up, the unit stays where it lay, alive and
--- unchanged in everything the engine lets a mod read (2.1.0 test logs). So they are taken for picked up when
--- you press the interact key (TAKE_KEY) within TAKE_REACH of them, or a teammate has been within
--- TAKE_TEAMMATE_REACH of them for TAKE_HOLD_S (their keys can't be read; they pick codes up running past, so
--- briefly). You walking past leaves them marked. Without the loader's keyboard: you count as a teammate.
-local TAKE_REACH = 2
-local TAKE_TEAMMATE_REACH = 1.5
-local TAKE_HOLD_S = 0.5
-local TAKE_KEY = 'e'
 -- Per-unit tables are keyed by the unit itself, weakly: under Chef Shared Loader every unit's tostring is the
 -- same (one key for all would mix units up).
 local function by_unit() return setmetatable({}, {__mode = 'k'}) end
-local reached = by_unit()     -- per unit: since when a teammate has been at it
 local taken = by_unit()       -- per unit: picked up (this world)
 
-local function check_taken(p, now)
-    local id = p.unit or string.format('%.0f %.0f %.0f', p[1], p[2], p[3])
-    if taken[id] then return true end
-    local keys_known = chef_has('key_down')
-    local by, other = nil, false
-    for _, h in ipairs(players) do
-        local dx, dy, dz = p[1] - h[1], p[2] - h[2], p[3] - h[3]
-        local d2 = dx * dx + dy * dy + dz * dz
-        if h == me and keys_known then
-            if d2 < TAKE_REACH * TAKE_REACH then
-                local ok, down = pcall(CHEF.key_down, TAKE_KEY)
-                if ok and down then by = 'you, with the interact key' end
-            end
-        elseif d2 < TAKE_TEAMMATE_REACH * TAKE_TEAMMATE_REACH then
-            other = true
+-- Has this unit no visible mesh left? Unit.box over the visible meshes (its second argument true) comes back
+-- empty (2.3.0: a hellbomb that blew up, alive and in place otherwise; not launch codes picked up: test.11).
+-- False when it can't be asked.
+local function no_visible_mesh(unit)
+    if unit == nil or not chef_has('call') then return false end
+    local _, extents = CHEF.call('Unit.box', unit, true)
+    if extents == nil then return false end
+    local ok, x, y, z = pcall(function() return sr.Vector3.x(extents), sr.Vector3.y(extents), sr.Vector3.z(extents) end)
+    return ok and type(x) == 'number' and x == 0 and y == 0 and z == 0
+end
+
+-- How many of a unit's meshes are visible (Mesh.visibility), or nil when it can't be asked.
+local function visible_meshes(unit)
+    if unit == nil or not chef_has('call') then return nil end
+    local n = tonumber((CHEF.call('Unit.num_meshes', unit)))
+    if n == nil then return nil end
+    local count = 0
+    for m = 1, n do
+        local mesh = CHEF.call('Unit.mesh', unit, m)
+        if mesh == nil then return nil end
+        local shown = CHEF.call('Mesh.visibility', mesh)
+        if shown == nil then return nil end
+        if shown == true then count = count + 1 end
+    end
+    return count
+end
+
+-- Launch codes and keycards (targets with 'taken'): picked up, the unit stays where it lay, alive, in place.
+-- 2.3.0: but it hides three of its six meshes (test.11 log; nothing else changed, as the codes were walked up
+-- to, either). So fewer visible meshes than it was first seen with: taken, by whoever, with whatever key.
+-- (2.1.0-2.2.0 guessed from the interact key and teammates standing at it; out in 2.3.0.)
+local first_visible = by_unit()   -- per unit: how many meshes it showed when first seen
+
+local function check_taken(p)
+    if p.unit == nil then return false end
+    if taken[p.unit] then return true end
+    local shown = visible_meshes(p.unit)
+    if shown ~= nil then
+        first_visible[p.unit] = first_visible[p.unit] or shown
+        if shown < first_visible[p.unit] then
+            taken[p.unit] = true
+            log(string.format('taken: the item at %.1f %.1f %.1f is taken for picked up (%d of its %d meshes hidden)',
+                p[1], p[2], p[3], first_visible[p.unit] - shown, first_visible[p.unit]))
+            return true
         end
     end
-    if other then
-        reached[id] = reached[id] or now
-        if by == nil and now - reached[id] >= TAKE_HOLD_S then by = 'a helldiver standing at it' end
-    else
-        reached[id] = nil
-    end
-    if by then
-        taken[id] = true
-        log(string.format('taken: the item at %.1f %.1f %.1f is taken for picked up (%s)', p[1], p[2], p[3], by))
+    return false
+end
+
+-- Where a unit's node is now (Chef Shared Loader), or nil. 2.3.0: a Terminid sample on a stalk, shot off it,
+-- tumbles about whole, its root left low and its bulb anywhere (test.3 log): the game's icon goes with its
+-- 'interact' node, so ours does too. The node's index is kept per unit.
+local node_of = by_unit()
+
+local function node_position(p, name)
+    if name == nil or p.unit == nil or not (chef_has('unit_node') and chef_has('unit_position')) then return nil end
+    local ok, x, y, z = pcall(function()
+        local n = node_of[p.unit]
+        if n == nil then
+            n = CHEF.unit_node(p.unit, name) or false
+            node_of[p.unit] = n
+        end
+        if n == false then return nil end
+        return CHEF.unit_position(p.unit, n)
+    end)
+    if ok and type(x) == 'number' and type(y) == 'number' and type(z) == 'number' then return x, y, z end
+end
+
+-- A hellbomb that blew up stays, alive, every node where it was; only its meshes go (no_visible_mesh, 2.3.0-test.6
+-- log). Once gone, gone (this world).
+local blown = by_unit()
+
+local function blown_up(p)
+    if p.unit == nil then return false end
+    if blown[p.unit] then return true end
+    if no_visible_mesh(p.unit) then
+        blown[p.unit] = true
+        log(string.format('hellbomb: the one at %.1f %.1f %.1f blew up (no visible mesh left)', p[1], p[2], p[3]))
         return true
     end
     return false
@@ -759,9 +845,24 @@ local function collect_dots(now)
                     -- destroyed, you in or at it, or someone else in a moving one: no marker
                     local v = follow_vehicle(p, now, seen_now)
                     local parked = now - v.still_since >= VEHICLE_PARKED_S
-                    local armed_now = near(arms, p, ARMS_NEAR)
-                    if armed_now then v.armed, v.lost = true, nil end
-                    local destroyed = near(wrecks, p, WRECK_NEAR) or (v.armed and not armed_now)
+                    local mx, my, mz = node_position(p, keys[i].mount)
+                    local from = nearest_from(arms, p, ARMS_NEAR, mx and {mx, my, mz} or p)
+                    local armed_now = from ~= nil
+                    local still = now - v.still_since >= ARMS_STILL_S
+                    if armed_now and not v.off then v.armed, v.lost = true, nil end
+                    if v.armed and not armed_now and still and not v.off then
+                        v.off = true   -- its weapon gone while it stands still: destroyed, for good (2.3.0)
+                    end
+                    if armed_now and not v.off and still then
+                        if v.arm == nil then
+                            v.arm = from
+                        elseif math.abs(from - v.arm) > ARM_MOVED then
+                            v.off = true
+                            log(string.format('vehicle: %s - its weapon came off (%.1f m from its mount; it sat %.1f)',
+                                string.match(keys[i].label, '([^/]+)$') or keys[i].label, from, v.arm))
+                        end
+                    end
+                    local destroyed = near(wrecks, p, WRECK_NEAR) or v.off
                     if destroyed and not v.lost then
                         v.lost = true
                         log('vehicle: ' .. (string.match(keys[i].label, '([^/]+)$') or keys[i].label)
@@ -776,9 +877,12 @@ local function collect_dots(now)
                 elseif LOOK.hide_near and (keys[i].near or NEAR_ME[group]) and me ~= nil and who == me
                     and d < (keys[i].near or NEAR_ME[group]) - NEAR_OVERLAP then
                     c.worn = c.worn + 1
-                elseif keys[i].taken and check_taken(p, now) then
+                elseif group == 'hellbombs' and blown_up(p) then
                     c.worn = c.worn + 1
-                elseif carried and group ~= 'dropoffs' and group ~= 'controls' then   -- never worn; a teammate may stand at it
+                elseif keys[i].taken and check_taken(p) then
+                    c.worn = c.worn + 1
+                elseif carried and group ~= 'dropoffs' and group ~= 'controls' and group ~= 'hellbombs' then
+                    -- (those never worn; a teammate may stand at it)
                     c.worn = c.worn + 1
                 elseif (group == 'mission' or group == 'carry') and near(dropoffs, p, DELIVERED_NEAR) then
                     c.worn = c.worn + 1
@@ -786,7 +890,13 @@ local function collect_dots(now)
                     c.worn = c.worn + 1
                 else
                     c.drawn = c.drawn + 1
-                    dots[#dots + 1] = {p[1], p[2], p[3] + (GROUP_HEIGHT[group] or DOT_HEIGHT), d, who, group, keys[i].icon}
+                    local nx, ny, nz = node_position(p, keys[i].node)
+                    if nx then   -- above the node as other markers are above their unit
+                        dots[#dots + 1] = {nx, ny, nz + (ABOVE_NODE[group] or DOT_HEIGHT), d, who, group, keys[i].icon}
+                    else
+                        dots[#dots + 1] = {p[1], p[2], p[3] + (keys[i].height or GROUP_HEIGHT[group] or DOT_HEIGHT), d, who,
+                                           group, keys[i].icon}
+                    end
                 end
             end
             if near_any then new_hot[#new_hot + 1] = i end
@@ -997,6 +1107,8 @@ local FULL_SIZE_M = 10
 local SMALLEST = 0.7          -- the smallest of the game icons' pixel sizes (ICON_PIXELS); smaller: scaled from it
 local FADE_LEAST = 0.2
 local POINTER = {gap = 3, half = 9, slope = 0.5, line = 2}   -- the wide V under a vehicle's icon, pixels at full size
+-- A vehicle off screen (2.3.0): at the screen's edge, this much smaller, with an arrow toward it
+local EDGE = {margin = 40, size = 0.7, gap = 4, long = 9, half = 6}   -- pixels at full size (margin: from the edge)
 -- 0 up to FULL_SIZE_M away, 1 at the edge of its kind's range
 local function far_share(d)
     local range = RANGE[setting_of(d[6])] or 0
@@ -1021,6 +1133,20 @@ local function project(cam, d, width, height, f)
     end
     -- whole pixels: between them the thin outline smears differently each frame and seems to waver
     return math.floor(sx + 0.5), math.floor(sy + 0.5)
+end
+
+-- Where an off-screen dot shows at the screen's edge (pixels, as project) and the way to it (a unit vector):
+-- the side it is to, seen from the middle of the screen; straight behind, the bottom.
+local function edge(cam, d, width, height)
+    local p = {d[1] - cam.translation[1], d[2] - cam.translation[2], d[3] - cam.translation[3]}
+    local x, y = dot3(p, cam.right), dot3(p, cam.up)
+    local len = math.sqrt(x * x + y * y)
+    if len < 1e-6 then x, y, len = 0, -1, 1 end
+    x, y = x / len, y / len
+    local hw, hh = width / 2 - EDGE.margin, height / 2 - EDGE.margin
+    local t = math.min(math.abs(x) > 1e-6 and hw / math.abs(x) or math.huge,
+                       math.abs(y) > 1e-6 and hh / math.abs(y) or math.huge)
+    return math.floor(width / 2 + x * t + 0.5), math.floor(height / 2 + y * t + 0.5), {x, y}
 end
 
 -- Returns true when the screen GUI handled this frame, false to draw in the 3D scene instead.
@@ -1113,6 +1239,21 @@ local function screen_draw(world, world_id, dots)
                 tri(sr.Vector3(p1[1], 0, p1[2]), sr.Vector3(p2[1], 0, p2[2] + t), sr.Vector3(p1[1], 0, p1[2] + t))
             end
         end
+        -- beside an off-screen vehicle's icon, an arrow toward the vehicle
+        local function arrow(list, sx, sy, size, dir)
+            if list.reach == nil then   -- how far the icon reaches from its middle, worked out once
+                local reach = 0
+                for _, r in ipairs(list) do
+                    reach = math.max(reach, math.abs(r[1]), math.abs(r[2]), math.abs(r[3]), math.abs(r[4]))
+                end
+                list.reach = reach
+            end
+            local from = list.reach * (size < SMALLEST and size / SMALLEST or 1) + EDGE.gap * size
+            local bx, by = sx + dir[1] * from, sy + dir[2] * from
+            local tip = sr.Vector3(bx + dir[1] * EDGE.long * size, 0, by + dir[2] * EDGE.long * size)
+            local w = EDGE.half * size
+            tri(sr.Vector3(bx - dir[2] * w, 0, by + dir[1] * w), tip, sr.Vector3(bx + dir[2] * w, 0, by - dir[1] * w))
+        end
         local function icon(shape, sx, sy, size)
             local color = ink
             local k = shape.scale * size
@@ -1163,7 +1304,8 @@ local function screen_draw(world, world_id, dots)
                 local k = full.span * size / (t[7] - t[5])          -- texture pixels to screen pixels
                 local cx, cy = (t[4] + t[6]) / 2, (t[5] + t[7]) / 2  -- the icon's centre in the texture
                 local x0, y1 = sx - cx * k, sy + cy * k              -- the texture's left and top edge
-                local c = CHEF.color(255, 255, 255, math.floor(255 * opacity))
+                local rgb = tint or {255, 255, 255}
+                local c = CHEF.color(rgb[1], rgb[2], rgb[3], math.floor(255 * opacity))
                 return CHEF.bitmap(t[1], x0 * w / width, (y1 - t[3] * k) * h / height,
                     t[2] * k * w / width, t[3] * k * h / height, c)
             end)
@@ -1185,10 +1327,12 @@ local function screen_draw(world, world_id, dots)
         local CORNERS = {{0, 1}, {1, 0}, {0, -1}, {-1, 0}}        -- top, right, bottom, left
         for _, d in ipairs(dots) do
             local sx, sy = project(cam, d, width, height, f)
-            local size = sx and size_of(d)
+            local dir   -- a vehicle off screen: the way to it
+            if not sx and d[6] == 'vehicles' then sx, sy, dir = edge(cam, d, width, height) end
+            local size = sx and size_of(d) * (dir and EDGE.size or 1)
             if sx then
                 opacity = opacity_of(d)
-                tint = d[6] == 'vehicles' and VEHICLE_RGB or nil
+                tint = d[7] and ICON_RGB[d[7]] or nil
                 ink = ink_of(255 * opacity)
                 if d[6] == 'samples' or d[6] == 'supplies' then sx, sy = sx + ICON_OFFSET[1], sy + ICON_OFFSET[2] end
             end
@@ -1200,7 +1344,11 @@ local function screen_draw(world, world_id, dots)
                 if not texture_icon(d[7], sizes[1], sx, sy, size) then
                     pixels(list, sx, sy, k)
                 end
-                if d[6] == 'vehicles' then pointer(list, sx, sy, size) end
+                if dir then
+                    arrow(list, sx, sy, size, dir)
+                elseif d[6] == 'vehicles' then
+                    pointer(list, sx, sy, size)
+                end
                 distance_above(sx, sy + top_of(list, k), d)
             elseif sx and d[7] and ICON_SHAPES[d[7]] then
                 local shape = ICON_SHAPES[d[7]]
@@ -1426,7 +1574,7 @@ local function tick()
         world_id = 'world #' .. world_seq
         last_world, world_seen_at, cursor, found, players, players_read_at, me = world, now, 1, {}, {}, nil, nil
         vehicles_seen = {}
-        reached, taken, me_unit = by_unit(), by_unit(), nil
+        taken, blown, first_visible, me_unit = by_unit(), by_unit(), by_unit(), nil
         hot = {}
         new_main_world()
         traced = 0
@@ -1460,7 +1608,7 @@ local function tick()
         if #players > 0 then
             log('found: ' .. found_summary())
             local parts = {}
-            for _, group in ipairs({'samples', 'supplies', 'mission', 'carry', 'dropoffs', 'controls', 'vehicles'}) do
+            for _, group in ipairs({'samples', 'supplies', 'mission', 'carry', 'dropoffs', 'controls', 'hellbombs', 'vehicles'}) do
                 local c = last_counts[group]
                 if c then parts[#parts + 1] = string.format('%s drawn=%d worn=%d far=%d', group, c.drawn, c.worn, c.far) end
             end
@@ -1480,6 +1628,7 @@ local ROWS = {   -- {id, kind ('show', 'range' with its most metres, or a LOOK f
     {'fade', 'toggle', 'fade'},
     {'show_mission', 'show', 'mission'}, {'range_mission', 'range', 'mission', 150},
     {'show_objectives', 'show', 'objectives'}, {'range_objectives', 'range', 'objectives', 150},
+    {'show_hellbombs', 'show', 'hellbombs'}, {'range_hellbombs', 'range', 'hellbombs', 300},
     {'show_vehicles', 'show', 'vehicles'}, {'range_vehicles', 'range', 'vehicles', 300},
     {'distance', 'toggle', 'distance'},
     {'hide_near', 'toggle', 'hide_near'},
@@ -1498,6 +1647,8 @@ local TEXTS = {
     range_mission = {'Mission items distance (m)', 'Marked within this many metres of you. 0 shows none.'},
     show_objectives = {'Show mission objectives (drop-off points, valves, cranks)', 'Drop-off points, cargo containers, valves and cranks.'},
     range_objectives = {'Mission objectives distance (m)', 'Marked within this many metres of you. 0 shows none.'},
+    show_hellbombs = {'Show hellbombs (the ones that blow up when shot)', 'Hellbombs lying about the map, which blow up when shot.'},
+    range_hellbombs = {'Hellbombs distance (m)', 'Marked within this many metres of you. 0 shows none.'},
     show_vehicles = {'Show vehicles (exosuits, FRVs, tanks)', 'Exosuits, FRVs and tanks.'},
     range_vehicles = {'Vehicles distance (m)', 'Marked within this many metres of you. 0 shows none.'},
     distance = {'Show distance above vehicles', 'How far away each marked vehicle is.'},
@@ -1609,7 +1760,8 @@ local function install()
     end
     M.status = 'running'
     log('running: ranges samples=' .. RANGE.samples .. ' supplies=' .. RANGE.supplies
-        .. ' mission=' .. RANGE.mission .. ' objectives=' .. RANGE.objectives .. ' vehicles=' .. RANGE.vehicles)
+        .. ' mission=' .. RANGE.mission .. ' objectives=' .. RANGE.objectives .. ' hellbombs=' .. RANGE.hellbombs
+        .. ' vehicles=' .. RANGE.vehicles)
     return M
 end
 
