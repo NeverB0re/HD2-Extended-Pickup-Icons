@@ -66,10 +66,10 @@ return {
   {group='dropoffs', name='content/objectives/obj_cyborgs/cyborg_dropoff/cyborg_dropoff_01', node='interact_node'},
   {group='vehicles', name='content/fac_helldivers/vehicles/combat_walker/combat_walker', icon='walker', height=4.8},  -- tall: above it
   {group='vehicles', name='content/fac_helldivers/vehicles/frv/frv', icon='car', mount='gun_mount'},
-  {group='vehicles', name='content/fac_helldivers/vehicles/frv_heavy/frv_flamer', icon='car', mount='gun_mount'},
-  {group='vehicles', name='content/fac_helldivers/vehicles/frv_supply/frv_supply', icon='car', mount='gun_mount'},
+  {group='vehicles', name='content/fac_helldivers/vehicles/frv_heavy/frv_flamer', icon='car_flamer', mount='gun_mount'},
+  {group='vehicles', name='content/fac_helldivers/vehicles/frv_supply/frv_supply', icon='car_supply', mount='gun_mount'},
   {group='vehicles', name='content/fac_helldivers/vehicles/tank/tank', icon='tank', height=4.2, mount='interact'},  -- 2.2.0: higher
-  {group='vehicles', name='content/fac_helldivers/vehicles/tank_storm/tank_storm', icon='tank', height=4.2, mount='interact'},
+  {group='vehicles', name='content/fac_helldivers/vehicles/tank_storm/tank_storm', icon='tank_storm', height=4.2, mount='interact'},
   -- 2.3.0: hellbombs lying about the map, shot to blow up (not the stratagem's 'hellbomb' nor the ship's
   -- 'hellbomb_prop': this one is in the maps' packages only)
   {group='hellbombs', name='content/fac_helldivers/hellpod/hellbomb_defunct/hellbomb_defunct', icon='hellbomb'},

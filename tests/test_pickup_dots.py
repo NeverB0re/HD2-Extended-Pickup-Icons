@@ -147,10 +147,20 @@ def xyz(v):
     return (v._x, v._y, v._z)
 
 
+# The baked icons' table as build.py writes it, with made-up texture ids ('<icon>_<size>') and square sizes (2.4.0):
+# baking the real ones takes seconds.
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "tools"))
+import bake_icons
+TEST_ICONS = "{\n" + "".join("    %s = {%s},\n" % (name, ", ".join("{%d, '%s_%d', %d, %d}" % (s, name, s, s, s)
+                                                                 for s in bake_icons.SIZES))
+                              for name in sorted(bake_icons.ICONS)) + "}"
+
+
 class Case(unittest.TestCase):
     def setUp(self):
         self.lua = lua51.LuaRuntime(unpack_returned_tuples=True)
         self.fake = self.lua.execute(FAKE_ENGINE)
+        build.ICON_TABLE = TEST_ICONS
         self.source = build.built_source()
 
     def set_units(self, key, units, loaded=True):
@@ -367,7 +377,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.4.0-test.2 loading", text)
+            self.assertIn("Pickup Dots 2.4.0-test.3 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -818,24 +828,25 @@ class ScreenTests(Case):
 
     def test_samples_and_supplies_get_icons_lower_than_diamonds(self):
         stim = "content/fac_helldivers/discoverables/health_pack_discoverable_01/health_pack_discoverable_01"
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.fake.textures_loaded = True
         self.set_units(AVATAR, [unit(0, -11, 0)], loaded=False)   # beyond the game's own sample icon
         self.set_units(SAMPLE, [unit(-1, 0, 0)])          # a common sample
         self.set_units(stim, [unit(1, -3, 0)])            # 8 m off: full size
-        self.load()
+        self.load_with_chef()
         self.settle()
-        tris = self.screen_tris()
-        self.assertTrue(all((t.color.r, t.color.g, t.color.b) == (255, 255, 255) for t in tris))   # all white
-        right = [t for t in tris if t.a._x > 960]
-        self.assertEqual(len(right), 2 * 27)               # the stim: the game's syringe, 27 rectangles
-        self.assertEqual(len(tris) - len(right), 22)       # the sample: two halves of a circle, 11 triangles each
-        ys = [v._z for t in tris for v in (t.a, t.b, t.c)]
+        shown = {b.tex.split("_")[0]: b for b in self.bitmaps_now()}
+        self.assertEqual(set(shown), {"common", "stim"})
+        self.assertTrue(all((b.c.r, b.c.g, b.c.b) == (255, 255, 255) for b in shown.values()))   # all white
         f = 600 / math.tan(math.radians(50) / 2)
-        self.assertLess(max(ys), 600 - 0.3 * f / 10 + 10)  # 0.3 m above the items: below a diamond's 0.6 m
+        top = max(b.y + b.h for b in shown.values())
+        self.assertLess(top, 600 - 0.3 * f / 10 + 10)     # 0.3 m above the items: below a diamond's 0.6 m
 
-    def test_ammo_grenade_and_supply_are_the_games_icons_pixel_for_pixel(self):
-        ammo = "content/fac_helldivers/discoverables/ammo_box_discoverable_01/ammo_box_discoverable_01"
+    def test_the_supply_crate_is_its_pixel_icon_pixel_for_pixel(self):
+        crate = "content/fac_helldivers/hellpod/ammo_rack/ammo_box"
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(ammo, [unit(0, 0, 0)])
+        self.set_units(crate, [unit(0, 0, 0)])
         self.load()
         self.settle()
         tris = self.screen_tris()
@@ -844,21 +855,23 @@ class ScreenTests(Case):
         self.assertTrue(all(c == int(c) for c in coords))              # on whole pixels
         self.assertEqual({t.color.a for t in tris} - {63, 127, 191, 255}, set())   # see-through edges, in quarters
         self.assertEqual(max(v._x for t in tris for v in (t.a, t.b, t.c))
-                         - min(v._x for t in tris for v in (t.a, t.b, t.c)), 19)   # 19 px across, as made
+                         - min(v._x for t in tris for v in (t.a, t.b, t.c)), 21)   # 21 px across, as made
 
     def test_artillery_shells_get_diamonds_and_carried_packages_the_games_icon(self):
         shell = "content/objectives/obj_common/seaf_artillery/seaf_shell_regular"
         case = "content/objectives/obj_common/briefcase/briefcase"
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.fake.textures_loaded = True
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(shell, [unit(-1, 0, 0), unit(0, 50, 0)])   # 8 m: in; 58 m: past mission items' 50 m
         self.set_units(case, [unit(1, 0, 0)])
-        self.load()
+        self.load_with_chef()
         self.settle()
-        tris = self.screen_tris()
-        left = [t for t in tris if t.a._x < 960]
-        self.assertEqual(len(left), 9)                       # the shell: a diamond
-        self.assertGreater(len(tris) - len(left), 9)         # the briefcase: the game's package icon
-        self.assertTrue(all(t.color.a in (63, 127, 191, 255) for t in tris if t.a._x > 960))
+        self.assertEqual(len(self.screen_tris()), 9)          # the shell: a diamond
+        (b,) = self.bitmaps_now()                             # the briefcase: the game's package icon, sky blue
+        self.assertTrue(b.tex.startswith("package_"))
+        self.assertEqual((b.c.r, b.c.g, b.c.b), (110, 205, 255))
 
     def test_ranges_are_settings_and_zero_shows_none(self):
         self.lua.execute("""
@@ -978,9 +991,11 @@ class ScreenTests(Case):
             end
             return nil, 'not in the fake'
           end,
-          bitmap = function(tex, x, y, w, h, c)
+          bitmap = function(tex, x, y, w, h, c, layer)
             fake.bitmaps = fake.bitmaps or {}
-            fake.bitmaps[#fake.bitmaps + 1] = {tex = tex, x = x, y = y, w = w, h = h}
+            if fake.textures_loaded == true then
+              fake.bitmaps[#fake.bitmaps + 1] = {tex = tex, x = x, y = y, w = w, h = h, c = c, layer = layer}
+            end
             return fake.textures_loaded == true
           end,
         }
@@ -1007,7 +1022,7 @@ class ScreenTests(Case):
                                                   "fov": math.radians(50)})
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(MARK, [unit(0, 0, 0)])                         # a diamond, straight ahead
-        self.set_units(self.VEHICLE, [unit(4, 20, 0)])                # a pixel icon
+        self.set_units("content/fac_helldivers/hellpod/ammo_rack/ammo_box", [unit(4, 0, 0)])   # a pixel icon
         self.load_with_chef(shapes=True)
         self.settle()
         self.fake.shapes = self.lua.table()
@@ -1015,7 +1030,7 @@ class ScreenTests(Case):
         shapes = list(self.fake.shapes.values())
         tris = [s for s in shapes if s.kind == 'tri']
         rects = [s for s in shapes if s.kind == 'rect']
-        self.assertTrue(rects)                                        # the FRV's pixels
+        self.assertTrue(rects)                                        # the supply crate's pixels
         self.assertEqual({s.layer for s in shapes}, {900})
         diamond = [s for s in tris if abs(s.x - 960) < 12 and abs(s.y - 600) < 12]
         self.assertEqual(len(diamond), 9)                             # outline and lower half, at the centre
@@ -1111,8 +1126,13 @@ class ScreenTests(Case):
         self.assertNotIn("mission drawn=1", status)
         self.assertIn("samples drawn=1", status)
 
-    def test_with_chef_icons_can_come_from_the_games_textures(self):
-        self.set_options({"pickup_dots.game_textures": True})
+    def bitmaps_now(self, start=40.0):
+        """The textures drawn in one frame from now."""
+        self.fake.bitmaps = self.lua.table()
+        self.frames(1, start=start)
+        return list(self.fake.bitmaps.values())
+
+    def test_with_chef_icons_are_the_mods_own_textures_of_the_games_icons(self):
         self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
                                                   "fov": math.radians(50)})
         self.fake.textures_loaded = True
@@ -1121,13 +1141,14 @@ class ScreenTests(Case):
         self.set_units(ammo, [unit(0, 0, 0)])
         self.load_with_chef()
         self.settle()
-        last = list(self.fake.bitmaps.values())[-1]
-        self.assertEqual(last.tex, "7615d6a35c657087")
-        self.assertAlmostEqual(last.h * 144 / 192, 19, delta=1)       # the icon in it: as tall as the pixel one
-        self.assertEqual(self.screen_tris(), [])                       # no pixel icon besides
-        self.fake.textures_loaded = False                              # not loaded: the pixel icon after all
+        (b,) = self.bitmaps_now()
+        self.assertEqual(b.tex, "ammo_20")                             # the smallest baked size of at least 19 px
+        self.assertAlmostEqual(b.h, 19, delta=0.01)                    # drawn 19 px, as the 2.3.0 pixel icon
+        self.assertEqual(self.screen_tris(), [])                       # nothing else
+        self.fake.textures_loaded = False                              # can't be drawn: a diamond instead
         self.frames(5, start=30.0)
-        self.assertGreater(len(self.screen_tris()), 0)
+        self.assertEqual(len(self.screen_tris()), 9)
+        self.assertIn("icons: the texture ammo_20 could not be drawn", self.log_text())
 
     def test_with_chef_launch_codes_you_pick_up_leave_other_codes_marked(self):
         codes = "content/objectives/obj_common/generic_intel/generic_intel"
@@ -1219,25 +1240,37 @@ class ScreenTests(Case):
                                  "show_mission", "range_mission", "show_objectives", "range_objectives",
                                  "show_hellbombs", "range_hellbombs", "show_vehicles", "range_vehicles", "distance", "hide_near", "smallest_size", "opacity"])
 
-    def test_vehicles_are_sky_blue(self):
+    def test_vehicles_are_their_stratagem_icons_with_a_sky_blue_v(self):
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.fake.textures_loaded = True
+        tank = "content/fac_helldivers/vehicles/tank_storm/tank_storm"
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(self.VEHICLE, [unit(0, 20, 0)])
-        self.load()
+        self.set_units(self.VEHICLE, [unit(-4, 20, 0)])
+        self.set_units(tank, [unit(4, 20, 0)])
+        self.load_with_chef()
         self.settle()
+        self.assertEqual(sorted(b.tex.rsplit("_", 1)[0] for b in self.bitmaps_now()), ["car", "tank_storm"])
         colours = {(t.color.r, t.color.g, t.color.b) for t in self.screen_tris()}
-        self.assertEqual(colours, {(110, 205, 255)})
+        self.assertEqual(colours, {(110, 205, 255)})                   # the Vs under them
 
     HELLBOMB = "content/fac_helldivers/hellpod/hellbomb_defunct/hellbomb_defunct"
     PACKAGE = "content/objectives/obj_common/carry_data/carry_data"
 
-    def test_hellbombs_are_red_out_to_100_m(self):
+    def test_hellbombs_are_marked_out_to_100_m_their_distance_in_red(self):
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.fake.textures_loaded = True
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(self.HELLBOMB, [unit(0, 80, 0), unit(0, 120, 0)])   # 88 m: in; 128 m: past 100 m
-        self.load()
+        self.load_with_chef()
         self.settle()
-        tris = self.screen_tris()
-        self.assertGreater(len(tris), 9)                                   # an icon, not a diamond
-        self.assertEqual({(t.color.r, t.color.g, t.color.b) for t in tris}, {(255, 90, 70)})
+        (b,) = self.bitmaps_now()
+        self.assertTrue(b.tex.startswith("hellbomb_"))
+        self.assertEqual((b.c.r, b.c.g, b.c.b), (255, 255, 255))           # its own colours
+        texts = list(self.fake.texts.values())
+        self.assertEqual({t.s for t in texts}, {"88m"})                    # its distance above it, in red
+        self.assertEqual({(t.c.r, t.c.g, t.c.b) for t in texts}, {(255, 90, 70)})
         self.assertIn("hellbombs drawn=1 worn=0 far=1", self.status_now())
 
     def test_a_sample_on_a_stalk_is_marked_higher_where_the_game_shows_its_icon(self):
