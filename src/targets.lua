@@ -111,9 +111,10 @@ return {
   {group='arms', name='content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg'},
   {group='arms', name='content/fac_helldivers/vehicles/frv_heavy/armaments/frv_flamethrower/frv_flamethrower'},
   {group='arms', name='content/fac_helldivers/vehicles/tank_storm/armaments/tank_storm_maingun/tank_storm_maingun'},
-  -- 2.3.0: the supply FRV's rack (falls off when it is destroyed) and the tank's turrets (in tank.package only;
-  -- the models: 'tank_turret', one with turret_whole/turret_damaged meshes)
-  {group='arms', name='content/fac_helldivers/vehicles/frv_supply/armaments/frv_supply_rack/frv_supply_rack'},
+  -- 2.3.0: the supply FRV's gun on top, which falls off when it is destroyed (in frv_supply.package only; the
+  -- model: traverse, elevation, muzzle, gunhousing; not the supply rack at the back, which stays), and the
+  -- tank's turrets (in tank.package only; the models: 'tank_turret', one with turret_whole/turret_damaged)
+  {group='arms', hex='4df41f84668d07fb'},
   {group='arms', hex='1fa1f596769225c2'},
   {group='arms', hex='439f9e65c18567da'},
   -- 2.1.0: not drawn; where artillery shells are loaded: a shell in one is in it (LOADED_NEAR). Not the

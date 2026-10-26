@@ -210,7 +210,7 @@ class DrawingTests(Case):
         self.assertGreater(self.fake.updates, 0)
         self.assertEqual(set(self.fake.lookups.keys()), {AVATAR, MARK})
         self.assertIn("can_get: present", log)
-        self.assertIn("87 target resources: 82 named, 5 by id only (looked up if the id self-test passes)", log)
+        self.assertIn("87 target resources: 81 named, 6 by id only (looked up if the id self-test passes)", log)
         self.frames(1, start=200.0)                   # the next status line, after a full sweep
         log = self.log_text()
         self.assertIn("found: il_sarcophagus=2", log)
@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.3.0-test.8 loading", text)
+            self.assertIn("Pickup Dots 2.3.0-test.9 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -992,24 +992,24 @@ class ScreenTests(Case):
         self.assertGreater(texts[-1].y, 600)                          # above the vehicle's icon
         self.assertAlmostEqual(texts[-1].px, 1200 / 1080 * 1.6, places=6)   # a fifth of test.5's size
 
-    def test_with_chef_a_supply_frv_whose_rack_comes_off_is_taken_for_destroyed(self):
+    def test_with_chef_a_frv_whose_gun_comes_off_is_taken_for_destroyed(self):
         self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
                                                   "fov": math.radians(50)})
-        frv = "content/fac_helldivers/vehicles/frv_supply/frv_supply"
-        rack = "content/fac_helldivers/vehicles/frv_supply/armaments/frv_supply_rack/frv_supply_rack"
+        frv = "content/fac_helldivers/vehicles/frv/frv"
+        rack = "content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg"
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         body = unit(0, 20, 0)
         body.update(mx=0, my=20, mz=1.5)                    # its gun mount, on top
         self.set_units(frv, [body])
-        self.set_units(rack, [unit(0, 20, 1.6)])             # on the mount
+        self.set_units(rack, [unit(0, 20, 1.6)])             # on its mount
         self.load_with_chef()
         self.settle()
-        self.frames(120, start=40.0)                         # it stands still: how far the rack sits is kept
+        self.frames(120, start=40.0)                         # it stands still: how far the gun sits is kept
         self.assertIn("vehicles drawn=1", self.status_now())
-        lying = self.fake.units[rack][1]                    # destroyed: the rack lies beside it, still within 5 m
+        lying = self.fake.units[rack][1]                    # destroyed: the gun lies beside it, still within 5 m
         lying.x, lying.z = 1.5, 0.2
         self.frames(120, start=50.0)
-        self.assertIn("frv_supply - its weapon came off", self.log_text())
+        self.assertIn("frv - its weapon came off", self.log_text())
         self.assertEqual(self.screen_tris(), [])
 
     def test_with_chef_a_hellbomb_that_blew_up_loses_its_marker(self):

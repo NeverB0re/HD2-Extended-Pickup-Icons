@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.3.0-test.8'
+local VERSION = '2.3.0-test.9'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -70,7 +70,7 @@ local VEHICLE_BUSY = 4        -- a helldiver this close to a vehicle's origin is
 local VEHICLE_PARKED_S = 3    -- a vehicle that has not moved this long is parked: teammates beside it do not hide it
 local WRECK_NEAR = 4          -- an exosuit this close to an exosuit wreck is that wreck
 local ARMS_NEAR = 5           -- a vehicle's weapon units (group 'arms') are this close to it
--- 2.3.0: a destroyed supply FRV's rack (and maybe a tank's turret) comes off and lies beside it, still within
+-- 2.3.0: a destroyed supply FRV's gun (and maybe a tank's turret) comes off and may lie beside it, still within
 -- ARMS_NEAR. So how far its nearest weapon is from the point it is mounted at (the vehicle's 'mount' node, else
 -- its root: two points of one body, the same however it leans) is kept once it has stood still ARMS_STILL_S
 -- (weapons are read on other frames than the vehicle); off by more than ARM_MOVED while it stands still: come
