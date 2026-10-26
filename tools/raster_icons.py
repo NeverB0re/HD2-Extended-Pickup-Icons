@@ -14,6 +14,7 @@ from sheet import load, png
 
 ICON = lambda name: os.path.join(HERE, "icons", name + ".png")   # the game's images (filediver)
 RED_ONLY = lambda c: max(0.0, min(1.0, (c[0] - 70) / 150)) if c[1] < 120 else 0.0
+GREEN_ONLY = lambda c: max(0.0, min(1.0, (c[1] - 70) / 150)) if c[0] < 120 else 0.0
 ICONS = [  # name, file, coverage of a pixel (0..1), screen height in pixels
     ("ammo", ICON("ammo"), lambda c: max(0.0, min(1.0, (c[0] - 70) / 150)), 19),
     ("grenade", ICON("grenade"), lambda c: max(0.0, min(1.0, (c[0] - 70) / 150)), 22),
@@ -27,6 +28,8 @@ ICONS = [  # name, file, coverage of a pixel (0..1), screen height in pixels
     ("tank", ICON("tank"), RED_ONLY, 16),
     ("walker", ICON("walker"), RED_ONLY, 28),
     ("car", ICON("car"), RED_ONLY, 20),
+    # the hellbomb: the hellbomb backpack's stratagem icon, its green part (red is the backpack)
+    ("hellbomb", ICON("hellbomb"), GREEN_ONLY, 22),
 ]
 
 

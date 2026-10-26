@@ -6,7 +6,7 @@
 -- near: no marker this close to you (the game's own icon shows); default NEAR_ME of the group. Stims
 -- have no icon of the game's: 0, always a marker.
 -- groups: samples, supplies, mission (objective items), carry (SEAF shells, carried ammo, warheads),
--- dropoffs (where an SSSD or data goes in), controls (valves, cranks, switches), vehicles.
+-- dropoffs (where an SSSD or data goes in), controls (valves, cranks, switches), hellbombs, vehicles.
 return {
   {group='samples', hex='a9936cbe561e8180', icon='tube', worn=2.5, near=15},  -- the sample container: worn 2.5 m off
   -- its helldiver too (boarding animations swing it away)
@@ -60,6 +60,9 @@ return {
   {group='vehicles', name='content/fac_helldivers/vehicles/frv_supply/frv_supply', icon='car'},
   {group='vehicles', name='content/fac_helldivers/vehicles/tank/tank', icon='tank', height=4.2},  -- 2.2.0: higher
   {group='vehicles', name='content/fac_helldivers/vehicles/tank_storm/tank_storm', icon='tank', height=4.2},
+  -- 2.3.0: hellbombs lying about the map, shot to blow up (not the stratagem's 'hellbomb' nor the ship's
+  -- 'hellbomb_prop': this one is in the maps' packages only)
+  {group='hellbombs', name='content/fac_helldivers/hellpod/hellbomb_defunct/hellbomb_defunct', icon='hellbomb'},
   -- 0.18.0: mission controls you work by hand (valves, cranks, switches, buttons), names from filediver's hash list
   {group='controls', name='content/objectives/obj_common/oil_pump/oil_pump_valve'},
   {group='controls', name='content/objectives/obj_common/colony_relay/colony_relay_01/objective_colony_relay_antenna_crank_01'},

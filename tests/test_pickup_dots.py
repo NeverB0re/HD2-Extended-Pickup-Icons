@@ -210,7 +210,7 @@ class DrawingTests(Case):
         self.assertGreater(self.fake.updates, 0)
         self.assertEqual(set(self.fake.lookups.keys()), {AVATAR, MARK})
         self.assertIn("can_get: present", log)
-        self.assertIn("81 target resources: 78 named, 3 by id only (looked up if the id self-test passes)", log)
+        self.assertIn("82 target resources: 79 named, 3 by id only (looked up if the id self-test passes)", log)
         self.frames(1, start=200.0)                   # the next status line, after a full sweep
         log = self.log_text()
         self.assertIn("found: il_sarcophagus=2", log)
@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.2.0 loading", text)
+            self.assertIn("Pickup Dots 2.3.0-test.1 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -1050,7 +1050,7 @@ class ScreenTests(Case):
         order = [i[len("pickup_dots."):] for i in self.fake.order.values()]
         self.assertEqual(order, ["show_samples", "range_samples", "show_supplies", "range_supplies", "fade",
                                  "show_mission", "range_mission", "show_objectives", "range_objectives",
-                                 "show_vehicles", "range_vehicles", "distance", "hide_near", "smallest_size", "opacity"])
+                                 "show_hellbombs", "range_hellbombs", "show_vehicles", "range_vehicles", "distance", "hide_near", "smallest_size", "opacity"])
 
     def test_vehicles_are_sky_blue(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
@@ -1059,6 +1059,53 @@ class ScreenTests(Case):
         self.settle()
         colours = {(t.color.r, t.color.g, t.color.b) for t in self.screen_tris()}
         self.assertEqual(colours, {(110, 205, 255)})
+
+    HELLBOMB = "content/fac_helldivers/hellpod/hellbomb_defunct/hellbomb_defunct"
+    PACKAGE = "content/objectives/obj_common/carry_data/carry_data"
+
+    def test_hellbombs_are_red_out_to_100_m(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(self.HELLBOMB, [unit(0, 80, 0), unit(0, 120, 0)])   # 88 m: in; 128 m: past 100 m
+        self.load()
+        self.settle()
+        tris = self.screen_tris()
+        self.assertGreater(len(tris), 9)                                   # an icon, not a diamond
+        self.assertEqual({(t.color.r, t.color.g, t.color.b) for t in tris}, {(255, 90, 70)})
+        self.assertIn("hellbombs drawn=1 worn=0 far=1", self.status_now())
+
+    def test_backpack_items_are_sky_blue_like_vehicles(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(self.PACKAGE, [unit(0, 20, 0)])
+        self.load()
+        self.settle()
+        colours = {(t.color.r, t.color.g, t.color.b) for t in self.screen_tris()}
+        self.assertEqual(colours, {(110, 205, 255)})
+
+    def test_a_vehicle_off_screen_shows_smaller_at_the_edge_with_an_arrow(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(self.VEHICLE, [unit(0, 20, 0)])                     # ahead: on screen
+        self.load()
+        self.settle()
+        ahead = self.screen_tris()
+        self.set_units(self.VEHICLE, [unit(60, -10, 0)])                   # 60 m to the right, level with the camera
+        self.frames(5, start=40.0)
+        side = self.screen_tris()
+        self.assertTrue(side)
+        xs = [xyz(v)[0] for t in side for v in (t.a, t.b, t.c)]
+        self.assertLessEqual(max(xs), 1920)                                # on screen ...
+        self.assertGreater(min(xs), 1920 / 2)                              # ... on its right side
+        self.assertGreater(max(xs), 1920 - 40)                             # the arrow points past the margin
+        width = lambda tris: max(xyz(v)[0] for t in tris for v in (t.a, t.b, t.c)) - min(
+            xyz(v)[0] for t in tris for v in (t.a, t.b, t.c))
+        self.assertNotEqual(len(side), len(ahead))                         # no V under it: an arrow instead
+        self.assertLess(width(side), width(ahead) + 20)
+
+    def test_other_kinds_off_screen_stay_hidden(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(self.HELLBOMB, [unit(60, -10, 0)])
+        self.load()
+        self.settle()
+        self.assertEqual(self.screen_tris(), [])
 
     def set_options(self, values):
         self.fake.option_values = self.lua.table_from(values)
@@ -1133,9 +1180,9 @@ class ScreenTests(Case):
         ids = sorted(self.fake.options.keys())
         look = ["pickup_dots." + n for n in ("distance", "fade", "hide_near", "opacity", "smallest_size")]
         self.assertEqual([i for i in ids if not i.startswith(("pickup_dots.range_", "pickup_dots.show_"))], look)
-        self.assertEqual(len(ids), 10 + 5)
+        self.assertEqual(len(ids), 12 + 5)
         kinds = sorted(i[len("pickup_dots.show_"):] for i in ids if i.startswith("pickup_dots.show_"))
-        self.assertEqual(kinds, ["mission", "objectives", "samples", "supplies", "vehicles"])
+        self.assertEqual(kinds, ["hellbombs", "mission", "objectives", "samples", "supplies", "vehicles"])
         self.assertTrue(self.fake.options["pickup_dots.fade"].default)
         self.assertEqual(self.fake.options["pickup_dots.show_vehicles"].type, "toggle")
 

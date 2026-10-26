@@ -21,12 +21,12 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.2.0'
+local VERSION = '2.3.0-test.1'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
 -- ------------------------------------------------------------------ settings --
-local RANGE = {samples = 50, supplies = 25, mission = 50, objectives = 50, vehicles = 100}   -- metres, settings
+local RANGE = {samples = 50, supplies = 25, mission = 50, objectives = 50, hellbombs = 100, vehicles = 100}   -- metres, settings
 local SHOW = {}               -- a setting per kind: false hides it (nil or true: shown)
 -- The groups the settings take together (2.2.0): what you carry with mission items, drop-off points with valves.
 local SETTING_OF = {carry = 'mission', dropoffs = 'objectives', controls = 'objectives'}
@@ -53,10 +53,14 @@ local ICON_TEXTURES = {
     egg = {'460c4e527705db55', 256, 256, 45, 16, 208, 240},
 }
 local VEHICLE_RGB = {110, 205, 255}   -- vehicles: the sky blue of the HUD's support weapon icons
+local HELLBOMB_RGB = {255, 90, 70}    -- hellbombs lying about the map (2.3.0): red, they blow up when shot
+-- The icons drawn in a colour (the rest white); 2.3.0: what you carry on your back too, like the vehicles
+local ICON_RGB = {tank = VEHICLE_RGB, walker = VEHICLE_RGB, car = VEHICLE_RGB, package = VEHICLE_RGB,
+                  larva = VEHICLE_RGB, hellbomb = HELLBOMB_RGB}
 local DISTANCE_PX = 1.6       -- the loader's text size at 1080 pixels of screen (8 drew far too big)
 local BOLD = {{0, 0}, {1, 0}, {0, 1}, {1, 1}}   -- the distance drawn at each, in the loader's screen pixels
 local DOT_HEIGHT = 0.6        -- metres above the unit's origin
-local GROUP_HEIGHT = {samples = 0.3, supplies = 0.3, dropoffs = 1.8, controls = 1.2, vehicles = 3.2}
+local GROUP_HEIGHT = {samples = 0.3, supplies = 0.3, dropoffs = 1.8, controls = 1.2, hellbombs = 3, vehicles = 3.2}
                               -- icons (samples, supplies) sit lower than diamonds   -- these stand taller: the marker goes above them
 local VEHICLE_BUSY = 4        -- a helldiver this close to a vehicle's origin is in it: no marker while it moves,
                               -- and none ever while you are this close
@@ -224,6 +228,16 @@ local ICON_PIXELS = {
         {{-11, -8, -10, -7, 1}, {-11, -7, -7, -6, 4}, {-11, -6, -7, -5, 1}, {-11, -5, 11, -4, 2}, {-11, -4, 11, -1, 4}, {-11, -1, -9, 0, 3}, {-10, -8, -8, -7, 4}, {-9, -1, 5, 0, 4}, {-9, 0, -8, 1, 1}, {-9, 4, -3, 5, 3}, {-9, 5, -8, 7, 3}, {-8, -8, -7, -7, 2}, {-8, 0, 4, 1, 4}, {-8, 1, -7, 2, 1}, {-8, 5, 2, 6, 4}, {-8, 6, -4, 7, 4}, {-7, -7, -6, -6, 1}, {-7, 1, 3, 2, 4}, {-7, 2, -6, 3, 1}, {-6, 2, 2, 3, 3}, {-4, 6, -3, 7, 3}, {-3, 4, 2, 5, 1}, {-3, 6, 2, 7, 1}, {2, 2, 3, 3, 2}, {2, 5, 3, 6, 1}, {3, 1, 4, 2, 2}, {4, 0, 5, 1, 2}, {5, -1, 11, 0, 3}, {6, -7, 7, -6, 1}, {7, -8, 8, -7, 2}, {7, -7, 11, -6, 4}, {7, -6, 11, -5, 1}, {8, -8, 10, -7, 4}, {10, -8, 11, -7, 1}},
         {{-10, -8, -9, -7, 1}, {-10, -7, -6, -6, 4}, {-10, -6, -6, -5, 1}, {-10, -5, 11, -4, 2}, {-10, -4, 11, -1, 4}, {-10, -1, -8, 0, 3}, {-9, -8, -7, -7, 4}, {-8, -1, 6, 0, 4}, {-8, 0, -7, 1, 1}, {-8, 4, -3, 5, 3}, {-8, 5, 2, 6, 4}, {-8, 6, -3, 7, 4}, {-7, -8, -6, -7, 2}, {-7, 0, 4, 1, 4}, {-7, 1, -6, 2, 1}, {-6, 1, 3, 2, 4}, {-6, 2, -5, 3, 1}, {-5, 2, 3, 3, 3}, {-3, 4, -2, 5, 2}, {-3, 6, -2, 7, 2}, {-2, 4, 2, 5, 1}, {-2, 6, 3, 7, 1}, {2, 5, 3, 6, 2}, {3, 1, 4, 2, 3}, {4, 0, 5, 1, 3}, {6, -1, 11, 0, 3}, {7, -8, 8, -7, 2}, {7, -7, 11, -6, 4}, {7, -6, 11, -5, 1}, {8, -8, 10, -7, 4}, {10, -8, 11, -7, 1}},
         {{-10, -7, -9, -6, 1}, {-10, -6, -6, -5, 4}, {-10, -4, 10, -3, 3}, {-10, -3, 10, 0, 4}, {-10, 0, -8, 1, 1}, {-9, -7, -7, -6, 4}, {-8, 0, -7, 1, 3}, {-8, 4, -4, 5, 3}, {-8, 5, 2, 6, 4}, {-8, 6, -3, 7, 4}, {-7, -7, -6, -6, 1}, {-7, 0, 4, 1, 4}, {-7, 1, -6, 2, 3}, {-6, 1, 3, 2, 4}, {-6, 2, -5, 3, 3}, {-5, 2, 2, 3, 4}, {-4, 4, -3, 5, 2}, {-3, 6, -2, 7, 2}, {-2, 6, 2, 7, 1}, {2, 2, 3, 3, 2}, {3, 1, 4, 2, 2}, {4, 0, 5, 1, 2}, {5, 0, 10, 1, 1}, {6, -7, 7, -6, 1}, {6, -6, 10, -5, 4}, {7, -7, 9, -6, 4}, {9, -7, 10, -6, 1}},
+    },
+    hellbomb = {
+        {{-10, -9, -9, -8, 2}, {-9, -10, -8, -9, 3}, {-9, -9, -7, -8, 3}, {-8, -11, -7, -10, 3}, {-8, -10, 8, -9, 4}, {-8, -8, -7, -6, 1}, {-8, 0, -7, 1, 1}, {-7, -11, 7, -10, 4}, {-7, -9, 7, -8, 4}, {-7, -8, -6, -7, 4}, {-7, -7, -6, -6, 2}, {-7, -1, -6, 0, 1}, {-7, 0, -5, 1, 4}, {-7, 1, -6, 2, 1}, {-7, 6, -6, 7, 1}, {-6, -8, -4, -7, 2}, {-6, -1, -4, 0, 3}, {-6, 1, -5, 2, 2}, {-6, 4, -5, 5, 1}, {-6, 5, 5, 6, 4}, {-6, 6, 6, 7, 4}, {-6, 7, -5, 8, 3}, {-5, -7, -4, -4, 2}, {-5, -4, -4, -3, 1}, {-5, 0, -4, 1, 2}, {-5, 1, -4, 2, 3}, {-5, 4, -2, 5, 2}, {-5, 7, 5, 8, 4}, {-5, 8, -4, 9, 1}, {-4, -8, 4, -7, 4}, {-4, -7, -2, -6, 4}, {-4, -6, -3, -5, 4}, {-4, -5, -3, -4, 3}, {-4, -1, 4, 0, 4}, {-4, 0, -3, 1, 1}, {-4, 1, 4, 2, 4}, {-4, 8, 4, 9, 4}, {-4, 9, -3, 10, 1}, {-3, -6, -2, -5, 3}, {-3, 9, -2, 10, 3}, {-2, -7, -1, -6, 3}, {-2, 2, -1, 3, 1}, {-2, 3, -1, 4, 2}, {-2, 4, 1, 5, 4}, {-2, 9, 2, 10, 4}, {-2, 10, -1, 11, 2}, {-1, -7, 1, -6, 4}, {-1, -6, 0, -5, 4}, {-1, -5, 1, -4, 3}, {-1, -4, 0, -1, 3}, {-1, 0, 0, 1, 3}, {-1, 2, 1, 4, 4}, {-1, 10, 1, 11, 4}, {0, -6, 1, -5, 3}, {0, -4, 1, -1, 2}, {0, 0, 1, 1, 2}, {1, -7, 2, -6, 3}, {1, 2, 2, 4, 1}, {1, 4, 2, 5, 3}, {1, 10, 2, 11, 1}, {2, -7, 4, -6, 4}, {2, -6, 3, -5, 3}, {2, 4, 5, 5, 2}, {2, 9, 3, 10, 3}, {3, -6, 4, -5, 4}, {3, -5, 4, -4, 3}, {3, 0, 4, 1, 1}, {3, 9, 4, 10, 1}, {4, -8, 5, -4, 2}, {4, -4, 5, -3, 1}, {4, -1, 5, 0, 3}, {4, 0, 5, 1, 2}, {4, 1, 5, 2, 3}, {4, 8, 5, 9, 1}, {5, -8, 6, -7, 3}, {5, -1, 6, 0, 2}, {5, 0, 7, 1, 4}, {5, 1, 6, 2, 2}, {5, 5, 6, 6, 3}, {5, 7, 6, 8, 3}, {6, -8, 7, -7, 4}, {6, -7, 7, -6, 3}, {6, -1, 7, 0, 1}, {6, 1, 7, 2, 1}, {7, -11, 8, -10, 3}, {7, -9, 9, -8, 3}, {7, -8, 8, -6, 1}, {7, 0, 8, 1, 1}, {8, -10, 9, -9, 3}, {9, -9, 10, -8, 2}},
+        {{-9, -10, -8, -9, 1}, {-9, -9, -7, -8, 2}, {-8, -11, -7, -10, 1}, {-8, -10, -7, -9, 3}, {-7, -11, -6, -10, 3}, {-7, -10, 8, -9, 4}, {-7, -9, -6, -8, 3}, {-7, -8, -6, -6, 2}, {-7, -1, -6, 1, 1}, {-6, -11, 7, -10, 4}, {-6, -9, 7, -8, 4}, {-6, -8, -5, -7, 4}, {-6, -7, -5, -6, 1}, {-6, -1, -5, 1, 3}, {-6, 4, -5, 5, 1}, {-6, 5, -5, 6, 2}, {-6, 6, -5, 7, 1}, {-5, -8, -4, -7, 1}, {-5, -2, -3, -1, 1}, {-5, -1, -4, 1, 4}, {-5, 4, 5, 5, 4}, {-5, 5, 6, 7, 4}, {-5, 7, -4, 8, 1}, {-4, -8, -3, -4, 3}, {-4, -1, -3, 1, 3}, {-4, 1, -3, 2, 1}, {-4, 3, -2, 4, 1}, {-4, 7, -3, 8, 3}, {-3, -8, 4, -7, 4}, {-3, -7, -1, -6, 4}, {-3, -6, -2, -5, 4}, {-3, -5, -2, -4, 1}, {-3, -2, 0, 1, 2}, {-3, 1, -1, 2, 2}, {-3, 7, 4, 8, 4}, {-3, 8, -2, 9, 2}, {-2, -6, -1, -5, 1}, {-2, 3, -1, 4, 2}, {-2, 8, -1, 9, 3}, {-1, -7, 0, -6, 3}, {-1, -6, 0, -5, 2}, {-1, -5, 0, -3, 1}, {-1, 1, 0, 3, 3}, {-1, 3, 2, 4, 4}, {-1, 8, 2, 9, 4}, {-1, 9, 0, 10, 3}, {0, -7, 1, 3, 4}, {0, 9, 1, 10, 4}, {1, -7, 2, -6, 3}, {1, -6, 3, -5, 1}, {1, -2, 4, 1, 2}, {1, 1, 2, 2, 3}, {1, 2, 2, 3, 2}, {1, 9, 2, 10, 3}, {2, -7, 4, -6, 4}, {2, 1, 4, 2, 2}, {2, 3, 5, 4, 1}, {2, 8, 3, 9, 3}, {3, -6, 4, -5, 4}, {3, -5, 4, -4, 1}, {3, 8, 4, 9, 2}, {4, -8, 5, -4, 3}, {4, -2, 5, -1, 1}, {4, -1, 5, 1, 3}, {4, 1, 5, 2, 1}, {4, 7, 5, 8, 2}, {5, -8, 6, -7, 1}, {5, -1, 6, 1, 4}, {5, 4, 6, 5, 3}, {6, -8, 7, -7, 4}, {6, -7, 8, -6, 1}, {6, -1, 7, 1, 3}, {6, 5, 7, 6, 1}, {7, -11, 8, -10, 3}, {7, -9, 8, -8, 3}, {7, -8, 8, -7, 2}, {7, -1, 8, 1, 1}, {8, -10, 9, -9, 3}, {8, -9, 10, -8, 2}},
+        {{-9, -9, -8, -8, 1}, {-9, -8, -7, -7, 2}, {-8, -10, -7, -9, 1}, {-8, -9, 8, -8, 4}, {-7, -10, 6, -9, 4}, {-7, -8, -6, -7, 3}, {-7, -7, -6, -6, 2}, {-7, -6, -6, -5, 1}, {-7, 0, -6, 1, 2}, {-6, -8, -5, -7, 4}, {-6, -7, -5, -6, 3}, {-6, -1, -5, 0, 2}, {-6, 0, -5, 1, 4}, {-6, 1, -5, 2, 1}, {-6, 4, -5, 5, 1}, {-6, 5, -5, 7, 2}, {-5, -8, -4, -7, 3}, {-5, -7, -4, -6, 1}, {-5, -1, -3, 0, 3}, {-5, 0, -4, 1, 3}, {-5, 1, -4, 2, 2}, {-5, 4, -4, 5, 3}, {-5, 5, 5, 7, 4}, {-5, 7, -4, 8, 1}, {-4, -8, 6, -7, 4}, {-4, -7, 4, -6, 4}, {-4, -6, -2, -5, 4}, {-4, -5, -3, -4, 4}, {-4, -4, -3, -3, 2}, {-4, 0, -3, 1, 1}, {-4, 1, -2, 2, 3}, {-4, 4, 4, 5, 4}, {-4, 7, 3, 8, 4}, {-4, 8, -3, 9, 1}, {-3, -5, -2, -4, 2}, {-3, -1, 3, 0, 4}, {-3, 8, -2, 9, 3}, {-2, -6, -1, -5, 2}, {-2, 1, 2, 2, 4}, {-2, 3, -1, 4, 2}, {-2, 8, 2, 9, 4}, {-2, 9, -1, 10, 1}, {-1, -6, 0, -5, 4}, {-1, -5, 1, -4, 3}, {-1, -4, 0, -3, 3}, {-1, -3, 1, -1, 2}, {-1, 0, 0, 1, 3}, {-1, 2, 1, 4, 4}, {-1, 9, 1, 10, 4}, {0, -6, 1, -5, 3}, {0, -4, 1, -3, 2}, {0, 0, 1, 1, 2}, {1, -6, 2, -5, 2}, {1, 3, 2, 4, 1}, {1, 9, 2, 10, 1}, {2, -6, 4, -5, 4}, {2, -5, 3, -4, 2}, {2, 0, 3, 1, 1}, {2, 1, 4, 2, 3}, {2, 8, 3, 9, 3}, {3, -5, 4, -4, 4}, {3, -4, 4, -3, 2}, {3, -1, 5, 0, 3}, {3, 0, 4, 1, 2}, {3, 7, 4, 8, 3}, {3, 8, 4, 9, 1}, {4, -7, 5, -6, 1}, {4, 0, 5, 1, 3}, {4, 1, 5, 2, 2}, {4, 4, 5, 5, 3}, {4, 7, 5, 8, 1}, {5, -7, 6, -6, 3}, {5, -1, 6, 0, 1}, {5, 0, 6, 1, 4}, {5, 1, 6, 2, 1}, {5, 5, 6, 6, 2}, {5, 6, 6, 7, 1}, {6, -10, 7, -9, 3}, {6, -8, 7, -7, 3}, {6, -7, 7, -6, 2}, {6, -6, 7, -5, 1}, {6, 0, 7, 1, 2}, {7, -10, 8, -9, 1}, {7, -8, 8, -7, 2}, {8, -9, 9, -7, 1}},
+        {{-8, -9, -7, -8, 1}, {-8, -8, -6, -7, 1}, {-7, -10, -6, -9, 1}, {-7, -9, 8, -8, 4}, {-6, -10, 7, -9, 4}, {-6, -8, -5, -6, 3}, {-6, -6, -5, -5, 1}, {-6, -1, -5, 0, 2}, {-6, 0, -5, 1, 1}, {-5, -8, -4, -7, 4}, {-5, -7, -4, -6, 2}, {-5, -1, -4, 0, 4}, {-5, 0, -2, 1, 3}, {-5, 4, -4, 6, 3}, {-4, -8, -3, -7, 3}, {-4, -7, -3, -3, 1}, {-4, -2, -2, -1, 1}, {-4, -1, -3, 0, 3}, {-4, 3, -3, 4, 2}, {-4, 4, 5, 6, 4}, {-4, 6, -3, 7, 2}, {-3, -8, 4, -6, 4}, {-3, -6, -2, -5, 4}, {-3, -5, -2, -4, 3}, {-3, -1, 0, 0, 2}, {-3, 1, -1, 2, 1}, {-3, 3, -1, 4, 3}, {-3, 6, 4, 7, 4}, {-3, 7, -2, 8, 2}, {-2, -6, -1, -5, 3}, {-2, -2, 0, -1, 2}, {-2, 0, -1, 1, 2}, {-2, 7, 3, 8, 4}, {-1, -6, 0, -5, 2}, {-1, -5, 0, -3, 1}, {-1, 0, 0, 3, 3}, {-1, 3, 2, 4, 4}, {-1, 8, 0, 9, 3}, {0, -6, 1, 3, 4}, {0, 8, 1, 9, 4}, {1, -6, 2, -5, 1}, {1, -2, 3, -1, 2}, {1, -1, 4, 0, 2}, {1, 0, 2, 3, 2}, {1, 8, 2, 9, 2}, {2, -6, 3, -5, 3}, {2, 0, 4, 1, 3}, {2, 1, 4, 2, 1}, {2, 3, 4, 4, 3}, {3, -6, 4, -5, 4}, {3, -5, 4, -4, 3}, {3, -2, 5, -1, 1}, {3, 7, 4, 8, 2}, {4, -8, 5, -7, 3}, {4, -7, 5, -3, 1}, {4, -1, 5, 0, 3}, {4, 0, 5, 1, 4}, {4, 3, 5, 4, 2}, {4, 6, 5, 7, 2}, {5, -8, 6, -7, 4}, {5, -7, 6, -6, 2}, {5, -1, 6, 0, 4}, {5, 0, 6, 1, 3}, {5, 4, 6, 6, 2}, {6, -8, 7, -6, 3}, {6, -6, 7, -5, 1}, {6, -1, 7, 1, 1}, {7, -10, 8, -9, 1}, {7, -8, 9, -7, 1}, {8, -9, 9, -8, 1}},
+        {{-8, -8, -7, -7, 2}, {-8, -7, -6, -6, 1}, {-7, -9, -6, -8, 2}, {-7, -8, 7, -7, 4}, {-6, -9, 6, -8, 4}, {-6, -7, -4, -6, 4}, {-6, -6, -5, -5, 3}, {-6, -1, -5, 0, 1}, {-6, 0, -5, 1, 3}, {-5, -6, -4, -5, 1}, {-5, -1, -4, 0, 2}, {-5, 0, -4, 1, 4}, {-5, 1, -4, 2, 1}, {-5, 4, -4, 5, 3}, {-5, 5, 4, 6, 4}, {-5, 6, -4, 7, 1}, {-4, -7, -3, -6, 3}, {-4, -6, -3, -3, 2}, {-4, -1, -1, 0, 3}, {-4, 0, -3, 2, 2}, {-4, 3, -3, 4, 1}, {-4, 4, 4, 5, 4}, {-4, 6, -3, 7, 3}, {-3, -7, 3, -5, 4}, {-3, -5, -2, -4, 4}, {-3, -4, -2, -3, 1}, {-3, 0, -1, 1, 1}, {-3, 1, -1, 2, 3}, {-3, 3, -2, 4, 2}, {-3, 6, 3, 7, 4}, {-3, 7, -2, 8, 3}, {-2, -5, -1, -4, 1}, {-2, 3, -1, 4, 3}, {-2, 7, 2, 8, 4}, {-2, 8, -1, 9, 1}, {-1, -5, 1, -4, 3}, {-1, -4, 0, -3, 3}, {-1, -3, 1, -2, 2}, {-1, -2, 0, -1, 2}, {-1, -1, 1, 0, 4}, {-1, 0, 0, 1, 3}, {-1, 1, 1, 4, 4}, {-1, 8, 1, 9, 4}, {0, -4, 1, -3, 2}, {0, -2, 1, -1, 1}, {0, 0, 1, 1, 2}, {1, -5, 2, -4, 1}, {1, -1, 4, 0, 3}, {1, 0, 3, 1, 1}, {1, 1, 2, 2, 3}, {1, 3, 3, 4, 2}, {1, 8, 2, 9, 1}, {2, -5, 3, -4, 4}, {2, -4, 3, -3, 1}, {2, 1, 4, 2, 2}, {2, 7, 3, 8, 3}, {3, -7, 4, -6, 3}, {3, -6, 4, -3, 2}, {3, 0, 4, 1, 2}, {3, 3, 4, 4, 1}, {3, 6, 4, 7, 3}, {4, -7, 5, -6, 4}, {4, -6, 5, -5, 1}, {4, -1, 5, 0, 2}, {4, 0, 5, 1, 4}, {4, 1, 5, 2, 1}, {4, 4, 5, 6, 3}, {4, 6, 5, 7, 1}, {5, -7, 6, -5, 3}, {5, 0, 6, 1, 3}, {6, -9, 7, -8, 1}, {6, -7, 8, -6, 1}, {7, -8, 8, -7, 1}},
+        {{-7, -8, -6, -7, 2}, {-6, -9, -5, -8, 2}, {-6, -8, 7, -7, 4}, {-5, -9, 6, -8, 4}, {-5, -7, -4, -6, 4}, {-5, -6, -4, -5, 2}, {-5, -1, -2, 0, 3}, {-5, 0, -4, 1, 2}, {-5, 4, -4, 5, 1}, {-4, -7, -3, -6, 3}, {-4, 0, 0, 1, 3}, {-4, 3, -3, 4, 3}, {-4, 4, 5, 5, 4}, {-4, 5, -3, 6, 2}, {-3, -7, 3, -6, 4}, {-3, -6, -1, -5, 4}, {-3, -5, -2, -4, 4}, {-3, -4, -2, -3, 2}, {-3, -2, 0, -1, 1}, {-3, 3, 4, 4, 4}, {-3, 5, 4, 6, 4}, {-3, 6, -2, 7, 1}, {-2, -5, -1, -4, 2}, {-2, -1, 0, 0, 2}, {-2, 6, 3, 7, 4}, {-1, -6, 0, -5, 3}, {-1, -5, 0, -4, 1}, {-1, 1, 0, 2, 2}, {-1, 2, 0, 3, 3}, {-1, 7, 0, 8, 3}, {0, -6, 1, -3, 4}, {0, -3, 1, -2, 3}, {0, -2, 1, 3, 4}, {0, 7, 1, 8, 4}, {1, -6, 2, -5, 3}, {1, -2, 4, -1, 1}, {1, -1, 3, 0, 2}, {1, 0, 5, 1, 3}, {1, 1, 2, 2, 2}, {1, 2, 2, 3, 3}, {1, 7, 2, 8, 2}, {2, -6, 3, -5, 4}, {2, -5, 3, -4, 2}, {3, -7, 5, -6, 3}, {3, -6, 4, -4, 3}, {3, -4, 4, -3, 2}, {3, -1, 4, 0, 3}, {3, 6, 4, 7, 1}, {4, -1, 5, 0, 4}, {4, 3, 5, 4, 3}, {4, 5, 5, 6, 2}, {5, -7, 6, -6, 4}, {5, -6, 6, -5, 3}, {5, -1, 6, 0, 2}, {5, 0, 6, 1, 1}, {6, -9, 7, -8, 2}, {7, -8, 8, -7, 2}},
+        {{-7, -7, -6, -6, 2}, {-6, -8, -5, -7, 3}, {-6, -7, 6, -6, 4}, {-6, -6, -5, -5, 1}, {-5, -8, 5, -7, 4}, {-5, -6, -4, -5, 4}, {-5, -5, -3, -4, 1}, {-5, -1, -4, 0, 1}, {-5, 0, -4, 1, 4}, {-5, 4, -4, 5, 1}, {-4, -6, -3, -5, 2}, {-4, -4, -3, -3, 1}, {-4, -1, -3, 0, 2}, {-4, 0, -3, 1, 3}, {-4, 1, -3, 2, 1}, {-4, 3, -1, 4, 3}, {-4, 4, 4, 5, 4}, {-4, 5, -3, 6, 3}, {-3, -6, 3, -5, 4}, {-3, -5, -2, -4, 4}, {-3, -4, -2, -3, 3}, {-3, -1, 3, 0, 3}, {-3, 0, -2, 1, 2}, {-3, 1, -1, 2, 2}, {-3, 5, 3, 6, 4}, {-3, 6, -2, 7, 3}, {-2, -5, 2, -4, 3}, {-2, 0, -1, 1, 1}, {-2, 6, 2, 7, 4}, {-2, 7, -1, 8, 1}, {-1, -4, 0, -3, 3}, {-1, -3, 1, -2, 2}, {-1, -2, 0, -1, 2}, {-1, 0, 0, 1, 3}, {-1, 1, 0, 2, 4}, {-1, 2, 1, 4, 4}, {-1, 7, 0, 8, 4}, {0, -4, 1, -3, 2}, {0, -2, 1, -1, 1}, {0, 0, 1, 1, 2}, {0, 1, 1, 2, 3}, {0, 7, 1, 8, 3}, {1, 0, 2, 1, 1}, {1, 1, 3, 2, 2}, {1, 3, 3, 4, 3}, {1, 7, 2, 8, 1}, {2, -5, 3, -4, 4}, {2, -4, 3, -3, 3}, {2, -3, 3, -2, 1}, {2, 0, 3, 1, 2}, {2, 6, 3, 7, 2}, {3, -6, 4, -5, 2}, {3, -1, 4, 0, 2}, {3, 0, 5, 1, 3}, {3, 1, 4, 2, 1}, {3, 3, 4, 4, 2}, {3, 5, 4, 6, 3}, {4, -6, 5, -5, 4}, {4, -5, 5, -4, 2}, {4, -1, 5, 0, 1}, {4, 4, 5, 5, 1}, {5, -8, 6, -7, 2}, {6, -7, 7, -6, 2}},
+        {{-6, -7, -5, -6, 2}, {-5, -8, -4, -7, 3}, {-5, -7, 6, -6, 4}, {-5, -6, -4, -4, 1}, {-5, -1, -4, 0, 1}, {-4, -8, 5, -7, 4}, {-4, -6, -3, -5, 3}, {-4, -1, -2, 0, 3}, {-4, 0, -3, 1, 2}, {-4, 3, -3, 4, 2}, {-4, 4, -3, 5, 1}, {-3, -6, -2, -3, 2}, {-3, 0, 0, 1, 3}, {-3, 2, -1, 3, 2}, {-3, 3, 4, 5, 4}, {-3, 5, -2, 6, 1}, {-2, -6, 3, -5, 4}, {-2, -5, -1, -4, 4}, {-2, -4, -1, -3, 1}, {-2, -2, 0, -1, 1}, {-2, -1, 0, 0, 2}, {-2, 5, 3, 6, 4}, {-1, -5, 0, -4, 2}, {-1, 1, 0, 2, 1}, {-1, 2, 0, 3, 3}, {-1, 6, 0, 7, 2}, {0, -5, 1, -3, 4}, {0, -3, 1, -1, 3}, {0, -1, 1, 3, 4}, {0, 6, 1, 7, 4}, {1, -5, 2, -4, 2}, {1, -2, 3, -1, 1}, {1, -1, 3, 0, 2}, {1, 0, 4, 1, 3}, {1, 1, 2, 2, 1}, {1, 2, 2, 3, 3}, {1, 6, 2, 7, 2}, {2, -5, 3, -4, 4}, {2, -4, 3, -3, 1}, {2, 2, 4, 3, 2}, {3, -6, 4, -3, 2}, {3, -1, 5, 0, 3}, {4, -6, 5, -5, 3}, {4, 0, 5, 1, 2}, {4, 3, 5, 5, 1}, {5, -8, 6, -7, 3}, {5, -6, 6, -4, 1}, {6, -7, 7, -6, 2}},
     },
 }
 
@@ -778,7 +792,8 @@ local function collect_dots(now)
                     c.worn = c.worn + 1
                 elseif keys[i].taken and check_taken(p, now) then
                     c.worn = c.worn + 1
-                elseif carried and group ~= 'dropoffs' and group ~= 'controls' then   -- never worn; a teammate may stand at it
+                elseif carried and group ~= 'dropoffs' and group ~= 'controls' and group ~= 'hellbombs' then
+                    -- (those never worn; a teammate may stand at it)
                     c.worn = c.worn + 1
                 elseif (group == 'mission' or group == 'carry') and near(dropoffs, p, DELIVERED_NEAR) then
                     c.worn = c.worn + 1
@@ -997,6 +1012,8 @@ local FULL_SIZE_M = 10
 local SMALLEST = 0.7          -- the smallest of the game icons' pixel sizes (ICON_PIXELS); smaller: scaled from it
 local FADE_LEAST = 0.2
 local POINTER = {gap = 3, half = 9, slope = 0.5, line = 2}   -- the wide V under a vehicle's icon, pixels at full size
+-- A vehicle off screen (2.3.0): at the screen's edge, this much smaller, with an arrow toward it
+local EDGE = {margin = 40, size = 0.7, gap = 4, long = 9, half = 6}   -- pixels at full size (margin: from the edge)
 -- 0 up to FULL_SIZE_M away, 1 at the edge of its kind's range
 local function far_share(d)
     local range = RANGE[setting_of(d[6])] or 0
@@ -1021,6 +1038,20 @@ local function project(cam, d, width, height, f)
     end
     -- whole pixels: between them the thin outline smears differently each frame and seems to waver
     return math.floor(sx + 0.5), math.floor(sy + 0.5)
+end
+
+-- Where an off-screen dot shows at the screen's edge (pixels, as project) and the way to it (a unit vector):
+-- the side it is to, seen from the middle of the screen; straight behind, the bottom.
+local function edge(cam, d, width, height)
+    local p = {d[1] - cam.translation[1], d[2] - cam.translation[2], d[3] - cam.translation[3]}
+    local x, y = dot3(p, cam.right), dot3(p, cam.up)
+    local len = math.sqrt(x * x + y * y)
+    if len < 1e-6 then x, y, len = 0, -1, 1 end
+    x, y = x / len, y / len
+    local hw, hh = width / 2 - EDGE.margin, height / 2 - EDGE.margin
+    local t = math.min(math.abs(x) > 1e-6 and hw / math.abs(x) or math.huge,
+                       math.abs(y) > 1e-6 and hh / math.abs(y) or math.huge)
+    return math.floor(width / 2 + x * t + 0.5), math.floor(height / 2 + y * t + 0.5), {x, y}
 end
 
 -- Returns true when the screen GUI handled this frame, false to draw in the 3D scene instead.
@@ -1113,6 +1144,21 @@ local function screen_draw(world, world_id, dots)
                 tri(sr.Vector3(p1[1], 0, p1[2]), sr.Vector3(p2[1], 0, p2[2] + t), sr.Vector3(p1[1], 0, p1[2] + t))
             end
         end
+        -- beside an off-screen vehicle's icon, an arrow toward the vehicle
+        local function arrow(list, sx, sy, size, dir)
+            if list.reach == nil then   -- how far the icon reaches from its middle, worked out once
+                local reach = 0
+                for _, r in ipairs(list) do
+                    reach = math.max(reach, math.abs(r[1]), math.abs(r[2]), math.abs(r[3]), math.abs(r[4]))
+                end
+                list.reach = reach
+            end
+            local from = list.reach * (size < SMALLEST and size / SMALLEST or 1) + EDGE.gap * size
+            local bx, by = sx + dir[1] * from, sy + dir[2] * from
+            local tip = sr.Vector3(bx + dir[1] * EDGE.long * size, 0, by + dir[2] * EDGE.long * size)
+            local w = EDGE.half * size
+            tri(sr.Vector3(bx - dir[2] * w, 0, by + dir[1] * w), tip, sr.Vector3(bx + dir[2] * w, 0, by - dir[1] * w))
+        end
         local function icon(shape, sx, sy, size)
             local color = ink
             local k = shape.scale * size
@@ -1163,7 +1209,8 @@ local function screen_draw(world, world_id, dots)
                 local k = full.span * size / (t[7] - t[5])          -- texture pixels to screen pixels
                 local cx, cy = (t[4] + t[6]) / 2, (t[5] + t[7]) / 2  -- the icon's centre in the texture
                 local x0, y1 = sx - cx * k, sy + cy * k              -- the texture's left and top edge
-                local c = CHEF.color(255, 255, 255, math.floor(255 * opacity))
+                local rgb = tint or {255, 255, 255}
+                local c = CHEF.color(rgb[1], rgb[2], rgb[3], math.floor(255 * opacity))
                 return CHEF.bitmap(t[1], x0 * w / width, (y1 - t[3] * k) * h / height,
                     t[2] * k * w / width, t[3] * k * h / height, c)
             end)
@@ -1185,10 +1232,12 @@ local function screen_draw(world, world_id, dots)
         local CORNERS = {{0, 1}, {1, 0}, {0, -1}, {-1, 0}}        -- top, right, bottom, left
         for _, d in ipairs(dots) do
             local sx, sy = project(cam, d, width, height, f)
-            local size = sx and size_of(d)
+            local dir   -- a vehicle off screen: the way to it
+            if not sx and d[6] == 'vehicles' then sx, sy, dir = edge(cam, d, width, height) end
+            local size = sx and size_of(d) * (dir and EDGE.size or 1)
             if sx then
                 opacity = opacity_of(d)
-                tint = d[6] == 'vehicles' and VEHICLE_RGB or nil
+                tint = d[7] and ICON_RGB[d[7]] or nil
                 ink = ink_of(255 * opacity)
                 if d[6] == 'samples' or d[6] == 'supplies' then sx, sy = sx + ICON_OFFSET[1], sy + ICON_OFFSET[2] end
             end
@@ -1200,7 +1249,11 @@ local function screen_draw(world, world_id, dots)
                 if not texture_icon(d[7], sizes[1], sx, sy, size) then
                     pixels(list, sx, sy, k)
                 end
-                if d[6] == 'vehicles' then pointer(list, sx, sy, size) end
+                if dir then
+                    arrow(list, sx, sy, size, dir)
+                elseif d[6] == 'vehicles' then
+                    pointer(list, sx, sy, size)
+                end
                 distance_above(sx, sy + top_of(list, k), d)
             elseif sx and d[7] and ICON_SHAPES[d[7]] then
                 local shape = ICON_SHAPES[d[7]]
@@ -1460,7 +1513,7 @@ local function tick()
         if #players > 0 then
             log('found: ' .. found_summary())
             local parts = {}
-            for _, group in ipairs({'samples', 'supplies', 'mission', 'carry', 'dropoffs', 'controls', 'vehicles'}) do
+            for _, group in ipairs({'samples', 'supplies', 'mission', 'carry', 'dropoffs', 'controls', 'hellbombs', 'vehicles'}) do
                 local c = last_counts[group]
                 if c then parts[#parts + 1] = string.format('%s drawn=%d worn=%d far=%d', group, c.drawn, c.worn, c.far) end
             end
@@ -1480,6 +1533,7 @@ local ROWS = {   -- {id, kind ('show', 'range' with its most metres, or a LOOK f
     {'fade', 'toggle', 'fade'},
     {'show_mission', 'show', 'mission'}, {'range_mission', 'range', 'mission', 150},
     {'show_objectives', 'show', 'objectives'}, {'range_objectives', 'range', 'objectives', 150},
+    {'show_hellbombs', 'show', 'hellbombs'}, {'range_hellbombs', 'range', 'hellbombs', 300},
     {'show_vehicles', 'show', 'vehicles'}, {'range_vehicles', 'range', 'vehicles', 300},
     {'distance', 'toggle', 'distance'},
     {'hide_near', 'toggle', 'hide_near'},
@@ -1498,6 +1552,8 @@ local TEXTS = {
     range_mission = {'Mission items distance (m)', 'Marked within this many metres of you. 0 shows none.'},
     show_objectives = {'Show mission objectives (drop-off points, valves, cranks)', 'Drop-off points, cargo containers, valves and cranks.'},
     range_objectives = {'Mission objectives distance (m)', 'Marked within this many metres of you. 0 shows none.'},
+    show_hellbombs = {'Show hellbombs (the ones that blow up when shot)', 'Hellbombs lying about the map, which blow up when shot.'},
+    range_hellbombs = {'Hellbombs distance (m)', 'Marked within this many metres of you. 0 shows none.'},
     show_vehicles = {'Show vehicles (exosuits, FRVs, tanks)', 'Exosuits, FRVs and tanks.'},
     range_vehicles = {'Vehicles distance (m)', 'Marked within this many metres of you. 0 shows none.'},
     distance = {'Show distance above vehicles', 'How far away each marked vehicle is.'},
@@ -1609,7 +1665,8 @@ local function install()
     end
     M.status = 'running'
     log('running: ranges samples=' .. RANGE.samples .. ' supplies=' .. RANGE.supplies
-        .. ' mission=' .. RANGE.mission .. ' objectives=' .. RANGE.objectives .. ' vehicles=' .. RANGE.vehicles)
+        .. ' mission=' .. RANGE.mission .. ' objectives=' .. RANGE.objectives .. ' hellbombs=' .. RANGE.hellbombs
+        .. ' vehicles=' .. RANGE.vehicles)
     return M
 end
 
