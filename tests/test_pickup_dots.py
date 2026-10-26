@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.3.0-test.10 loading", text)
+            self.assertIn("Pickup Dots 2.3.0-test.11 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -1087,6 +1087,20 @@ class ScreenTests(Case):
         self.frames(80, start=40.0)
         self.assertEqual(self.log_text().count("taken: "), 1)
         self.assertEqual(len(self.screen_points()), 1)                 # the other codes keep their marker
+
+    def test_with_chef_launch_codes_with_no_visible_mesh_left_are_taken_by_anyone(self):
+        codes = "content/objectives/obj_common/generic_intel/generic_intel"
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(codes, [unit(5, 5, 0)])                        # far from you: no key, no teammate
+        self.load_with_chef()
+        self.settle()
+        self.assertEqual(len(self.screen_points()), 1)
+        self.fake.units[codes][1].blown = True                         # picked up somewhere: its meshes gone
+        self.frames(5, start=40.0)
+        self.assertEqual(self.screen_tris(), [])
+        self.assertIn("is taken for picked up (no visible mesh left)", self.log_text())
 
     def test_with_chef_a_crank_that_turned_keeps_its_marker(self):
         crank = "content/objectives/obj_common/colony_relay/colony_relay_01/objective_colony_relay_antenna_crank_01"

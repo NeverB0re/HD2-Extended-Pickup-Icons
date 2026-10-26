@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.3.0-test.10'
+local VERSION = '2.3.0-test.11'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -627,6 +627,8 @@ end
 local PROBE = {
     tank = {'interact'},
     tank_storm = {'interact'},
+    generic_intel = {},       -- test.11: launch codes and keycards, picked up (their meshes?)
+    cy_generic_intel = {},
 }
 -- test.10: per mesh (Unit.mesh by index), what these Mesh calls give (test.9 inventory: Mesh has these)
 local MESH_CALLS = {'visibility', 'name'}
@@ -863,9 +865,25 @@ local function by_unit() return setmetatable({}, {__mode = 'k'}) end
 local reached = by_unit()     -- per unit: since when a teammate has been at it
 local taken = by_unit()       -- per unit: picked up (this world)
 
+-- Has this unit no visible mesh left? Unit.box over the visible meshes (its second argument true) comes back
+-- empty (2.3.0: a hellbomb that blew up, alive and in place otherwise). False when it can't be asked.
+local function no_visible_mesh(unit)
+    if unit == nil or not chef_has('call') then return false end
+    local _, extents = CHEF.call('Unit.box', unit, true)
+    if extents == nil then return false end
+    local ok, x, y, z = pcall(function() return sr.Vector3.x(extents), sr.Vector3.y(extents), sr.Vector3.z(extents) end)
+    return ok and type(x) == 'number' and x == 0 and y == 0 and z == 0
+end
+
 local function check_taken(p, now)
     local id = p.unit or string.format('%.0f %.0f %.0f', p[1], p[2], p[3])
     if taken[id] then return true end
+    -- 2.3.0-test.11: picked up, maybe its meshes go as a hellbomb's do; then that says it, whoever took it
+    if no_visible_mesh(p.unit) then
+        taken[id] = true
+        log(string.format('taken: the item at %.1f %.1f %.1f is taken for picked up (no visible mesh left)', p[1], p[2], p[3]))
+        return true
+    end
     local keys_known = chef_has('key_down')
     local by, other = nil, false
     for _, h in ipairs(players) do
@@ -913,17 +931,14 @@ local function node_position(p, name)
     if ok and type(x) == 'number' and type(y) == 'number' and type(z) == 'number' then return x, y, z end
 end
 
--- A hellbomb that blew up stays, alive, every node where it was; only its meshes go: Unit.box over the visible
--- meshes (its second argument true) comes back empty (2.3.0-test.6 log). Once gone, gone (this world).
+-- A hellbomb that blew up stays, alive, every node where it was; only its meshes go (no_visible_mesh, 2.3.0-test.6
+-- log). Once gone, gone (this world).
 local blown = by_unit()
 
 local function blown_up(p)
-    if p.unit == nil or not chef_has('call') then return false end
+    if p.unit == nil then return false end
     if blown[p.unit] then return true end
-    local _, extents = CHEF.call('Unit.box', p.unit, true)
-    if extents == nil then return false end
-    local ok, x, y, z = pcall(function() return sr.Vector3.x(extents), sr.Vector3.y(extents), sr.Vector3.z(extents) end)
-    if ok and type(x) == 'number' and x == 0 and y == 0 and z == 0 then
+    if no_visible_mesh(p.unit) then
         blown[p.unit] = true
         log(string.format('hellbomb: the one at %.1f %.1f %.1f blew up (no visible mesh left)', p[1], p[2], p[3]))
         return true
