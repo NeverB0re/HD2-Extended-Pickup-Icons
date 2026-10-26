@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.3.0-test.7'
+local VERSION = '2.3.0-test.8'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -70,6 +70,13 @@ local VEHICLE_BUSY = 4        -- a helldiver this close to a vehicle's origin is
 local VEHICLE_PARKED_S = 3    -- a vehicle that has not moved this long is parked: teammates beside it do not hide it
 local WRECK_NEAR = 4          -- an exosuit this close to an exosuit wreck is that wreck
 local ARMS_NEAR = 5           -- a vehicle's weapon units (group 'arms') are this close to it
+-- 2.3.0: a destroyed supply FRV's rack (and maybe a tank's turret) comes off and lies beside it, still within
+-- ARMS_NEAR. So how far its nearest weapon is from the point it is mounted at (the vehicle's 'mount' node, else
+-- its root: two points of one body, the same however it leans) is kept once it has stood still ARMS_STILL_S
+-- (weapons are read on other frames than the vehicle); off by more than ARM_MOVED while it stands still: come
+-- off, destroyed.
+local ARMS_STILL_S = 1
+local ARM_MOVED = 0.6
 local DELIVERED_NEAR = 3      -- a mission item or load this close to a drop-off is in it (an SSSD put in)
 local LOADED_NEAR = 1         -- an artillery shell this close to a ready rack (group 'loaders', not drawn) is in it
 local DIAMOND_PER_M = 0.008   -- half-height per metre of distance: about the same size on screen at any range
@@ -504,10 +511,10 @@ local function build_keys()
     local unnamed = 0
     for _, t in ipairs(TARGETS) do
         if t.name then
-            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node}
+            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount}
         elseif t.hex then
             unnamed = unnamed + 1
-            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node}
+            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount}
         end
     end
     log(string.format('%d target resources: %d named, %d by id only (looked up if the id self-test passes)',
@@ -552,13 +559,16 @@ local function track(previous, x, y, z, now)
         if d < best_d then best, best_d = q, d end
     end
     local armed = best ~= nil and best.armed or nil   -- it had weapons on it (kept while it is followed)
+    local arm = best ~= nil and best.arm or nil       -- how far from its mount its weapon sat (2.3.0)
+    local off = best ~= nil and best.off or nil       -- its weapon came off (2.3.0)
     if best ~= nil and best.anchor ~= nil then
         local a = best.anchor
         if math.abs(a[1] - x) < STILL_EPS and math.abs(a[2] - y) < STILL_EPS and math.abs(a[3] - z) < STILL_EPS then
-            return {x, y, z, still_since = best.still_since, anchor = a, armed = armed, lost = best.lost}
+            return {x, y, z, still_since = best.still_since, anchor = a, armed = armed, lost = best.lost, arm = arm, off = off}
         end
     end
-    return {x, y, z, still_since = now, anchor = {x, y, z}, armed = armed, lost = best ~= nil and best.lost or nil}
+    return {x, y, z, still_since = now, anchor = {x, y, z}, armed = armed, lost = best ~= nil and best.lost or nil,
+            arm = arm, off = off}
 end
 
 local function read_players(world, now)
@@ -646,6 +656,13 @@ local function probe(world, now)
     if probe_at ~= nil and now - probe_at < PROBE_EVERY_S then return end
     probe_at = now
     local all   -- World.units, once this round, if a probed unit is near
+    local found_arms = {}   -- the vehicles' weapons, as read last
+    for i = 1, #keys do
+        if keys[i].group == 'arms' and found[i] then
+            local short = string.match(keys[i].label, '([^/]+)$') or keys[i].label
+            for _, a in ipairs(found[i]) do found_arms[#found_arms + 1] = {a[1], a[2], a[3], short = short} end
+        end
+    end
     for i = 1, #keys do
         local short = string.match(keys[i].label, '([^/]+)$') or keys[i].label
         local nodes = PROBE[short]
@@ -708,6 +725,17 @@ local function probe(world, now)
                             for kind, n in pairs(kinds) do names[#names + 1] = kind .. 'x' .. n end
                             table.sort(names)
                             parts[#parts + 1] = 'around(' .. #all .. ')=' .. table.concat(names, ',')
+                        end
+                        if found_arms then
+                            local near_arms = {}
+                            for _, a in ipairs(found_arms) do
+                                local ax, ay, az = a[1] - q[1], a[2] - q[2], a[3] - q[3]
+                                if ax * ax + ay * ay + az * az < 64 then
+                                    near_arms[#near_arms + 1] = string.format('%s(%.1f across,%.1f up)', a.short,
+                                        math.sqrt(ax * ax + ay * ay), az)
+                                end
+                            end
+                            parts[#parts + 1] = 'arms=' .. table.concat(near_arms, ',')
                         end
                         local line = table.concat(parts, ' ')
                         if probed[q.unit] ~= line then
@@ -792,6 +820,20 @@ local function follow_vehicle(p, now, seen_now)
     local t = track(vehicles_seen, p[1], p[2], p[3], now)
     seen_now[#seen_now + 1] = t
     return t
+end
+
+-- How far the nearest of these points within r of p is from point m; nil if none is.
+local function nearest_from(list, p, r, m)
+    local best, from = r * r, nil
+    for _, v in ipairs(list) do
+        local dx, dy, dz = v[1] - p[1], v[2] - p[2], v[3] - p[3]
+        local d = dx * dx + dy * dy + dz * dz
+        if d < best then
+            local mx, my, mz = v[1] - m[1], v[2] - m[2], v[3] - m[3]
+            best, from = d, math.sqrt(mx * mx + my * my + mz * mz)
+        end
+    end
+    return from
 end
 
 -- Is any of these points within r of p?
@@ -927,9 +969,20 @@ local function collect_dots(now)
                     -- destroyed, you in or at it, or someone else in a moving one: no marker
                     local v = follow_vehicle(p, now, seen_now)
                     local parked = now - v.still_since >= VEHICLE_PARKED_S
-                    local armed_now = near(arms, p, ARMS_NEAR)
-                    if armed_now then v.armed, v.lost = true, nil end
-                    local destroyed = near(wrecks, p, WRECK_NEAR) or (v.armed and not armed_now)
+                    local mx, my, mz = node_position(p, keys[i].mount)
+                    local from = nearest_from(arms, p, ARMS_NEAR, mx and {mx, my, mz} or p)
+                    local armed_now = from ~= nil
+                    if armed_now and not v.off then v.armed, v.lost = true, nil end
+                    if armed_now and not v.off and now - v.still_since >= ARMS_STILL_S then
+                        if v.arm == nil then
+                            v.arm = from
+                        elseif math.abs(from - v.arm) > ARM_MOVED then
+                            v.off = true
+                            log(string.format('vehicle: %s - its weapon came off (%.1f m from its mount; it sat %.1f)',
+                                string.match(keys[i].label, '([^/]+)$') or keys[i].label, from, v.arm))
+                        end
+                    end
+                    local destroyed = near(wrecks, p, WRECK_NEAR) or (v.armed and not armed_now) or v.off
                     if destroyed and not v.lost then
                         v.lost = true
                         log('vehicle: ' .. (string.match(keys[i].label, '([^/]+)$') or keys[i].label)

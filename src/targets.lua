@@ -4,6 +4,7 @@
 -- icon: drawn as this shape (samples, supplies); the rest as diamonds (vehicles: chevrons).
 -- Rare samples are Crystallized E-710, Legendarium and Black Saffron; the super sample is Super Uranium.
 -- node: marked above this node of the unit (Chef Shared Loader); height: above the root without it.
+-- mount: a vehicle's node its weapon (group 'arms') is mounted at, as it is read from (2.3.0: one come off).
 -- 2.3.0: the node where the game shows its interact icon, where it is not at the unit's root (the models,
 -- filediver: samples, drop-off points; the cargo container's is at its door, 2.8 m from its middle).
 -- near: no marker this close to you (the game's own icon shows); default NEAR_ME of the group. Stims
@@ -64,11 +65,11 @@ return {
   {group='dropoffs', name='content/objectives/obj_common/dropoff/dropoff_01', node='drop_interact'},
   {group='dropoffs', name='content/objectives/obj_cyborgs/cyborg_dropoff/cyborg_dropoff_01', node='interact_node'},
   {group='vehicles', name='content/fac_helldivers/vehicles/combat_walker/combat_walker', icon='walker', height=4.8},  -- tall: above it
-  {group='vehicles', name='content/fac_helldivers/vehicles/frv/frv', icon='car'},
-  {group='vehicles', name='content/fac_helldivers/vehicles/frv_heavy/frv_flamer', icon='car'},
-  {group='vehicles', name='content/fac_helldivers/vehicles/frv_supply/frv_supply', icon='car'},
-  {group='vehicles', name='content/fac_helldivers/vehicles/tank/tank', icon='tank', height=4.2},  -- 2.2.0: higher
-  {group='vehicles', name='content/fac_helldivers/vehicles/tank_storm/tank_storm', icon='tank', height=4.2},
+  {group='vehicles', name='content/fac_helldivers/vehicles/frv/frv', icon='car', mount='gun_mount'},
+  {group='vehicles', name='content/fac_helldivers/vehicles/frv_heavy/frv_flamer', icon='car', mount='gun_mount'},
+  {group='vehicles', name='content/fac_helldivers/vehicles/frv_supply/frv_supply', icon='car', mount='gun_mount'},
+  {group='vehicles', name='content/fac_helldivers/vehicles/tank/tank', icon='tank', height=4.2, mount='interact'},  -- 2.2.0: higher
+  {group='vehicles', name='content/fac_helldivers/vehicles/tank_storm/tank_storm', icon='tank', height=4.2, mount='interact'},
   -- 2.3.0: hellbombs lying about the map, shot to blow up (not the stratagem's 'hellbomb' nor the ship's
   -- 'hellbomb_prop': this one is in the maps' packages only)
   {group='hellbombs', name='content/fac_helldivers/hellpod/hellbomb_defunct/hellbomb_defunct', icon='hellbomb'},
@@ -110,6 +111,11 @@ return {
   {group='arms', name='content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg'},
   {group='arms', name='content/fac_helldivers/vehicles/frv_heavy/armaments/frv_flamethrower/frv_flamethrower'},
   {group='arms', name='content/fac_helldivers/vehicles/tank_storm/armaments/tank_storm_maingun/tank_storm_maingun'},
+  -- 2.3.0: the supply FRV's rack (falls off when it is destroyed) and the tank's turrets (in tank.package only;
+  -- the models: 'tank_turret', one with turret_whole/turret_damaged meshes)
+  {group='arms', name='content/fac_helldivers/vehicles/frv_supply/armaments/frv_supply_rack/frv_supply_rack'},
+  {group='arms', hex='1fa1f596769225c2'},
+  {group='arms', hex='439f9e65c18567da'},
   -- 2.1.0: not drawn; where artillery shells are loaded: a shell in one is in it (LOADED_NEAR). Not the
   -- artillery itself: it is large, and shells are left beside it to load later.
   {group='loaders', name='content/objectives/obj_common/fire_artillery/ready_rack'},
