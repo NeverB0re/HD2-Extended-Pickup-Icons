@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.3.0-test.4'
+local VERSION = '2.3.0-test.5'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -60,6 +60,9 @@ local ICON_RGB = {tank = VEHICLE_RGB, walker = VEHICLE_RGB, car = VEHICLE_RGB, p
 local DISTANCE_PX = 1.6       -- the loader's text size at 1080 pixels of screen (8 drew far too big)
 local BOLD = {{0, 0}, {1, 0}, {0, 1}, {1, 1}}   -- the distance drawn at each, in the loader's screen pixels
 local DOT_HEIGHT = 0.6        -- metres above the unit's origin
+-- Above a target's node (its 'node': where the game shows its interact icon), instead: icons as high above it as
+-- above a sample's root, diamonds as DOT_HEIGHT (a drop-off's is 1.2 m up: 1.8, as GROUP_HEIGHT had it)
+local ABOVE_NODE = {samples = 0.3, supplies = 0.3}
 local GROUP_HEIGHT = {samples = 0.3, supplies = 0.3, dropoffs = 1.8, controls = 1.2, hellbombs = 3, vehicles = 3.2}
                               -- icons (samples, supplies) sit lower than diamonds   -- these stand taller: the marker goes above them
 local VEHICLE_BUSY = 4        -- a helldiver this close to a vehicle's origin is in it: no marker while it moves,
@@ -877,7 +880,7 @@ local function collect_dots(now)
                     c.drawn = c.drawn + 1
                     local nx, ny, nz = node_position(p, keys[i].node)
                     if nx then   -- above the node as other markers are above their unit
-                        dots[#dots + 1] = {nx, ny, nz + (GROUP_HEIGHT[group] or DOT_HEIGHT), d, who, group, keys[i].icon}
+                        dots[#dots + 1] = {nx, ny, nz + (ABOVE_NODE[group] or DOT_HEIGHT), d, who, group, keys[i].icon}
                     else
                         dots[#dots + 1] = {p[1], p[2], p[3] + (keys[i].height or GROUP_HEIGHT[group] or DOT_HEIGHT), d, who,
                                            group, keys[i].icon}

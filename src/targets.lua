@@ -4,6 +4,8 @@
 -- icon: drawn as this shape (samples, supplies); the rest as diamonds (vehicles: chevrons).
 -- Rare samples are Crystallized E-710, Legendarium and Black Saffron; the super sample is Super Uranium.
 -- node: marked above this node of the unit (Chef Shared Loader); height: above the root without it.
+-- 2.3.0: the node where the game shows its interact icon, where it is not at the unit's root (the models,
+-- filediver: samples, drop-off points; the cargo container's is at its door, 2.8 m from its middle).
 -- near: no marker this close to you (the game's own icon shows); default NEAR_ME of the group. Stims
 -- have no icon of the game's: 0, always a marker.
 -- groups: samples, supplies, mission (objective items), carry (SEAF shells, carried ammo, warheads),
@@ -20,15 +22,15 @@ return {
   {group='samples', name='content/env_super_earth/samples/research_bio_sample_01', icon='common'},
   {group='mission', name='content/objectives/obj_common/black_box/black_box_01', icon='package'},
   {group='samples', name='content/env_cyborg/samples/automaton_enemy_sample_01', icon='rare'},
-  {group='samples', name='content/env_shared_forest/assets/samples/plant_sample_01', icon='common'},
+  {group='samples', name='content/env_shared_forest/assets/samples/plant_sample_01', icon='common', node='interact', height=0.8},
   {group='samples', name='content/env_bugs/assets/samples/bug_sample_01', icon='common', node='interact', height=1.2},  -- 2.3.0: grows on a
   -- stalk; the game's icon is at its 'interact' node, 0.9 m up (the model, filediver): 0.3 above that, as other samples
-  {group='samples', name='content/env_super_earth/samples/se_intel_sample_01', icon='common'},
+  {group='samples', name='content/env_super_earth/samples/se_intel_sample_01', icon='common', node='interact', height=0.6},
   {group='supplies', name='content/fac_helldivers/hellpod/health_pack_rack/health_pack', icon='stim', near=0},
-  {group='samples', name='content/env_shared_desert/assets/samples/mineral_sample_01', icon='common'},
+  {group='samples', name='content/env_shared_desert/assets/samples/mineral_sample_01', icon='common', node='interact', height=1.0},
   {group='mission', name='content/objectives/obj_common/carry_data/carry_data', icon='package'},
   {group='mission', name='content/objectives/obj_bugs/retrieve_larva/bug_larva_container_backpack', icon='larva'},
-  {group='samples', name='content/env_shared/assets/samples/crystalized_e710_sample_01/crystalized_e710_sample_01', icon='rare'},
+  {group='samples', name='content/env_shared/assets/samples/crystalized_e710_sample_01/crystalized_e710_sample_01', icon='rare', node='interact', height=0.8},
   {group='samples', name='content/env_super_earth/samples/research_artifact_sample_01', icon='common'},
   {group='samples', name='content/env_shared/assets/samples/tech_sample_01/tech_sample_01', icon='common'},
   {group='supplies', name='content/fac_helldivers/discoverables/grenade_box_discoverable_01/grenade_box_discoverable_01', icon='grenade'},
@@ -37,9 +39,9 @@ return {
   {group='mission', name='content/objectives/obj_common/briefcase/briefcase', icon='package'},
   {group='mission', hex='0dc9084e50c051f3'},  -- unresolved_mission_carryable_0dc9084e50c051f3
   {group='supplies', name='content/fac_helldivers/discoverables/health_pack_discoverable_01/health_pack_discoverable_01', icon='stim', near=0},
-  {group='samples', name='content/env_shared/assets/samples/super_uranium/super_uranium_sample_01', icon='super'},
-  {group='samples', name='content/env_shared_arctic/assets/samples/crystal_sample_01', icon='common'},
-  {group='samples', name='content/env_cyborg/samples/automaton_intel_sample_01', icon='common'},
+  {group='samples', name='content/env_shared/assets/samples/super_uranium/super_uranium_sample_01', icon='super', node='interact', height=1.3},
+  {group='samples', name='content/env_shared_arctic/assets/samples/crystal_sample_01', icon='common', node='interact', height=0.5},
+  {group='samples', name='content/env_cyborg/samples/automaton_intel_sample_01', icon='common', node='interact', height=0.4},
   {group='samples', name='content/env_shared/assets/samples/artifact_sample_01/artifact_sample_01', icon='common'},
   {group='samples', name='content/env_shared/assets/samples/legendarium_sample_01/legendarium_sample_01', icon='rare'},
   {group='samples', name='content/env_bugs/assets/samples/bug_intel_sample_01', icon='common', node='interact', height=1.9},  -- 2.3.0: its
@@ -51,7 +53,7 @@ return {
   {group='supplies', name='content/fac_helldivers/hellpod/ammo_rack/ammo_box', icon='supply'},
   {group='mission', hex='2d3bc1683a54298d'},  -- unresolved_mission_carryable_2d3bc1683a54298d
   {group='carry', name='content/objectives/obj_common/carry_warhead/warhead_01'},
-  {group='samples', name='content/env_shared/assets/samples/blacksaffron_sample_01/blacksaffron_sample_01', icon='rare'},
+  {group='samples', name='content/env_shared/assets/samples/blacksaffron_sample_01/blacksaffron_sample_01', icon='rare', node='interact', height=0.95},
   {group='samples', name='content/env_cyborg/samples/automaton_sample_01', icon='common'},
   {group='samples', name='content/env_super_earth/samples/research_sample_01', icon='common'},
   {group='mission', name='content/objectives/obj_cyborgs/cyborg_chemicals_backpack/cy_chemicals_backpack'},
@@ -59,8 +61,8 @@ return {
   {group='samples', name='content/env_illuminate/samples/illuminate_enemy_sample_01', icon='rare'},
   -- 0.11.0: drop-off points (the SSSD upload and such) and vehicles; terminals out in 0.12.1,
   -- names from filediver's hash list. Mech weapon units sit on the mech: one marker per vehicle.
-  {group='dropoffs', name='content/objectives/obj_common/dropoff/dropoff_01'},
-  {group='dropoffs', name='content/objectives/obj_cyborgs/cyborg_dropoff/cyborg_dropoff_01'},
+  {group='dropoffs', name='content/objectives/obj_common/dropoff/dropoff_01', node='drop_interact'},
+  {group='dropoffs', name='content/objectives/obj_cyborgs/cyborg_dropoff/cyborg_dropoff_01', node='interact_node'},
   {group='vehicles', name='content/fac_helldivers/vehicles/combat_walker/combat_walker', icon='walker', height=4.8},  -- tall: above it
   {group='vehicles', name='content/fac_helldivers/vehicles/frv/frv', icon='car'},
   {group='vehicles', name='content/fac_helldivers/vehicles/frv_heavy/frv_flamer', icon='car'},
@@ -84,7 +86,7 @@ return {
   {group='carry', name='content/objectives/obj_common/seaf_artillery/seaf_shell_mini_nuke'},
   -- 0.24.0: from the wiki's missions, matched to units in the game's files
   {group='carry', name='content/objectives/obj_cyborgs/cyborg_battery_carry_2h/cy_battery_carry_2h'},  -- Confiscate Assets: fusion battery, two-handed
-  {group='dropoffs', name='content/objectives/obj_common/cargo_container/cargo_container'},  -- Confiscate Assets, Rapid Acquisition: loaded here
+  {group='dropoffs', name='content/objectives/obj_common/cargo_container/cargo_container', node='drop_interact'},  -- Confiscate Assets, Rapid Acquisition: loaded here
   {group='controls', name='content/objectives/obj_cyborgs/cyborg_generic_valve/cy_generic_valve'},  -- Sabotage Orgo-Plasma Synthesis
   {group='controls', name='content/objectives/obj_cyborgs/cyborg_cooling_structure/cyborg_cooling_pipe_valve'},  -- Halt Cyborg Production
   {group='controls', name='content/objectives/obj_cyborgs/cyborg_cooling_structure/cyborg_cooling_pipe_valve_horizontal'},  -- Halt Cyborg Production
