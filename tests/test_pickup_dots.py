@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.3.0-test.1 loading", text)
+            self.assertIn("Pickup Dots 2.3.0-test.2 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -1072,6 +1072,21 @@ class ScreenTests(Case):
         self.assertGreater(len(tris), 9)                                   # an icon, not a diamond
         self.assertEqual({(t.color.r, t.color.g, t.color.b) for t in tris}, {(255, 90, 70)})
         self.assertIn("hellbombs drawn=1 worn=0 far=1", self.status_now())
+
+    def test_a_sample_on_a_stalk_is_marked_higher_where_the_game_shows_its_icon(self):
+        def top(name):
+            self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+            self.set_units(name, [unit(0, 10, 0)])   # 18 m from you: past where the game shows its own icon
+            self.load()
+            self.settle()
+            ys = [xyz(p)[2] for t in self.screen_tris() for p in (t.a, t.b, t.c)]
+            self.set_units(name, [])
+            return max(ys)
+        low = top(SAMPLE)
+        self.tearDown(); self.setUp()
+        high = top("content/env_bugs/assets/samples/bug_sample_01")
+        f = 600 / math.tan(math.radians(50) / 2)
+        self.assertAlmostEqual(high - low, f * 0.9 / 20, delta=2)   # 0.9 m higher, 20 m from the camera
 
     def test_backpack_items_are_sky_blue_like_vehicles(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)

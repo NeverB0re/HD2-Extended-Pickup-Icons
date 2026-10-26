@@ -20,7 +20,8 @@ return {
   {group='mission', name='content/objectives/obj_common/black_box/black_box_01', icon='package'},
   {group='samples', name='content/env_cyborg/samples/automaton_enemy_sample_01', icon='rare'},
   {group='samples', name='content/env_shared_forest/assets/samples/plant_sample_01', icon='common'},
-  {group='samples', name='content/env_bugs/assets/samples/bug_sample_01', icon='common'},
+  {group='samples', name='content/env_bugs/assets/samples/bug_sample_01', icon='common', height=1.2},  -- 2.3.0: grows on a
+  -- stalk; the game's icon is at its 'interact' node, 0.9 m up (the model, filediver): 0.3 above that, as other samples
   {group='samples', name='content/env_super_earth/samples/se_intel_sample_01', icon='common'},
   {group='supplies', name='content/fac_helldivers/hellpod/health_pack_rack/health_pack', icon='stim', near=0},
   {group='samples', name='content/env_shared_desert/assets/samples/mineral_sample_01', icon='common'},
@@ -40,7 +41,8 @@ return {
   {group='samples', name='content/env_cyborg/samples/automaton_intel_sample_01', icon='common'},
   {group='samples', name='content/env_shared/assets/samples/artifact_sample_01/artifact_sample_01', icon='common'},
   {group='samples', name='content/env_shared/assets/samples/legendarium_sample_01/legendarium_sample_01', icon='rare'},
-  {group='samples', name='content/env_bugs/assets/samples/bug_intel_sample_01', icon='common'},
+  {group='samples', name='content/env_bugs/assets/samples/bug_intel_sample_01', icon='common', height=1.9},  -- 2.3.0: its
+  -- 'interact' node is 1.59 m up
   {group='supplies', name='content/fac_helldivers/hellpod/ammo_rack/ammo_box', icon='supply'},
   {group='mission', hex='2d3bc1683a54298d'},  -- unresolved_mission_carryable_2d3bc1683a54298d
   {group='carry', name='content/objectives/obj_common/carry_warhead/warhead_01'},

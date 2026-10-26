@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.3.0-test.1'
+local VERSION = '2.3.0-test.2'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -801,7 +801,8 @@ local function collect_dots(now)
                     c.worn = c.worn + 1
                 else
                     c.drawn = c.drawn + 1
-                    dots[#dots + 1] = {p[1], p[2], p[3] + (GROUP_HEIGHT[group] or DOT_HEIGHT), d, who, group, keys[i].icon}
+                    dots[#dots + 1] = {p[1], p[2], p[3] + (keys[i].height or GROUP_HEIGHT[group] or DOT_HEIGHT), d, who, group,
+                                       keys[i].icon}
                 end
             end
             if near_any then new_hot[#new_hot + 1] = i end
