@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.4.0-test.1'
+local VERSION = '2.4.0-test.2'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -89,6 +89,7 @@ local GAME_FOV_EVERY_S = 10   -- how often the game's settings file is read agai
 local SCREEN_DIAMOND = 7.92   -- screen diamond half-height, pixels (0.11: 20% smaller; 2.1.0: 10% bigger)
 local SCREEN_LINE = 2         -- screen diamond outline thickness, pixels
 local SCREEN_LAYER = 1        -- screen GUI layer: low, so the game's menus draw over the markers
+local CHEF_LAYER = 900        -- Chef Shared Loader's layer for them (under the game's HUD and menus)
 
 -- Icons for samples and supplies, white, drawn as filled convex polygons (x right, y up, centred on the
 -- item). Samples: the game's rarity icons (traced from the Helldivers wiki's SVGs, 512 units across);
@@ -1183,13 +1184,25 @@ local function screen_draw(world, world_id, dots)
         return false
     end
     screen.cam_misses = 0
-    local ui, worlds_note = ui_world(world)
-    if screen.worlds_logged ~= world_id then
-        screen.worlds_logged = world_id
-        log('drawing: ' .. worlds_note .. '; screen GUI goes on '
-            .. (same_world(ui, world) and 'the main world' or ('other world #' .. SCREEN_WORLD)))
+    -- 2.4.0: through Chef Shared Loader's own shapes when it has them. With anti-aliasing off, what our own screen
+    -- GUI drew showed in the top-left quarter of the screen only (the textures and texts the loader drew did not):
+    -- the loader puts its drawing where the whole screen is reachable.
+    local by_chef = chef_has('rect') and chef_has('triangle') and chef_has('color') and chef_has('screen')
+    if screen.by_chef_logged ~= by_chef then
+        screen.by_chef_logged = by_chef
+        log('drawing: ' .. (by_chef and "Chef Shared Loader's shapes" or 'our own screen GUI'))
     end
-    if not (sr.Gui and type(sr.Gui.resolution) == 'function' and type(sr.Gui.triangle) == 'function') then
+    local ui_w
+    if not by_chef then
+        local worlds_note
+        ui_w, worlds_note = ui_world(world)
+        if screen.worlds_logged ~= world_id then
+            screen.worlds_logged = world_id
+            log('drawing: ' .. worlds_note .. '; screen GUI goes on '
+                .. (same_world(ui_w, world) and 'the main world' or ('other world #' .. SCREEN_WORLD)))
+        end
+    end
+    if not (sr.Gui and type(sr.Gui.resolution) == 'function' and (by_chef or type(sr.Gui.triangle) == 'function')) then
         screen.off = true
         log('drawing: Gui.resolution or Gui.triangle missing')
         return false
@@ -1199,14 +1212,24 @@ local function screen_draw(world, world_id, dots)
         screen_why(world_id, 'Gui.resolution gave ' .. tostring(width) .. ' ' .. tostring(height))
         return false
     end
-    local g = screen_gui(ui)
-    if g == nil then return false end
+    local g
+    if not by_chef then
+        g = screen_gui(ui_w)
+        if g == nil then return false end
+    end
     local ok, problem = pcall(function()
         trace('screen triangles dots=', #dots)
-        if not screen.immediate then
+        if g ~= nil and not screen.immediate then
             for _, id in ipairs(screen.ids) do pcall(sr.Gui.destroy_triangle, g, id) end
             screen.ids = {}
         end
+        -- the loader's screen size: its shapes, texts and textures go there, ours are in Gui.resolution's pixels
+        local cw, ch
+        if chef_has('screen') then
+            local oks, w, h = pcall(CHEF.screen)
+            if oks and type(w) == 'number' and type(h) == 'number' and w > 0 and h > 0 then cw, ch = w, h end
+        end
+        if by_chef and cw == nil then error('no screen size from the loader') end
         local inks = {}             -- by tint, then alpha (0..255)
         local tint = nil            -- this marker's colour: nil white, else {r, g, b}
         local function ink_of(alpha)
@@ -1218,30 +1241,43 @@ local function screen_draw(world, world_id, dots)
             end
             local c = by[alpha]
             if c == nil then
-                c = tint and sr.Color(alpha, tint[1], tint[2], tint[3]) or sr.Color(alpha, 255, 255, 255)  -- ARGB
+                local rgb = tint or {255, 255, 255}
+                if by_chef then
+                    c = CHEF.color(rgb[1], rgb[2], rgb[3], alpha)
+                else
+                    c = sr.Color(alpha, rgb[1], rgb[2], rgb[3])  -- ARGB
+                end
                 by[alpha] = c
             end
             return c
         end
         local ink = ink_of(255)     -- this marker's: its opacity (LOOK)
         local opacity = 1
-        local function tri(a, b, c)
-            local id = sr.Gui.triangle(g, a, b, c, SCREEN_LAYER, ink)
+        -- a filled triangle and rectangle, in Gui.resolution's pixels (origin bottom-left, y up), in this colour
+        local function put_tri(x1, y1, x2, y2, x3, y3, color)
+            if by_chef then
+                local kx, ky = cw / width, ch / height
+                CHEF.triangle(x1 * kx, y1 * ky, x2 * kx, y2 * ky, x3 * kx, y3 * ky, color, CHEF_LAYER)
+                return
+            end
+            -- screen GUI points are Vector3(x, 0, y)
+            local id = sr.Gui.triangle(g, sr.Vector3(x1, 0, y1), sr.Vector3(x2, 0, y2), sr.Vector3(x3, 0, y3), SCREEN_LAYER, color)
             if not screen.immediate and id ~= nil then screen.ids[#screen.ids + 1] = id end
         end
+        local function put_rect(x0, y0, x1, y1, color)
+            if by_chef then
+                local kx, ky = cw / width, ch / height
+                CHEF.rect(x0 * kx, y0 * ky, (x1 - x0) * kx, (y1 - y0) * ky, color, CHEF_LAYER)
+                return
+            end
+            put_tri(x0, y0, x1, y0, x1, y1, color)
+            put_tri(x0, y0, x1, y1, x0, y1, color)
+        end
+        local function tri(a, b, c) put_tri(a[1], a[2], b[1], b[2], c[1], c[2], ink) end
         -- an icon: each polygon as a fan of triangles
         local function pixels(list, sx, sy, k)   -- k: scale (below the smallest pixel size), else 1
             for _, r in ipairs(list) do
-                local shade = ink_of(255 * r[5] / 4 * opacity)
-                local x0, y0, x1, y1 = sx + r[1] * k, sy + r[2] * k, sx + r[3] * k, sy + r[4] * k
-                local a, b = sr.Vector3(x0, 0, y0), sr.Vector3(x1, 0, y0)
-                local c, d = sr.Vector3(x1, 0, y1), sr.Vector3(x0, 0, y1)
-                local id1 = sr.Gui.triangle(g, a, b, c, SCREEN_LAYER, shade)
-                local id2 = sr.Gui.triangle(g, a, c, d, SCREEN_LAYER, shade)
-                if not screen.immediate then
-                    if id1 ~= nil then screen.ids[#screen.ids + 1] = id1 end
-                    if id2 ~= nil then screen.ids[#screen.ids + 1] = id2 end
-                end
+                put_rect(sx + r[1] * k, sy + r[2] * k, sx + r[3] * k, sy + r[4] * k, ink_of(255 * r[5] / 4 * opacity))
             end
         end
         -- under a vehicle's icon, a wide V pointing down at it (like the 0.11-0.25 vehicle marker's lower V)
@@ -1258,8 +1294,8 @@ local function screen_draw(world, world_id, dots)
             local l, a, r = {sx - w, top}, {sx, top - w * POINTER.slope}, {sx + w, top}
             for _, side in ipairs({{l, a}, {a, r}}) do
                 local p1, p2 = side[1], side[2]
-                tri(sr.Vector3(p1[1], 0, p1[2]), sr.Vector3(p2[1], 0, p2[2]), sr.Vector3(p2[1], 0, p2[2] + t))
-                tri(sr.Vector3(p1[1], 0, p1[2]), sr.Vector3(p2[1], 0, p2[2] + t), sr.Vector3(p1[1], 0, p1[2] + t))
+                tri(p1, p2, {p2[1], p2[2] + t})
+                tri(p1, {p2[1], p2[2] + t}, {p1[1], p1[2] + t})
             end
         end
         -- beside an off-screen vehicle's icon, an arrow toward the vehicle
@@ -1273,19 +1309,16 @@ local function screen_draw(world, world_id, dots)
             end
             local from = list.reach * scale_of(size) + EDGE.gap * size
             local bx, by = sx + dir[1] * from, sy + dir[2] * from
-            local tip = sr.Vector3(bx + dir[1] * EDGE.long * size, 0, by + dir[2] * EDGE.long * size)
+            local tip = {bx + dir[1] * EDGE.long * size, by + dir[2] * EDGE.long * size}
             local w = EDGE.half * size
-            tri(sr.Vector3(bx - dir[2] * w, 0, by + dir[1] * w), tip, sr.Vector3(bx + dir[2] * w, 0, by - dir[1] * w))
+            tri({bx - dir[2] * w, by + dir[1] * w}, tip, {bx + dir[2] * w, by - dir[1] * w})
         end
         local function icon(shape, sx, sy, size)
-            local color = ink
             local k = shape.scale * size
             for _, poly in ipairs(shape.polys) do
-                local first = sr.Vector3(sx + poly[1][1] * k, 0, sy + poly[1][2] * k)
+                local first = {sx + poly[1][1] * k, sy + poly[1][2] * k}
                 for n = 2, #poly - 1 do
-                    local id = sr.Gui.triangle(g, first, sr.Vector3(sx + poly[n][1] * k, 0, sy + poly[n][2] * k),
-                        sr.Vector3(sx + poly[n + 1][1] * k, 0, sy + poly[n + 1][2] * k), SCREEN_LAYER, color)
-                    if not screen.immediate and id ~= nil then screen.ids[#screen.ids + 1] = id end
+                    tri(first, {sx + poly[n][1] * k, sy + poly[n][2] * k}, {sx + poly[n + 1][1] * k, sy + poly[n + 1][2] * k})
                 end
             end
         end
@@ -1293,13 +1326,9 @@ local function screen_draw(world, world_id, dots)
         -- the lower half filled
         local f = (height / 2) / math.tan(math.rad(cam.fov or current_fov()) / 2)   -- once a frame
         -- the distance above a marker, in the game's font (Chef Shared Loader draws it, on its own screen size)
-        local cw, ch
-        if LOOK.distance and chef_has('text') and chef_has('screen') and chef_has('color') and chef_has('text_width') then
-            local oks, w, h = pcall(CHEF.screen)
-            if oks and type(w) == 'number' and type(h) == 'number' and w > 0 and h > 0 then cw, ch = w, h end
-        end
+        local texts = LOOK.distance and cw ~= nil and chef_has('text') and chef_has('color') and chef_has('text_width')
         local function distance_above(sx, top, d)
-            if cw == nil or d[6] ~= 'vehicles' then return end
+            if not texts or d[6] ~= 'vehicles' then return end
             pcall(function()
                 local px = math.max(1, ch / 1080 * DISTANCE_PX)
                 local text = string.format('%dm', math.floor(d[4] + 0.5))
@@ -1315,7 +1344,7 @@ local function screen_draw(world, world_id, dots)
         -- an icon from the game's texture, as tall as its pixel icon at this size; false when it can't be drawn
         local function texture_icon(name, full, sx, sy, size)
             local t = ICON_TEXTURES[name]
-            if t == nil or cw == nil and not chef_has('screen') or not chef_has('bitmap') then return false end
+            if t == nil or cw == nil or not chef_has('bitmap') then return false end
             if full.span == nil then
                 local lo, hi = math.huge, -math.huge
                 for _, r in ipairs(full) do lo, hi = math.min(lo, r[2]), math.max(hi, r[4]) end
@@ -1323,7 +1352,6 @@ local function screen_draw(world, world_id, dots)
             end
             local okd, drawn = pcall(function()
                 local w, h = cw, ch
-                if w == nil then w, h = CHEF.screen() end
                 local k = full.span * size / (t[7] - t[5])          -- texture pixels to screen pixels
                 local cx, cy = (t[4] + t[6]) / 2, (t[5] + t[7]) / 2  -- the icon's centre in the texture
                 local x0, y1 = sx - cx * k, sy + cy * k              -- the texture's left and top edge
@@ -1390,11 +1418,10 @@ local function screen_draw(world, world_id, dots)
                 local outer = SCREEN_DIAMOND * size
                 local inner = math.max(0, outer - math.max(1.5, SCREEN_LINE * size) * math.sqrt(2))  -- the band
                 -- at right angles; a small one is filled
-                -- screen GUI points are Vector3(x, 0, y)
                 local o, i = {}, {}
                 for k, c in ipairs(CORNERS) do
-                    o[k] = sr.Vector3(sx + c[1] * outer, 0, sy + c[2] * outer)
-                    i[k] = sr.Vector3(sx + c[1] * inner, 0, sy + c[2] * inner)
+                    o[k] = {sx + c[1] * outer, sy + c[2] * outer}
+                    i[k] = {sx + c[1] * inner, sy + c[2] * inner}
                 end
                 for k = 1, 4 do
                     local n = k % 4 + 1

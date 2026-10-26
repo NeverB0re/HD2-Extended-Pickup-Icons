@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.4.0-test.1 loading", text)
+            self.assertIn("Pickup Dots 2.4.0-test.2 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -986,11 +986,42 @@ class ScreenTests(Case):
         }
     """
 
-    def load_with_chef(self):
+    def load_with_chef(self, shapes=False):
         chef = self.lua.execute(self.FAKE_CHEF, self.fake)
+        if shapes:   # the loader's own shapes, recorded
+            self.lua.execute("""local chef, fake = ...
+                fake.shapes = {}
+                chef.triangle = function(x1, y1, x2, y2, x3, y3, c, layer)
+                  fake.shapes[#fake.shapes + 1] = {kind = 'tri', x = (x1 + x2 + x3) / 3, y = (y1 + y2 + y3) / 3, c = c, layer = layer}
+                end
+                chef.rect = function(x, y, w, h, c, layer)
+                  fake.shapes[#fake.shapes + 1] = {kind = 'rect', x = x + w / 2, y = y + h / 2, c = c, layer = layer}
+                end
+            """, chef, self.fake)
         mod = self.lua.execute(self.source, chef)
         self.assertEqual(mod.status, "running", self.log_text())
         return mod
+
+    def test_with_chef_shapes_markers_are_drawn_by_the_loader_not_our_screen_gui(self):
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(MARK, [unit(0, 0, 0)])                         # a diamond, straight ahead
+        self.set_units(self.VEHICLE, [unit(4, 20, 0)])                # a pixel icon
+        self.load_with_chef(shapes=True)
+        self.settle()
+        self.fake.shapes = self.lua.table()
+        self.frames(1, start=40.0)
+        shapes = list(self.fake.shapes.values())
+        tris = [s for s in shapes if s.kind == 'tri']
+        rects = [s for s in shapes if s.kind == 'rect']
+        self.assertTrue(rects)                                        # the FRV's pixels
+        self.assertEqual({s.layer for s in shapes}, {900})
+        diamond = [s for s in tris if abs(s.x - 960) < 12 and abs(s.y - 600) < 12]
+        self.assertEqual(len(diamond), 9)                             # outline and lower half, at the centre
+        self.assertEqual(self.fake.screen_guis, 0)                    # no screen GUI of our own
+        self.assertEqual(self.screen_tris(), [])
+        self.assertIn("drawing: Chef Shared Loader's shapes", self.log_text())
 
     def test_with_chef_the_cameras_real_field_of_view_is_used(self):
         self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
