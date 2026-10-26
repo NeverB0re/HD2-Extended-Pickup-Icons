@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.3.0 loading", text)
+            self.assertIn("Pickup Dots 2.4.0-test.1 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -556,6 +556,16 @@ class ScreenTests(Case):
                          [(952.08, 600.0), (960.0, 592.08), (967.92, 600.0)])   # left, bottom, right
         self.assertEqual({t.layer for t in tris}, {1})
 
+    def test_on_a_bigger_screen_markers_grow_as_the_games_hud_does(self):
+        self.lua.execute("stingray.Gui.resolution = function() return 2560, 1440 end")
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(MARK, [unit(0, 0, 0)])
+        self.load()
+        self.settle()
+        fill = [xyz(v) for v in (self.screen_tris()[8].a, self.screen_tris()[8].b, self.screen_tris()[8].c)]
+        self.assertEqual(sorted((round(x, 2), round(y, 2)) for x, _, y in fill),
+                         [(1269.44, 720.0), (1280.0, 709.44), (1290.56, 720.0)])   # 7.92 px x 1440 / 1080
+
     VEHICLE = "content/fac_helldivers/vehicles/frv/frv"
     MECH = "content/fac_helldivers/vehicles/combat_walker/combat_walker"
     MECH_ARM = "content/fac_helldivers/vehicles/combat_walker_missile/combat_walker_missile"
@@ -606,14 +616,27 @@ class ScreenTests(Case):
         self.load()
         self.settle()
         body, arm = self.fake.units[self.VEHICLE][1], self.fake.units[gun][1]
-        for k in range(30):                                  # falling: its gun, read on other frames, lags 6 m
-            body.z = 60 - 1.5 * k                            # 90 m/s, as a tank fell (test.9 log)
-            arm.z = body.z + 7.5
+        for k in range(40):                                  # falling at 90 m/s, its gun on it
+            body.z = 60 - 1.5 * k
+            arm.z = body.z + 1.5
             self.frames(1, start=40.0 + k / 60)
-        body.z, arm.z = 0, 1.5                               # landed, gun on
-        self.frames(120, start=41.0)
         self.assertNotIn("lost its weapons", self.log_text())
         self.assertIn("vehicles drawn=1", self.status_now())
+
+    def test_a_wreck_still_rolling_loses_its_marker_at_once(self):
+        gun = "content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(self.VEHICLE, [unit(0, 20, 0)])
+        self.set_units(gun, [unit(0, 20, 1.5)])
+        self.load()
+        self.settle()
+        body = self.fake.units[self.VEHICLE][1]
+        self.fake.units[gun] = self.lua.table()              # destroyed: the gun is gone ...
+        for k in range(5):                                   # ... while it rolls on
+            body.x = 0.1 * k
+            self.frames(1, start=40.0 + k / 60)
+        self.assertIn("frv lost its weapons", self.log_text())
+        self.assertEqual(self.screen_tris(), [])
 
     def test_vehicles_side_by_side_each_get_a_marker(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)

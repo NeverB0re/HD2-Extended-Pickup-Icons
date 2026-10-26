@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.3.0'
+local VERSION = '2.4.0-test.1'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -70,15 +70,14 @@ local VEHICLE_BUSY = 4        -- a helldiver this close to a vehicle's origin is
 local VEHICLE_PARKED_S = 3    -- a vehicle that has not moved this long is parked: teammates beside it do not hide it
 local WRECK_NEAR = 4          -- an exosuit this close to an exosuit wreck is that wreck
 local ARMS_NEAR = 5           -- a vehicle's weapon units (group 'arms') are this close to it
--- (A weapon gone counts once the vehicle has stood still ARMS_STILL_S: falling from orbit, its weapons, read on
--- other frames, lag metres behind it.)
 -- 2.3.0: a destroyed supply FRV's gun (and maybe a tank's turret) comes off and may lie beside it, still within
 -- ARMS_NEAR. So how far its nearest weapon is from the point it is mounted at (the vehicle's 'mount' node, else
--- its root: two points of one body, the same however it leans) is kept once it has stood still ARMS_STILL_S
--- (weapons are read on other frames than the vehicle); off by more than ARM_MOVED while it stands still: come
--- off, destroyed.
-local ARMS_STILL_S = 1
+-- its root: two points of one body, the same however it leans) is kept; off by more than ARM_MOVED: come off,
+-- destroyed. 2.4.0: vehicles and weapons are read in the same frame while a vehicle is near (READ_TOGETHER), so
+-- this holds while it moves too: a wreck rolling or flung, a vehicle falling from orbit (2.3.0 waited for it to
+-- stand still, as weapons read on other frames lagged metres behind it, and lost its marker late).
 local ARM_MOVED = 0.6
+local READ_TOGETHER = {vehicles = true, arms = true, wrecks = true}
 local DELIVERED_NEAR = 3      -- a mission item or load this close to a drop-off is in it (an SSSD put in)
 local LOADED_NEAR = 1         -- an artillery shell this close to a ready rack (group 'loaders', not drawn) is in it
 local DIAMOND_PER_M = 0.008   -- half-height per metre of distance: about the same size on screen at any range
@@ -607,6 +606,7 @@ end
 -- Resources with an item near you in the last frame: read again every frame, so an item thrown by an
 -- explosion moves smoothly instead of jumping about four times a second.
 local hot = {}           -- list of key indices, made by collect_dots
+local vehicles_near = false   -- a vehicle near you in the last frame: READ_TOGETHER read every frame (2.4.0)
 local hot_reads = 0      -- for the status line
 
 local function refresh_hot(world, first, last)
@@ -645,6 +645,14 @@ local function sweep_step(world)
         found[i] = points
     end
     refresh_hot(world, first, last)
+    if vehicles_near then   -- vehicles and their weapons, all in this frame (the sweep has its own batch)
+        for i = 1, #keys do
+            if READ_TOGETHER[keys[i].group] and (i < first or i > last) then
+                found[i] = read_key(world, i)
+                hot_reads = hot_reads + 1
+            end
+        end
+    end
     cursor = last + 1
     if cursor > #keys then
         cursor = 1
@@ -813,6 +821,7 @@ local function collect_dots(now)
     local dots = {}
     local counts = {}
     local new_hot = {}
+    local any_vehicle = false
     local seen_now = {}
     local wrecks = {}        -- exosuit wrecks: the exosuit beside one is destroyed (its unit may stay)
     local arms = {}          -- vehicles' weapon units: a vehicle that had some and has none now is destroyed
@@ -848,12 +857,11 @@ local function collect_dots(now)
                     local mx, my, mz = node_position(p, keys[i].mount)
                     local from = nearest_from(arms, p, ARMS_NEAR, mx and {mx, my, mz} or p)
                     local armed_now = from ~= nil
-                    local still = now - v.still_since >= ARMS_STILL_S
                     if armed_now and not v.off then v.armed, v.lost = true, nil end
-                    if v.armed and not armed_now and still and not v.off then
-                        v.off = true   -- its weapon gone while it stands still: destroyed, for good (2.3.0)
+                    if v.armed and not armed_now and not v.off then
+                        v.off = true   -- its weapon gone: destroyed, for good
                     end
-                    if armed_now and not v.off and still then
+                    if armed_now and not v.off then
                         if v.arm == nil then
                             v.arm = from
                         elseif math.abs(from - v.arm) > ARM_MOVED then
@@ -899,11 +907,16 @@ local function collect_dots(now)
                     end
                 end
             end
-            if near_any then new_hot[#new_hot + 1] = i end
+            if near_any and group == 'vehicles' then
+                any_vehicle = true   -- read with its weapons every frame, not among the hot ones
+            elseif near_any then
+                new_hot[#new_hot + 1] = i
+            end
         end
     end
     last_counts = counts
     hot = new_hot
+    vehicles_near = any_vehicle
     vehicles_seen = seen_now
     if #dots > MAX_DOTS then
         table.sort(dots, function(a, b) return a[4] < b[4] end)
@@ -1104,6 +1117,9 @@ local function dot3(a, b) return a[1] * b[1] + a[2] * b[2] + a[3] * b[3] end
 
 -- How big a marker is drawn: full size up to FULL_SIZE_M away, LOOK.smallest at the edge of its kind's range.
 local FULL_SIZE_M = 10
+-- The game scales its HUD with the screen: 1 at 1920 x 1080, by the smaller of width / 1920 and height / 1080
+-- (2.4.0: at 1920 x 1200 its icons matched ours; at 2560 x 1440 they were bigger). Ours (sizes, offsets) too.
+local UI_W, UI_H = 1920, 1080
 local SMALLEST = 0.7          -- the smallest of the game icons' pixel sizes (ICON_PIXELS); smaller: scaled from it
 local FADE_LEAST = 0.2
 local POINTER = {gap = 3, half = 9, slope = 0.5, line = 2}   -- the wide V under a vehicle's icon, pixels at full size
@@ -1116,6 +1132,13 @@ local function far_share(d)
     return math.max(0, math.min(1, (d[4] - FULL_SIZE_M) / (range - FULL_SIZE_M)))
 end
 local function size_of(d) return 1 - (1 - LOOK.smallest) * far_share(d) end
+-- How much a pixel icon's rectangles are scaled at this size: the full one above full size (a big screen, 2.4.0),
+-- the smallest one below SMALLEST, else none (its own pixel size is picked)
+local function scale_of(size)
+    if size > 1 then return size end
+    if size < SMALLEST then return size / SMALLEST end
+    return 1
+end
 local function opacity_of(d)
     if not LOOK.fade or d[6] ~= 'supplies' then return LOOK.opacity end   -- mission markers stay easy to find
     return LOOK.opacity * (1 - (1 - FADE_LEAST) * far_share(d))
@@ -1137,13 +1160,13 @@ end
 
 -- Where an off-screen dot shows at the screen's edge (pixels, as project) and the way to it (a unit vector):
 -- the side it is to, seen from the middle of the screen; straight behind, the bottom.
-local function edge(cam, d, width, height)
+local function edge(cam, d, width, height, ui)
     local p = {d[1] - cam.translation[1], d[2] - cam.translation[2], d[3] - cam.translation[3]}
     local x, y = dot3(p, cam.right), dot3(p, cam.up)
     local len = math.sqrt(x * x + y * y)
     if len < 1e-6 then x, y, len = 0, -1, 1 end
     x, y = x / len, y / len
-    local hw, hh = width / 2 - EDGE.margin, height / 2 - EDGE.margin
+    local hw, hh = width / 2 - EDGE.margin * ui, height / 2 - EDGE.margin * ui
     local t = math.min(math.abs(x) > 1e-6 and hw / math.abs(x) or math.huge,
                        math.abs(y) > 1e-6 and hh / math.abs(y) or math.huge)
     return math.floor(width / 2 + x * t + 0.5), math.floor(height / 2 + y * t + 0.5), {x, y}
@@ -1248,7 +1271,7 @@ local function screen_draw(world, world_id, dots)
                 end
                 list.reach = reach
             end
-            local from = list.reach * (size < SMALLEST and size / SMALLEST or 1) + EDGE.gap * size
+            local from = list.reach * scale_of(size) + EDGE.gap * size
             local bx, by = sx + dir[1] * from, sy + dir[2] * from
             local tip = sr.Vector3(bx + dir[1] * EDGE.long * size, 0, by + dir[2] * EDGE.long * size)
             local w = EDGE.half * size
@@ -1325,22 +1348,25 @@ local function screen_draw(world, world_id, dots)
             return list.top * k
         end
         local CORNERS = {{0, 1}, {1, 0}, {0, -1}, {-1, 0}}        -- top, right, bottom, left
+        local ui = math.min(width / UI_W, height / UI_H)
         for _, d in ipairs(dots) do
             local sx, sy = project(cam, d, width, height, f)
             local dir   -- a vehicle off screen: the way to it
-            if not sx and d[6] == 'vehicles' then sx, sy, dir = edge(cam, d, width, height) end
-            local size = sx and size_of(d) * (dir and EDGE.size or 1)
+            if not sx and d[6] == 'vehicles' then sx, sy, dir = edge(cam, d, width, height, ui) end
+            local size = sx and size_of(d) * (dir and EDGE.size or 1) * ui
             if sx then
                 opacity = opacity_of(d)
                 tint = d[7] and ICON_RGB[d[7]] or nil
                 ink = ink_of(255 * opacity)
-                if d[6] == 'samples' or d[6] == 'supplies' then sx, sy = sx + ICON_OFFSET[1], sy + ICON_OFFSET[2] end
+                if d[6] == 'samples' or d[6] == 'supplies' then
+                    sx, sy = math.floor(sx + ICON_OFFSET[1] * ui + 0.5), math.floor(sy + ICON_OFFSET[2] * ui + 0.5)
+                end
             end
             if sx and d[7] and ICON_PIXELS[d[7]] then
                 local sizes = ICON_PIXELS[d[7]]   -- full size first, then a pixel smaller each
                 local step = math.floor((1 - size) / (1 - SMALLEST) * (#sizes - 1) + 0.5) + 1
                 local list = sizes[math.max(1, math.min(#sizes, step))]
-                local k = size < SMALLEST and size / SMALLEST or 1
+                local k = scale_of(size)
                 if not texture_icon(d[7], sizes[1], sx, sy, size) then
                     pixels(list, sx, sy, k)
                 end
