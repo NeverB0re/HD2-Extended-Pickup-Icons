@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.3.0-test.11'
+local VERSION = '2.3.0-test.12'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -866,7 +866,8 @@ local reached = by_unit()     -- per unit: since when a teammate has been at it
 local taken = by_unit()       -- per unit: picked up (this world)
 
 -- Has this unit no visible mesh left? Unit.box over the visible meshes (its second argument true) comes back
--- empty (2.3.0: a hellbomb that blew up, alive and in place otherwise). False when it can't be asked.
+-- empty (2.3.0: a hellbomb that blew up, alive and in place otherwise; not launch codes picked up: test.11).
+-- False when it can't be asked.
 local function no_visible_mesh(unit)
     if unit == nil or not chef_has('call') then return false end
     local _, extents = CHEF.call('Unit.box', unit, true)
@@ -875,14 +876,40 @@ local function no_visible_mesh(unit)
     return ok and type(x) == 'number' and x == 0 and y == 0 and z == 0
 end
 
+-- How many of a unit's meshes are visible (Mesh.visibility), or nil when it can't be asked.
+local function visible_meshes(unit)
+    if unit == nil or not chef_has('call') then return nil end
+    local n = tonumber((CHEF.call('Unit.num_meshes', unit)))
+    if n == nil then return nil end
+    local count = 0
+    for m = 1, n do
+        local mesh = CHEF.call('Unit.mesh', unit, m)
+        if mesh == nil then return nil end
+        local shown = CHEF.call('Mesh.visibility', mesh)
+        if shown == nil then return nil end
+        if shown == true then count = count + 1 end
+    end
+    return count
+end
+
+-- 2.3.0: picked up, launch codes hide three of their six meshes (test.11 log: picked up with another key than
+-- the interact key; nothing else changed, as the codes were walked up to, either). So fewer visible meshes than
+-- it was first seen with: taken, by whoever. Only where that can't be asked, the guess below (TAKE_KEY...).
+local first_visible = by_unit()   -- per unit: how many meshes it showed when first seen
+
 local function check_taken(p, now)
     local id = p.unit or string.format('%.0f %.0f %.0f', p[1], p[2], p[3])
     if taken[id] then return true end
-    -- 2.3.0-test.11: picked up, maybe its meshes go as a hellbomb's do; then that says it, whoever took it
-    if no_visible_mesh(p.unit) then
-        taken[id] = true
-        log(string.format('taken: the item at %.1f %.1f %.1f is taken for picked up (no visible mesh left)', p[1], p[2], p[3]))
-        return true
+    local shown = visible_meshes(p.unit)
+    if shown ~= nil then
+        first_visible[p.unit] = first_visible[p.unit] or shown
+        if shown < first_visible[p.unit] then
+            taken[id] = true
+            log(string.format('taken: the item at %.1f %.1f %.1f is taken for picked up (%d of its %d meshes hidden)',
+                p[1], p[2], p[3], first_visible[p.unit] - shown, first_visible[p.unit]))
+            return true
+        end
+        return false
     end
     local keys_known = chef_has('key_down')
     local by, other = nil, false
@@ -1711,7 +1738,7 @@ local function tick()
         world_id = 'world #' .. world_seq
         last_world, world_seen_at, cursor, found, players, players_read_at, me = world, now, 1, {}, {}, nil, nil
         vehicles_seen = {}
-        reached, taken, blown, me_unit = by_unit(), by_unit(), by_unit(), nil
+        reached, taken, blown, first_visible, me_unit = by_unit(), by_unit(), by_unit(), by_unit(), nil
         hot = {}
         new_main_world()
         traced = 0

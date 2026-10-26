@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.3.0-test.11 loading", text)
+            self.assertIn("Pickup Dots 2.3.0-test.12 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -946,6 +946,12 @@ class ScreenTests(Case):
           end,
           call = function(name, ...)
             if name == 'Unit.num_scene_graph_items' then return 3 end
+            if name == 'Unit.num_meshes' then local u = ...; return u.meshes end
+            if name == 'Unit.mesh' then local u, m = ...; return {unit = u, index = m} end
+            if name == 'Mesh.visibility' then
+              local mesh = ...
+              return mesh.index <= mesh.unit.meshes - (mesh.unit.hidden or 0)
+            end
             if name == 'Unit.box' then
               local u, visible = ...
               if visible and u.blown then return 'POSE', stingray.Vector3(0, 0, 0) end
@@ -1088,19 +1094,34 @@ class ScreenTests(Case):
         self.assertEqual(self.log_text().count("taken: "), 1)
         self.assertEqual(len(self.screen_points()), 1)                 # the other codes keep their marker
 
-    def test_with_chef_launch_codes_with_no_visible_mesh_left_are_taken_by_anyone(self):
+    def test_with_chef_launch_codes_that_hide_some_meshes_are_taken_by_anyone(self):
         codes = "content/objectives/obj_common/generic_intel/generic_intel"
         self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
                                                   "fov": math.radians(50)})
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(codes, [unit(5, 5, 0)])                        # far from you: no key, no teammate
+        lying = unit(5, 5, 0)
+        lying.update(meshes=6)
+        self.set_units(codes, [lying])                                # far from you: no key, no teammate
         self.load_with_chef()
         self.settle()
         self.assertEqual(len(self.screen_points()), 1)
-        self.fake.units[codes][1].blown = True                         # picked up somewhere: its meshes gone
+        self.fake.units[codes][1].hidden = 3                           # picked up somewhere: 3 of its 6 meshes hide
         self.frames(5, start=40.0)
         self.assertEqual(self.screen_tris(), [])
-        self.assertIn("is taken for picked up (no visible mesh left)", self.log_text())
+        self.assertIn("is taken for picked up (3 of its 6 meshes hidden)", self.log_text())
+
+    def test_with_chef_launch_codes_a_teammate_only_passes_keep_their_marker(self):
+        codes = "content/objectives/obj_common/generic_intel/generic_intel"
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.set_units(AVATAR, [unit(0, -8, 0), unit(5, 5, 0)], loaded=False)   # you, and a teammate at the codes
+        lying = unit(5.5, 5, 0)
+        lying.update(meshes=6)
+        self.set_units(codes, [lying])
+        self.load_with_chef()
+        self.settle()
+        self.frames(120, start=40.0)                                   # 2 s at it, all 6 meshes still shown
+        self.assertNotIn("taken: ", self.log_text())
 
     def test_with_chef_a_crank_that_turned_keeps_its_marker(self):
         crank = "content/objectives/obj_common/colony_relay/colony_relay_01/objective_colony_relay_antenna_crank_01"
