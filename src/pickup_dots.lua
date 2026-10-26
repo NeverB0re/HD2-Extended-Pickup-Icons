@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.3.0-test.6'
+local VERSION = '2.3.0-test.7'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -329,7 +329,7 @@ local sr = rawget(_G, 'stingray')
 -- Names only: walking the tables is plain Lua and calls nothing in the engine.
 local function log_api_inventory()
     for _, lib in ipairs({'Application', 'World', 'Unit', 'LineObject', 'IdString64', 'Script', 'Gui', 'Matrix4x4', 'Camera',
-                          'Window', 'Mouse', 'Keyboard'}) do
+                          'Window', 'Mouse', 'Keyboard', 'Mesh'}) do
         local t = sr[lib]
         if type(t) == 'table' then
             local names = {}
@@ -613,13 +613,15 @@ end
 -- it comes, and with true: maybe visible meshes only), a few nodes, and the units that appear near it (World.units,
 -- their kinds). Every PROBE_EVERY_S, each such unit within PROBE_NEAR of you; a line when anything in it changed.
 local PROBE = {
-    hellbomb_defunct = {'top', 'nuke', 'console', 'shield_prong_1'},
-    frv_supply = {'door_fwd_l', 'door_bck_r', 'hood', 'r_top_lid', 'l_box_01', 'r_front_rotation', 'steering_wheel', 'gun_mount'},
-    frv = {'door_fwd_l', 'hood', 'r_front_rotation', 'gun_mount'},
-    frv_flamer = {'door_fwd_l', 'hood', 'r_front_rotation', 'gun_mount'},
+    frv_supply = {'door_fwd_l', 'hood', 'gun_mount'},
+    frv = {'door_fwd_l', 'hood', 'gun_mount'},
+    frv_flamer = {'door_fwd_l', 'hood', 'gun_mount'},
     tank = {'interact'},
     tank_storm = {'interact'},
+    combat_walker = {'interact_enter'},
 }
+-- test.7: per mesh (Unit.mesh by index), what these Mesh calls give, if the game has them
+local MESH_CALLS = {'is_visible', 'visible', 'bounding_box', 'num_materials'}
 local PROBE_EVERY_S, PROBE_NEAR, PROBE_LINES = 1, 200, 600
 local PROBE_AROUND = 8        -- metres: units this close to it are listed by kind
 local PROBE_SCAN_MAX = 40000  -- World.units longer than this: not scanned
@@ -657,6 +659,20 @@ local function probe(world, now)
                         if chef_has('call') then
                             local n = CHEF.call('Unit.num_meshes', q.unit)
                             parts[#parts + 1] = 'meshes=' .. tostring(n)
+                            for m = 1, math.min(tonumber(n) or 0, 16) do
+                                local mesh = CHEF.call('Unit.mesh', q.unit, m)
+                                if mesh ~= nil then
+                                    local said = {}
+                                    for _, fn in ipairs(MESH_CALLS) do
+                                        local a1, a2 = CHEF.call('Mesh.' .. fn, mesh)
+                                        if a1 ~= nil then
+                                            local t = type(a1) == 'userdata' and vec_text(a2 or a1) or tostring(a1)
+                                            said[#said + 1] = fn .. '=' .. t
+                                        end
+                                    end
+                                    parts[#parts + 1] = 'm' .. m .. '[' .. table.concat(said, ' ') .. ']'
+                                end
+                            end
                         end
                         for _, name in ipairs(nodes) do
                             local n = CHEF.unit_node(q.unit, name)
@@ -670,7 +686,7 @@ local function probe(world, now)
                             end
                         end
                         -- what is around it, by kind
-                        if all == nil and chef_has('call') and chef_has('unit_kind') then
+                        if false then   -- test.7: no units around (test.6: only the blast's rubble came and went)
                             local list = CHEF.call('World.units', world)
                             all = type(list) == 'table' and as_list(list) or false
                         end
@@ -857,6 +873,24 @@ local function node_position(p, name)
     if ok and type(x) == 'number' and type(y) == 'number' and type(z) == 'number' then return x, y, z end
 end
 
+-- A hellbomb that blew up stays, alive, every node where it was; only its meshes go: Unit.box over the visible
+-- meshes (its second argument true) comes back empty (2.3.0-test.6 log). Once gone, gone (this world).
+local blown = by_unit()
+
+local function blown_up(p)
+    if p.unit == nil or not chef_has('call') then return false end
+    if blown[p.unit] then return true end
+    local _, extents = CHEF.call('Unit.box', p.unit, true)
+    if extents == nil then return false end
+    local ok, x, y, z = pcall(function() return sr.Vector3.x(extents), sr.Vector3.y(extents), sr.Vector3.z(extents) end)
+    if ok and type(x) == 'number' and x == 0 and y == 0 and z == 0 then
+        blown[p.unit] = true
+        log(string.format('hellbomb: the one at %.1f %.1f %.1f blew up (no visible mesh left)', p[1], p[2], p[3]))
+        return true
+    end
+    return false
+end
+
 local function collect_dots(now)
     local dots = {}
     local counts = {}
@@ -909,6 +943,8 @@ local function collect_dots(now)
                     end
                 elseif LOOK.hide_near and (keys[i].near or NEAR_ME[group]) and me ~= nil and who == me
                     and d < (keys[i].near or NEAR_ME[group]) - NEAR_OVERLAP then
+                    c.worn = c.worn + 1
+                elseif group == 'hellbombs' and blown_up(p) then
                     c.worn = c.worn + 1
                 elseif keys[i].taken and check_taken(p, now) then
                     c.worn = c.worn + 1
@@ -1605,7 +1641,7 @@ local function tick()
         world_id = 'world #' .. world_seq
         last_world, world_seen_at, cursor, found, players, players_read_at, me = world, now, 1, {}, {}, nil, nil
         vehicles_seen = {}
-        reached, taken, me_unit = by_unit(), by_unit(), nil
+        reached, taken, blown, me_unit = by_unit(), by_unit(), by_unit(), nil
         hot = {}
         new_main_world()
         traced = 0

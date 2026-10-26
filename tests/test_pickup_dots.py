@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.3.0-test.6 loading", text)
+            self.assertIn("Pickup Dots 2.3.0-test.7 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -924,6 +924,11 @@ class ScreenTests(Case):
           unit_node = function(u, name) if name == 'interact' and u.ix then return 7 end return nil end,
           call = function(name, ...)
             if name == 'Unit.num_scene_graph_items' then return 3 end
+            if name == 'Unit.box' then
+              local u, visible = ...
+              if visible and u.blown then return 'POSE', stingray.Vector3(0, 0, 0) end
+              return 'POSE', stingray.Vector3(0.67, 0.67, 1.05)
+            end
             return nil, 'not in the fake'
           end,
           bitmap = function(tex, x, y, w, h, c)
@@ -981,6 +986,19 @@ class ScreenTests(Case):
         self.assertEqual(len({(round(t.x, 3), round(t.y, 3)) for t in texts}), 4)   # bold: four, a pixel apart
         self.assertGreater(texts[-1].y, 600)                          # above the vehicle's icon
         self.assertAlmostEqual(texts[-1].px, 1200 / 1080 * 1.6, places=6)   # a fifth of test.5's size
+
+    def test_with_chef_a_hellbomb_that_blew_up_loses_its_marker(self):
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(ScreenTests.HELLBOMB, [unit(0, 30, 0)])
+        self.load_with_chef()
+        self.settle()
+        self.assertTrue(self.screen_tris())
+        self.fake.units[ScreenTests.HELLBOMB][1].blown = True          # its meshes gone: blown up, still alive
+        self.frames(5, start=40.0)
+        self.assertEqual(self.screen_tris(), [])
+        self.assertIn("hellbomb: the one at 0.0 30.0 0.0 blew up", self.log_text())
 
     def test_with_chef_on_the_ship_mission_markers_are_off(self):
         self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
