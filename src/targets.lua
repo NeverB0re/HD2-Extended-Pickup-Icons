@@ -3,6 +3,7 @@
 -- equipment and weapons (0.9.0). key: the unit resource name when known, otherwise its 64-bit id as hex.
 -- icon: drawn as this shape (samples, supplies); the rest as diamonds (vehicles: chevrons).
 -- Rare samples are Crystallized E-710, Legendarium and Black Saffron; the super sample is Super Uranium.
+-- node: marked above this node of the unit (Chef Shared Loader); height: above the root without it.
 -- near: no marker this close to you (the game's own icon shows); default NEAR_ME of the group. Stims
 -- have no icon of the game's: 0, always a marker.
 -- groups: samples, supplies, mission (objective items), carry (SEAF shells, carried ammo, warheads),
@@ -20,7 +21,7 @@ return {
   {group='mission', name='content/objectives/obj_common/black_box/black_box_01', icon='package'},
   {group='samples', name='content/env_cyborg/samples/automaton_enemy_sample_01', icon='rare'},
   {group='samples', name='content/env_shared_forest/assets/samples/plant_sample_01', icon='common'},
-  {group='samples', name='content/env_bugs/assets/samples/bug_sample_01', icon='common', height=1.2},  -- 2.3.0: grows on a
+  {group='samples', name='content/env_bugs/assets/samples/bug_sample_01', icon='common', node='interact', height=1.2},  -- 2.3.0: grows on a
   -- stalk; the game's icon is at its 'interact' node, 0.9 m up (the model, filediver): 0.3 above that, as other samples
   {group='samples', name='content/env_super_earth/samples/se_intel_sample_01', icon='common'},
   {group='supplies', name='content/fac_helldivers/hellpod/health_pack_rack/health_pack', icon='stim', near=0},
@@ -41,9 +42,10 @@ return {
   {group='samples', name='content/env_cyborg/samples/automaton_intel_sample_01', icon='common'},
   {group='samples', name='content/env_shared/assets/samples/artifact_sample_01/artifact_sample_01', icon='common'},
   {group='samples', name='content/env_shared/assets/samples/legendarium_sample_01/legendarium_sample_01', icon='rare'},
-  {group='samples', name='content/env_bugs/assets/samples/bug_intel_sample_01', icon='common', height=1.9},  -- 2.3.0: its
+  {group='samples', name='content/env_bugs/assets/samples/bug_intel_sample_01', icon='common', node='interact', height=1.9},  -- 2.3.0: its
   -- 'interact' node is 1.59 m up
-  -- 2.3.0-test.3: what may come off them, in the same packages (the models: a loose bulb)
+  -- 2.3.0-test.3: what may come off them, in the same packages (the models: a loose bulb). test.3 log: shot off its
+  -- stalk, a sample tumbles whole (node: where it is); this one is the bulb picked up, briefly in a hand
   {group='samples', name='content/env_bugs/assets/samples/bug_sample_pickup_01', icon='common'},
   {group='samples', name='content/env_bugs/assets/samples/bug_intel_sample_01_pickup', icon='common'},
   {group='supplies', name='content/fac_helldivers/hellpod/ammo_rack/ammo_box', icon='supply'},

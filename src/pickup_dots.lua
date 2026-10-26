@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.3.0-test.3'
+local VERSION = '2.3.0-test.4'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -501,10 +501,10 @@ local function build_keys()
     local unnamed = 0
     for _, t in ipairs(TARGETS) do
         if t.name then
-            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height}
+            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node}
         elseif t.hex then
             unnamed = unnamed + 1
-            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height}
+            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node}
         end
     end
     log(string.format('%d target resources: %d named, %d by id only (looked up if the id self-test passes)',
@@ -605,18 +605,16 @@ local function refresh_hot(world, first, last)
     hot_reads = hot_reads + done
 end
 
--- 2.3.0-test.3, a probe: what changes on a Terminid sample shot off its stalk, and on a hellbomb that blew up
--- (the engine says neither). Every PROBE_EVERY_S, each such unit within PROBE_NEAR of you: its nodes'
+-- 2.3.0-test.3, a probe: what changes on a hellbomb that blew up (the engine does not say; test.4: from farther,
+-- more nodes). Every PROBE_EVERY_S, each such unit within PROBE_NEAR of you: its nodes'
 -- heights above its root and their way from it, logged when any changed by over 0.1 m (PROBE_LINES at most).
 local PROBE = {
-    bug_sample_01 = {'interact', 'bulb', 'bulb_base', 'stem_5', 'boss'},
-    bug_sample_pickup_01 = {'bulb'},
-    bug_intel_sample_01 = {'interact', 'boss', 'sample_handle', 'rotation'},
-    bug_intel_sample_01_pickup = {},
-    hellbomb_defunct = {'top', 'nuke', 'console', 'console_rotator', 'shield_prong_1', 'debris', 'rubble', 'explode_node',
-                        'target_node', 'g_hellbomb', 'Bone_a745e83c'},
+    hellbomb_defunct = {'root', 'boss', 'top', 'nuke', 'console', 'console_rotator', 'shield_prong_1', 'shield_prong_2',
+                        'shield_prong_3', 'debris', 'debris_collision', 'rubble', 'rubble_collision', 'collision',
+                        'c_collision_01', 'c_collision_02', 'destruction_volume', 'explode_node', 'target_node', 'navigation',
+                        'g_hellbomb', 'game_mesh', 'shadow_mesh'},
 }
-local PROBE_EVERY_S, PROBE_NEAR, PROBE_LINES = 2, 60, 400
+local PROBE_EVERY_S, PROBE_NEAR, PROBE_LINES = 1, 200, 400
 local probe_at, probe_lines = nil, 0
 local probed = setmetatable({}, {__mode = 'k'})   -- per unit (by the unit itself, as by_unit): its last line
 
@@ -794,6 +792,25 @@ local function check_taken(p, now)
     return false
 end
 
+-- Where a unit's node is now (Chef Shared Loader), or nil. 2.3.0: a Terminid sample on a stalk, shot off it,
+-- tumbles about whole, its root left low and its bulb anywhere (test.3 log): the game's icon goes with its
+-- 'interact' node, so ours does too. The node's index is kept per unit.
+local node_of = by_unit()
+
+local function node_position(p, name)
+    if name == nil or p.unit == nil or not (chef_has('unit_node') and chef_has('unit_position')) then return nil end
+    local ok, x, y, z = pcall(function()
+        local n = node_of[p.unit]
+        if n == nil then
+            n = CHEF.unit_node(p.unit, name) or false
+            node_of[p.unit] = n
+        end
+        if n == false then return nil end
+        return CHEF.unit_position(p.unit, n)
+    end)
+    if ok and type(x) == 'number' and type(y) == 'number' and type(z) == 'number' then return x, y, z end
+end
+
 local function collect_dots(now)
     local dots = {}
     local counts = {}
@@ -858,8 +875,13 @@ local function collect_dots(now)
                     c.worn = c.worn + 1
                 else
                     c.drawn = c.drawn + 1
-                    dots[#dots + 1] = {p[1], p[2], p[3] + (keys[i].height or GROUP_HEIGHT[group] or DOT_HEIGHT), d, who, group,
-                                       keys[i].icon}
+                    local nx, ny, nz = node_position(p, keys[i].node)
+                    if nx then   -- above the node as other markers are above their unit
+                        dots[#dots + 1] = {nx, ny, nz + (GROUP_HEIGHT[group] or DOT_HEIGHT), d, who, group, keys[i].icon}
+                    else
+                        dots[#dots + 1] = {p[1], p[2], p[3] + (keys[i].height or GROUP_HEIGHT[group] or DOT_HEIGHT), d, who,
+                                           group, keys[i].icon}
+                    end
                 end
             end
             if near_any then new_hot[#new_hot + 1] = i end

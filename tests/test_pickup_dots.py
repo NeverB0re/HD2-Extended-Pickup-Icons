@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.3.0-test.3 loading", text)
+            self.assertIn("Pickup Dots 2.3.0-test.4 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -913,6 +913,7 @@ class ScreenTests(Case):
           mouse_down = function(name) return name == 'right' and fake.rmb == true end,
           key_down = function(name) return name == 'e' and fake.e_key == true end,
           unit_position = function(u, node)
+            if node == 7 and u.ix then return u.ix, u.iy, u.iz end   -- its 'interact' node
             if node and node > 1 then return u.x, u.y + node, u.z + (u.blast or 0) * node end
             return u.x, u.y, u.z
           end,
@@ -920,7 +921,7 @@ class ScreenTests(Case):
             if node == 3 and u.turn then return math.sin(u.turn), math.cos(u.turn), 0, 0 end
             return 0, 1, 0, 0
           end,
-          unit_node = function(u, name) return nil end,
+          unit_node = function(u, name) if name == 'interact' and u.ix then return 7 end return nil end,
           call = function(name, ...)
             if name == 'Unit.num_scene_graph_items' then return 3 end
             return nil, 'not in the fake'
@@ -950,6 +951,22 @@ class ScreenTests(Case):
         f25 = 600 / math.tan(math.radians(25) / 2)
         self.assertAlmostEqual(pt[0], 960 + f25 / 10, delta=1)
         self.assertIn("camera: the game's own (Chef Shared Loader)", self.log_text())
+
+    def test_with_chef_a_sample_shot_off_its_stalk_is_marked_where_it_tumbled(self):
+        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
+                                                  "fov": math.radians(50)})
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        stalk = unit(0, 10, 0)
+        stalk.update(ix=2, iy=10, iz=-0.3)                            # lying 2 m to the right of its root
+        self.set_units("content/env_bugs/assets/samples/bug_sample_01", [stalk])
+        self.load_with_chef()
+        self.settle()
+        pts = [xyz(p) for t in self.screen_tris() for p in (t.a, t.b, t.c)]
+        f = 600 / math.tan(math.radians(25))
+        cx = (min(p[0] for p in pts) + max(p[0] for p in pts)) / 2
+        cy = (min(p[2] for p in pts) + max(p[2] for p in pts)) / 2
+        self.assertAlmostEqual(cx, 960 + f * 2 / 20 - 28, delta=3)    # at the node (and the game icon's offset)
+        self.assertAlmostEqual(cy, 600 + f * (-0.3 + 0.3 - 0.6) / 20 - 35, delta=3)   # 0.3 above it, not 1.2
 
     def test_with_chef_the_distance_shows_above_vehicles_only(self):
         self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
