@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.3.0-test.5'
+local VERSION = '2.3.0-test.6'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -608,23 +608,42 @@ local function refresh_hot(world, first, last)
     hot_reads = hot_reads + done
 end
 
--- 2.3.0-test.3, a probe: what changes on a hellbomb that blew up (the engine does not say; test.4: from farther,
--- more nodes). Every PROBE_EVERY_S, each such unit within PROBE_NEAR of you: its nodes'
--- heights above its root and their way from it, logged when any changed by over 0.1 m (PROBE_LINES at most).
+-- 2.3.0-test.3-6, a probe: what changes on a hellbomb that blew up, and on a vehicle destroyed (the engine says
+-- neither; test.5: no node of a hellbomb moved, it stayed alive). test.6: the unit's bounding box (Unit.box, as
+-- it comes, and with true: maybe visible meshes only), a few nodes, and the units that appear near it (World.units,
+-- their kinds). Every PROBE_EVERY_S, each such unit within PROBE_NEAR of you; a line when anything in it changed.
 local PROBE = {
-    hellbomb_defunct = {'root', 'boss', 'top', 'nuke', 'console', 'console_rotator', 'shield_prong_1', 'shield_prong_2',
-                        'shield_prong_3', 'debris', 'debris_collision', 'rubble', 'rubble_collision', 'collision',
-                        'c_collision_01', 'c_collision_02', 'destruction_volume', 'explode_node', 'target_node', 'navigation',
-                        'g_hellbomb', 'game_mesh', 'shadow_mesh'},
+    hellbomb_defunct = {'top', 'nuke', 'console', 'shield_prong_1'},
+    frv_supply = {'door_fwd_l', 'door_bck_r', 'hood', 'r_top_lid', 'l_box_01', 'r_front_rotation', 'steering_wheel', 'gun_mount'},
+    frv = {'door_fwd_l', 'hood', 'r_front_rotation', 'gun_mount'},
+    frv_flamer = {'door_fwd_l', 'hood', 'r_front_rotation', 'gun_mount'},
+    tank = {'interact'},
+    tank_storm = {'interact'},
 }
-local PROBE_EVERY_S, PROBE_NEAR, PROBE_LINES = 1, 200, 400
+local PROBE_EVERY_S, PROBE_NEAR, PROBE_LINES = 1, 200, 600
+local PROBE_AROUND = 8        -- metres: units this close to it are listed by kind
+local PROBE_SCAN_MAX = 40000  -- World.units longer than this: not scanned
 local probe_at, probe_lines = nil, 0
 local probed = setmetatable({}, {__mode = 'k'})   -- per unit (by the unit itself, as by_unit): its last line
 
-local function probe(now)
+local function vec_text(v)
+    local ok, x, y, z = pcall(function() return sr.Vector3.x(v), sr.Vector3.y(v), sr.Vector3.z(v) end)
+    if ok and type(x) == 'number' then return string.format('%.2f/%.2f/%.2f', x, y, z) end
+    return tostring(v)
+end
+
+local function box_text(u, ...)
+    if not chef_has('call') then return 'no call' end
+    local pose, extents, why = CHEF.call('Unit.box', u, ...)
+    if extents == nil then return 'nil(' .. tostring(why or pose) .. ')' end
+    return vec_text(extents)
+end
+
+local function probe(world, now)
     if probe_lines >= PROBE_LINES or not (chef_has('unit_node') and chef_has('unit_position')) or me == nil then return end
     if probe_at ~= nil and now - probe_at < PROBE_EVERY_S then return end
     probe_at = now
+    local all   -- World.units, once this round, if a probed unit is near
     for i = 1, #keys do
         local short = string.match(keys[i].label, '([^/]+)$') or keys[i].label
         local nodes = PROBE[short]
@@ -634,9 +653,10 @@ local function probe(now)
                 if q.unit ~= nil and dx * dx + dy * dy + dz * dz < PROBE_NEAR * PROBE_NEAR then
                     pcall(function()
                         local parts = {string.format('alive=%s at %.1f %.1f %.1f', tostring(CHEF.unit_alive(q.unit)), q[1], q[2], q[3])}
-                        if chef_has('unit_rotation') then
-                            local fx, fy, fz = CHEF.unit_rotation(q.unit)
-                            if type(fz) == 'number' then parts[#parts + 1] = string.format('fwd z=%.2f', fz) end
+                        parts[#parts + 1] = 'box=' .. box_text(q.unit) .. ' box(true)=' .. box_text(q.unit, true)
+                        if chef_has('call') then
+                            local n = CHEF.call('Unit.num_meshes', q.unit)
+                            parts[#parts + 1] = 'meshes=' .. tostring(n)
                         end
                         for _, name in ipairs(nodes) do
                             local n = CHEF.unit_node(q.unit, name)
@@ -649,8 +669,31 @@ local function probe(now)
                                 end
                             end
                         end
+                        -- what is around it, by kind
+                        if all == nil and chef_has('call') and chef_has('unit_kind') then
+                            local list = CHEF.call('World.units', world)
+                            all = type(list) == 'table' and as_list(list) or false
+                        end
+                        if all and #all <= PROBE_SCAN_MAX then
+                            local kinds = {}
+                            for _, u in ipairs(all) do
+                                if u ~= q.unit then
+                                    local x, y, z = CHEF.unit_position(u)
+                                    if type(x) == 'number' then
+                                        local ex, ey, ez = x - q[1], y - q[2], z - q[3]
+                                        if ex * ex + ey * ey + ez * ez < PROBE_AROUND * PROBE_AROUND then
+                                            local kind = tostring(CHEF.unit_kind(u))
+                                            kinds[kind] = (kinds[kind] or 0) + 1
+                                        end
+                                    end
+                                end
+                            end
+                            local names = {}
+                            for kind, n in pairs(kinds) do names[#names + 1] = kind .. 'x' .. n end
+                            table.sort(names)
+                            parts[#parts + 1] = 'around(' .. #all .. ')=' .. table.concat(names, ',')
+                        end
                         local line = table.concat(parts, ' ')
-                        -- the same within 0.1 m: not logged again (positions in the line are rounded to 0.1)
                         if probed[q.unit] ~= line then
                             probed[q.unit] = line
                             probe_lines = probe_lines + 1
@@ -1578,7 +1621,7 @@ local function tick()
         if #players > 0 and can_get then
             detect_id_form()
             sweep_step(world)
-            probe(now)
+            probe(world, now)
         end
         -- draw every frame; with no helldiver this clears whatever was drawn last
         if #players > 0 or shown() then draw(world, world_id, now) end
