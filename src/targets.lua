@@ -47,8 +47,8 @@ return {
   {group='samples', name='content/env_shared/assets/samples/legendarium_sample_01/legendarium_sample_01', icon='rare'},
   {group='samples', name='content/env_bugs/assets/samples/bug_intel_sample_01', icon='common', node='interact', height=1.9},  -- 2.3.0: its
   -- 'interact' node is 1.59 m up
-  -- 2.3.0-test.3: what may come off them, in the same packages (the models: a loose bulb). test.3 log: shot off its
-  -- stalk, a sample tumbles whole (node: where it is); this one is the bulb picked up, briefly in a hand
+  -- 2.3.0: their loose bulbs, in the same packages (the models). Shot off its stalk, a sample tumbles whole (its
+  -- node follows it: the log); the bulb is what is picked up, briefly in a hand
   {group='samples', name='content/env_bugs/assets/samples/bug_sample_pickup_01', icon='common'},
   {group='samples', name='content/env_bugs/assets/samples/bug_intel_sample_01_pickup', icon='common'},
   {group='supplies', name='content/fac_helldivers/hellpod/ammo_rack/ammo_box', icon='supply'},
@@ -118,11 +118,6 @@ return {
   {group='arms', hex='4df41f84668d07fb'},
   {group='arms', hex='439f9e65c18567da'},
   {group='arms', hex='c36b5b37c058dbdd'},
-  -- 2.3.0-test.10: not drawn, not weighed, only logged near tanks: the tank's turret, and hood, grate and
-  -- plates (in both tanks' packages; maybe the hatch that comes off)
-  {group='parts', hex='1fa1f596769225c2'},
-  {group='parts', hex='b8b26ab77816d7bc'},
-  {group='parts', name='content/fac_helldivers/vehicles/tank_storm/armaments/tank_storm_maingun/tank_storm_maingun'},
   -- 2.1.0: not drawn; where artillery shells are loaded: a shell in one is in it (LOADED_NEAR). Not the
   -- artillery itself: it is large, and shells are left beside it to load later.
   {group='loaders', name='content/objectives/obj_common/fire_artillery/ready_rack'},

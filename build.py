@@ -52,15 +52,18 @@ game's own icons.
 What gets a marker (default distance):
 - Samples (50 m): common, rare and super samples, sample containers, Terminid eggs.
 - Supplies (25 m): ammo boxes, grenade boxes, stims and resupply pod crates.
-- Mission items (50 m): SSSDs, data drives, black boxes, larva containers, launch codes,
-  keycards, video cameras, artillery shells, warheads and other things you carry.
+- Mission items (50 m): SSSDs, data drives, black boxes, larva containers (in sky blue),
+  launch codes, keycards, video cameras, artillery shells, warheads and other things you carry.
 - Mission objectives (50 m): drop-off points, cargo containers, valves and cranks.
-- Vehicles (100 m): exosuits, FRVs and tanks, in sky blue.
+- Hellbombs (100 m): the hellbombs lying about the map that blow up when shot, in red.
+- Vehicles (100 m): exosuits, FRVs and tanks, in sky blue; out of view, at the screen's edge
+  with an arrow.
 
-Vehicle markers show their distance. Markers get smaller farther away (supply markers
-fainter too), follow the game's camera (scopes too), and hide while a menu is open; on
-your ship mission markers are off. Items someone is carrying, and the vehicle you or a
-teammate are driving, get no marker. Items close enough
+Vehicle markers show their distance. Markers sit where the game shows its own icon, get
+smaller farther away (supply markers fainter too), follow the game's camera (scopes too),
+and hide while a menu is open; on your ship mission markers are off. Items someone is
+carrying, picked-up launch codes and keycards, hellbombs that blew up, destroyed vehicles
+and the vehicle you or a teammate are driving get no marker. Items close enough
 for the game to show its own icon get none either: samples within 9 m (Terminid eggs and
 Automaton super samples 20 m, sample containers 15 m) and ammo and grenade boxes within
 4 m. Stims have no icon of the game's and keep theirs.
@@ -75,8 +78,6 @@ in your mod manager (in Arsenal, by default, the bottom of the list).
 
 Good to know:
 - Valves and cranks stay marked after you turn them.
-- Destroyed exosuits and FRVs lose their marker. Destroyed tanks and supply FRVs keep it
-  until the wreck disappears from the map.
 """
 
 

@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.3.0-test.12'
+local VERSION = '2.3.0'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -120,7 +120,8 @@ local ICON_SHAPES = {
 -- mission items) from the game's textures (0x7615d6a35c657087, 0x4c3bef8bc16021c9, 0x93b43ada76587340,
 -- 0x3a6b4bdd84bc5561; extracted with filediver), supply and larva (the larva backpack) from a
 -- screenshot of the icon; egg from 0x460c4e527705db55; tube (the sample container) from a screenshot of its icon; tank, walker and car from the game's vehicle
--- stratagem icons (their red part). Each in every size a pixel apart along its longest side, from full
+-- stratagem icons (their red part); hellbomb (2.3.0) from the hellbomb backpack's stratagem icon, its green part
+-- (icon_strat_hud_backpack_hellbomb; the red part is the backpack). Each in every size a pixel apart along its longest side, from full
 -- down to SMALLEST, as rectangles
 -- {x0, y0, x1, y1, coverage in quarters} in whole pixels around the item (y up), drawn that see-through,
 -- as the game draws its scaled icon (scaled from those images).
@@ -620,136 +621,6 @@ local function refresh_hot(world, first, last)
     hot_reads = hot_reads + done
 end
 
--- 2.3.0-test.3-6, a probe: what changes on a hellbomb that blew up, and on a vehicle destroyed (the engine says
--- neither; test.5: no node of a hellbomb moved, it stayed alive). test.6: the unit's bounding box (Unit.box, as
--- it comes, and with true: maybe visible meshes only), a few nodes, and the units that appear near it (World.units,
--- their kinds). Every PROBE_EVERY_S, each such unit within PROBE_NEAR of you; a line when anything in it changed.
-local PROBE = {
-    tank = {'interact'},
-    tank_storm = {'interact'},
-    generic_intel = {},       -- test.11: launch codes and keycards, picked up (their meshes?)
-    cy_generic_intel = {},
-}
--- test.10: per mesh (Unit.mesh by index), what these Mesh calls give (test.9 inventory: Mesh has these)
-local MESH_CALLS = {'visibility', 'name'}
-local PROBE_EVERY_S, PROBE_NEAR, PROBE_LINES = 1, 200, 600
-local PROBE_AROUND = 8        -- metres: units this close to it are listed by kind
-local PROBE_SCAN_MAX = 40000  -- World.units longer than this: not scanned
-local probe_at, probe_lines = nil, 0
-local probed = setmetatable({}, {__mode = 'k'})   -- per unit (by the unit itself, as by_unit): its last line
-
-local function vec_text(v)
-    local ok, x, y, z = pcall(function() return sr.Vector3.x(v), sr.Vector3.y(v), sr.Vector3.z(v) end)
-    if ok and type(x) == 'number' then return string.format('%.2f/%.2f/%.2f', x, y, z) end
-    return tostring(v)
-end
-
-local function box_text(u, ...)
-    if not chef_has('call') then return 'no call' end
-    local pose, extents, why = CHEF.call('Unit.box', u, ...)
-    if extents == nil then return 'nil(' .. tostring(why or pose) .. ')' end
-    return vec_text(extents)
-end
-
-local function probe(world, now)
-    if probe_lines >= PROBE_LINES or not (chef_has('unit_node') and chef_has('unit_position')) or me == nil then return end
-    if probe_at ~= nil and now - probe_at < PROBE_EVERY_S then return end
-    probe_at = now
-    local all   -- World.units, once this round, if a probed unit is near
-    local found_arms = {}   -- the vehicles' weapons, as read last
-    for i = 1, #keys do
-        if (keys[i].group == 'arms' or keys[i].group == 'parts') and found[i] then
-            local short = string.match(keys[i].label, '([^/]+)$') or keys[i].label
-            for _, a in ipairs(found[i]) do found_arms[#found_arms + 1] = {a[1], a[2], a[3], short = short} end
-        end
-    end
-    for i = 1, #keys do
-        local short = string.match(keys[i].label, '([^/]+)$') or keys[i].label
-        local nodes = PROBE[short]
-        if nodes and found[i] then
-            for _, q in ipairs(found[i]) do
-                local dx, dy, dz = q[1] - me[1], q[2] - me[2], q[3] - me[3]
-                if q.unit ~= nil and dx * dx + dy * dy + dz * dz < PROBE_NEAR * PROBE_NEAR then
-                    pcall(function()
-                        local parts = {string.format('alive=%s at %.1f %.1f %.1f', tostring(CHEF.unit_alive(q.unit)), q[1], q[2], q[3])}
-                        parts[#parts + 1] = 'box=' .. box_text(q.unit) .. ' box(true)=' .. box_text(q.unit, true)
-                        if chef_has('call') then
-                            local n = CHEF.call('Unit.num_meshes', q.unit)
-                            parts[#parts + 1] = 'meshes=' .. tostring(n)
-                            for m = 1, math.min(tonumber(n) or 0, 16) do
-                                local mesh = CHEF.call('Unit.mesh', q.unit, m)
-                                if mesh ~= nil then
-                                    local said = {}
-                                    for _, fn in ipairs(MESH_CALLS) do
-                                        local a1, a2 = CHEF.call('Mesh.' .. fn, mesh)
-                                        if a1 ~= nil then
-                                            local t = tostring(a1)
-                                            said[#said + 1] = fn .. '=' .. t
-                                        end
-                                    end
-                                    parts[#parts + 1] = 'm' .. m .. '[' .. table.concat(said, ' ') .. ']'
-                                end
-                            end
-                        end
-                        for _, name in ipairs(nodes) do
-                            local n = CHEF.unit_node(q.unit, name)
-                            if n == nil then
-                                parts[#parts + 1] = name .. '=none'
-                            else
-                                local x, y, z = CHEF.unit_position(q.unit, n)
-                                if type(x) == 'number' then
-                                    parts[#parts + 1] = string.format('%s=%.1f(%.1f,%.1f)', name, z - q[3], x - q[1], y - q[2])
-                                end
-                            end
-                        end
-                        -- what is around it, by kind
-                        if false then   -- test.7: no units around (test.6: only the blast's rubble came and went)
-                            local list = CHEF.call('World.units', world)
-                            all = type(list) == 'table' and as_list(list) or false
-                        end
-                        if all and #all <= PROBE_SCAN_MAX then
-                            local kinds = {}
-                            for _, u in ipairs(all) do
-                                if u ~= q.unit then
-                                    local x, y, z = CHEF.unit_position(u)
-                                    if type(x) == 'number' then
-                                        local ex, ey, ez = x - q[1], y - q[2], z - q[3]
-                                        if ex * ex + ey * ey + ez * ez < PROBE_AROUND * PROBE_AROUND then
-                                            local kind = tostring(CHEF.unit_kind(u))
-                                            kinds[kind] = (kinds[kind] or 0) + 1
-                                        end
-                                    end
-                                end
-                            end
-                            local names = {}
-                            for kind, n in pairs(kinds) do names[#names + 1] = kind .. 'x' .. n end
-                            table.sort(names)
-                            parts[#parts + 1] = 'around(' .. #all .. ')=' .. table.concat(names, ',')
-                        end
-                        if found_arms then
-                            local near_arms = {}
-                            for _, a in ipairs(found_arms) do
-                                local ax, ay, az = a[1] - q[1], a[2] - q[2], a[3] - q[3]
-                                if ax * ax + ay * ay + az * az < 64 then
-                                    near_arms[#near_arms + 1] = string.format('%s(%.1f across,%.1f up)', a.short,
-                                        math.sqrt(ax * ax + ay * ay), az)
-                                end
-                            end
-                            parts[#parts + 1] = 'arms=' .. table.concat(near_arms, ',')
-                        end
-                        local line = table.concat(parts, ' ')
-                        if probed[q.unit] ~= line then
-                            probed[q.unit] = line
-                            probe_lines = probe_lines + 1
-                            log('probe ' .. short .. ': ' .. line)
-                        end
-                    end)
-                end
-            end
-        end
-    end
-end
-
 local function sweep_step(world)
     local first = cursor
     local last = math.min(cursor + KEYS_PER_FRAME - 1, #keys)
@@ -850,19 +721,9 @@ local SHIP_HIDDEN = {mission = true, carry = true, dropoffs = true, controls = t
 -- Last frame's counts per group, for the status line: drawn, hidden as worn/held, out of range.
 local last_counts = {}
 
--- Launch codes and keycards (targets with 'taken'): picked up, the unit stays where it lay, alive and
--- unchanged in everything the engine lets a mod read (2.1.0 test logs). So they are taken for picked up when
--- you press the interact key (TAKE_KEY) within TAKE_REACH of them, or a teammate has been within
--- TAKE_TEAMMATE_REACH of them for TAKE_HOLD_S (their keys can't be read; they pick codes up running past, so
--- briefly). You walking past leaves them marked. Without the loader's keyboard: you count as a teammate.
-local TAKE_REACH = 2
-local TAKE_TEAMMATE_REACH = 1.5
-local TAKE_HOLD_S = 0.5
-local TAKE_KEY = 'e'
 -- Per-unit tables are keyed by the unit itself, weakly: under Chef Shared Loader every unit's tostring is the
 -- same (one key for all would mix units up).
 local function by_unit() return setmetatable({}, {__mode = 'k'}) end
-local reached = by_unit()     -- per unit: since when a teammate has been at it
 local taken = by_unit()       -- per unit: picked up (this world)
 
 -- Has this unit no visible mesh left? Unit.box over the visible meshes (its second argument true) comes back
@@ -892,49 +753,24 @@ local function visible_meshes(unit)
     return count
 end
 
--- 2.3.0: picked up, launch codes hide three of their six meshes (test.11 log: picked up with another key than
--- the interact key; nothing else changed, as the codes were walked up to, either). So fewer visible meshes than
--- it was first seen with: taken, by whoever. Only where that can't be asked, the guess below (TAKE_KEY...).
+-- Launch codes and keycards (targets with 'taken'): picked up, the unit stays where it lay, alive, in place.
+-- 2.3.0: but it hides three of its six meshes (test.11 log; nothing else changed, as the codes were walked up
+-- to, either). So fewer visible meshes than it was first seen with: taken, by whoever, with whatever key.
+-- (2.1.0-2.2.0 guessed from the interact key and teammates standing at it; out in 2.3.0.)
 local first_visible = by_unit()   -- per unit: how many meshes it showed when first seen
 
-local function check_taken(p, now)
-    local id = p.unit or string.format('%.0f %.0f %.0f', p[1], p[2], p[3])
-    if taken[id] then return true end
+local function check_taken(p)
+    if p.unit == nil then return false end
+    if taken[p.unit] then return true end
     local shown = visible_meshes(p.unit)
     if shown ~= nil then
         first_visible[p.unit] = first_visible[p.unit] or shown
         if shown < first_visible[p.unit] then
-            taken[id] = true
+            taken[p.unit] = true
             log(string.format('taken: the item at %.1f %.1f %.1f is taken for picked up (%d of its %d meshes hidden)',
                 p[1], p[2], p[3], first_visible[p.unit] - shown, first_visible[p.unit]))
             return true
         end
-        return false
-    end
-    local keys_known = chef_has('key_down')
-    local by, other = nil, false
-    for _, h in ipairs(players) do
-        local dx, dy, dz = p[1] - h[1], p[2] - h[2], p[3] - h[3]
-        local d2 = dx * dx + dy * dy + dz * dz
-        if h == me and keys_known then
-            if d2 < TAKE_REACH * TAKE_REACH then
-                local ok, down = pcall(CHEF.key_down, TAKE_KEY)
-                if ok and down then by = 'you, with the interact key' end
-            end
-        elseif d2 < TAKE_TEAMMATE_REACH * TAKE_TEAMMATE_REACH then
-            other = true
-        end
-    end
-    if other then
-        reached[id] = reached[id] or now
-        if by == nil and now - reached[id] >= TAKE_HOLD_S then by = 'a helldiver standing at it' end
-    else
-        reached[id] = nil
-    end
-    if by then
-        taken[id] = true
-        log(string.format('taken: the item at %.1f %.1f %.1f is taken for picked up (%s)', p[1], p[2], p[3], by))
-        return true
     end
     return false
 end
@@ -1043,7 +879,7 @@ local function collect_dots(now)
                     c.worn = c.worn + 1
                 elseif group == 'hellbombs' and blown_up(p) then
                     c.worn = c.worn + 1
-                elseif keys[i].taken and check_taken(p, now) then
+                elseif keys[i].taken and check_taken(p) then
                     c.worn = c.worn + 1
                 elseif carried and group ~= 'dropoffs' and group ~= 'controls' and group ~= 'hellbombs' then
                     -- (those never worn; a teammate may stand at it)
@@ -1738,7 +1574,7 @@ local function tick()
         world_id = 'world #' .. world_seq
         last_world, world_seen_at, cursor, found, players, players_read_at, me = world, now, 1, {}, {}, nil, nil
         vehicles_seen = {}
-        reached, taken, blown, first_visible, me_unit = by_unit(), by_unit(), by_unit(), by_unit(), nil
+        taken, blown, first_visible, me_unit = by_unit(), by_unit(), by_unit(), nil
         hot = {}
         new_main_world()
         traced = 0
@@ -1754,7 +1590,6 @@ local function tick()
         if #players > 0 and can_get then
             detect_id_form()
             sweep_step(world)
-            probe(world, now)
         end
         -- draw every frame; with no helldiver this clears whatever was drawn last
         if #players > 0 or shown() then draw(world, world_id, now) end

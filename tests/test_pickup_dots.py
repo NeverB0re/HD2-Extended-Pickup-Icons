@@ -210,7 +210,7 @@ class DrawingTests(Case):
         self.assertGreater(self.fake.updates, 0)
         self.assertEqual(set(self.fake.lookups.keys()), {AVATAR, MARK})
         self.assertIn("can_get: present", log)
-        self.assertIn("89 target resources: 81 named, 8 by id only (looked up if the id self-test passes)", log)
+        self.assertIn("86 target resources: 80 named, 6 by id only (looked up if the id self-test passes)", log)
         self.frames(1, start=200.0)                   # the next status line, after a full sweep
         log = self.log_text()
         self.assertIn("found: il_sarcophagus=2", log)
@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.3.0-test.12 loading", text)
+            self.assertIn("Pickup Dots 2.3.0 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -900,18 +900,14 @@ class ScreenTests(Case):
         self.settle()
         self.assertIn("carry drawn=1 worn=1", self.status_now())
 
-    def test_launch_codes_a_helldiver_stood_at_are_taken_for_picked_up(self):
+    def test_launch_codes_a_helldiver_stands_at_keep_their_marker(self):
         codes = "content/objectives/obj_common/generic_intel/generic_intel"
         self.set_units(AVATAR, [unit(0, -8, 0), unit(10, 0, 0)], loaded=False)   # you; a teammate at them
         self.set_units(codes, [unit(10, 1.2, 0), unit(-6, 0, 0)])
         self.load()
-        self.settle()                                                  # 9 s on: long enough
-        self.assertIn("mission drawn=1 worn=1", self.status_now())
-        self.assertIn("taken: the item at 10.0 1.2 0.0 is taken for picked up (a helldiver standing at it)",
-                      self.log_text())
-        self.fake.units[AVATAR][2].x = 30                              # the teammate goes: they stay taken
-        self.frames(10, start=30.0)
-        self.assertIn("mission drawn=1 worn=1", self.status_now())
+        self.settle()                                                  # 9 s on: no guess from who stands where
+        self.assertIn("mission drawn=2 worn=0", self.status_now())
+        self.assertNotIn("taken: ", self.log_text())
 
     # Chef Shared Loader hands the mod its helpers as the chunk's argument.
     FAKE_CHEF = """
@@ -1084,12 +1080,17 @@ class ScreenTests(Case):
         self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
                                                   "fov": math.radians(50)})
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(codes, [unit(0, -6.5, 0), unit(5, 5, 0)])      # one at you, one farther on
+        picked, other = unit(0, -6.5, 0), unit(5, 5, 0)
+        picked.update(meshes=6)
+        other.update(meshes=6)
+        self.set_units(codes, [picked, other])                       # one at you, one farther on
         self.load_with_chef()
         self.settle()
-        self.fake.e_key = True
+        self.fake.e_key = True                                        # the interact key alone takes nothing
         self.frames(3, start=30.0)
         self.fake.e_key = False
+        self.assertNotIn("taken: ", self.log_text())
+        self.fake.units[codes][1].hidden = 3                           # picked up
         self.frames(80, start=40.0)
         self.assertEqual(self.log_text().count("taken: "), 1)
         self.assertEqual(len(self.screen_points()), 1)                 # the other codes keep their marker
