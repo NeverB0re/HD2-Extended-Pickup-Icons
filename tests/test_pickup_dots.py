@@ -210,7 +210,7 @@ class DrawingTests(Case):
         self.assertGreater(self.fake.updates, 0)
         self.assertEqual(set(self.fake.lookups.keys()), {AVATAR, MARK})
         self.assertIn("can_get: present", log)
-        self.assertIn("87 target resources: 81 named, 6 by id only (looked up if the id self-test passes)", log)
+        self.assertIn("89 target resources: 81 named, 8 by id only (looked up if the id self-test passes)", log)
         self.frames(1, start=200.0)                   # the next status line, after a full sweep
         log = self.log_text()
         self.assertIn("found: il_sarcophagus=2", log)
@@ -367,7 +367,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.3.0-test.9 loading", text)
+            self.assertIn("Pickup Dots 2.3.0-test.10 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -597,6 +597,23 @@ class ScreenTests(Case):
         self.frames(60, start=201.0)
         self.assertIn("frv lost its weapons", self.log_text())
         self.assertTrue(all(t.a._x > 960 for t in self.screen_tris()))   # only the tank is left
+
+    def test_a_vehicle_falling_from_orbit_is_not_taken_for_destroyed(self):
+        gun = "content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(self.VEHICLE, [unit(0, 20, 60)])      # within 100 m of you
+        self.set_units(gun, [unit(0, 20, 61.5)])
+        self.load()
+        self.settle()
+        body, arm = self.fake.units[self.VEHICLE][1], self.fake.units[gun][1]
+        for k in range(30):                                  # falling: its gun, read on other frames, lags 6 m
+            body.z = 60 - 1.5 * k                            # 90 m/s, as a tank fell (test.9 log)
+            arm.z = body.z + 7.5
+            self.frames(1, start=40.0 + k / 60)
+        body.z, arm.z = 0, 1.5                               # landed, gun on
+        self.frames(120, start=41.0)
+        self.assertNotIn("lost its weapons", self.log_text())
+        self.assertIn("vehicles drawn=1", self.status_now())
 
     def test_vehicles_side_by_side_each_get_a_marker(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)

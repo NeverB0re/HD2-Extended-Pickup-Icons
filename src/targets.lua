@@ -110,13 +110,19 @@ return {
   {group='arms', name='content/fac_helldivers/vehicles/combat_walker_turret/combat_walker_turret'},
   {group='arms', name='content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg'},
   {group='arms', name='content/fac_helldivers/vehicles/frv_heavy/armaments/frv_flamethrower/frv_flamethrower'},
-  {group='arms', name='content/fac_helldivers/vehicles/tank_storm/armaments/tank_storm_maingun/tank_storm_maingun'},
+  -- (tank_storm_maingun out in 2.3.0: it stays on a destroyed tank; test.9 log)
   -- 2.3.0: the supply FRV's gun on top, which falls off when it is destroyed (in frv_supply.package only; the
   -- model: traverse, elevation, muzzle, gunhousing; not the supply rack at the back, which stays), and the
-  -- tank's turrets (in tank.package only; the models: 'tank_turret', one with turret_whole/turret_damaged)
+  -- tanks' guns with a machine gun and laser muzzle (one per tank kind, in its package only), gone when the tank
+  -- is destroyed (test.9 log: the tank's went, its turret, 1fa1f596769225c2, stayed)
   {group='arms', hex='4df41f84668d07fb'},
-  {group='arms', hex='1fa1f596769225c2'},
   {group='arms', hex='439f9e65c18567da'},
+  {group='arms', hex='c36b5b37c058dbdd'},
+  -- 2.3.0-test.10: not drawn, not weighed, only logged near tanks: the tank's turret, and hood, grate and
+  -- plates (in both tanks' packages; maybe the hatch that comes off)
+  {group='parts', hex='1fa1f596769225c2'},
+  {group='parts', hex='b8b26ab77816d7bc'},
+  {group='parts', name='content/fac_helldivers/vehicles/tank_storm/armaments/tank_storm_maingun/tank_storm_maingun'},
   -- 2.1.0: not drawn; where artillery shells are loaded: a shell in one is in it (LOADED_NEAR). Not the
   -- artillery itself: it is large, and shells are left beside it to load later.
   {group='loaders', name='content/objectives/obj_common/fire_artillery/ready_rack'},

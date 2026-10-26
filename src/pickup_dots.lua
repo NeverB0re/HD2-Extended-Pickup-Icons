@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.3.0-test.9'
+local VERSION = '2.3.0-test.10'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -70,6 +70,8 @@ local VEHICLE_BUSY = 4        -- a helldiver this close to a vehicle's origin is
 local VEHICLE_PARKED_S = 3    -- a vehicle that has not moved this long is parked: teammates beside it do not hide it
 local WRECK_NEAR = 4          -- an exosuit this close to an exosuit wreck is that wreck
 local ARMS_NEAR = 5           -- a vehicle's weapon units (group 'arms') are this close to it
+-- (A weapon gone counts once the vehicle has stood still ARMS_STILL_S: falling from orbit, its weapons, read on
+-- other frames, lag metres behind it.)
 -- 2.3.0: a destroyed supply FRV's gun (and maybe a tank's turret) comes off and may lie beside it, still within
 -- ARMS_NEAR. So how far its nearest weapon is from the point it is mounted at (the vehicle's 'mount' node, else
 -- its root: two points of one body, the same however it leans) is kept once it has stood still ARMS_STILL_S
@@ -623,15 +625,11 @@ end
 -- it comes, and with true: maybe visible meshes only), a few nodes, and the units that appear near it (World.units,
 -- their kinds). Every PROBE_EVERY_S, each such unit within PROBE_NEAR of you; a line when anything in it changed.
 local PROBE = {
-    frv_supply = {'door_fwd_l', 'hood', 'gun_mount'},
-    frv = {'door_fwd_l', 'hood', 'gun_mount'},
-    frv_flamer = {'door_fwd_l', 'hood', 'gun_mount'},
     tank = {'interact'},
     tank_storm = {'interact'},
-    combat_walker = {'interact_enter'},
 }
--- test.7: per mesh (Unit.mesh by index), what these Mesh calls give, if the game has them
-local MESH_CALLS = {'is_visible', 'visible', 'bounding_box', 'num_materials'}
+-- test.10: per mesh (Unit.mesh by index), what these Mesh calls give (test.9 inventory: Mesh has these)
+local MESH_CALLS = {'visibility', 'name'}
 local PROBE_EVERY_S, PROBE_NEAR, PROBE_LINES = 1, 200, 600
 local PROBE_AROUND = 8        -- metres: units this close to it are listed by kind
 local PROBE_SCAN_MAX = 40000  -- World.units longer than this: not scanned
@@ -658,7 +656,7 @@ local function probe(world, now)
     local all   -- World.units, once this round, if a probed unit is near
     local found_arms = {}   -- the vehicles' weapons, as read last
     for i = 1, #keys do
-        if keys[i].group == 'arms' and found[i] then
+        if (keys[i].group == 'arms' or keys[i].group == 'parts') and found[i] then
             local short = string.match(keys[i].label, '([^/]+)$') or keys[i].label
             for _, a in ipairs(found[i]) do found_arms[#found_arms + 1] = {a[1], a[2], a[3], short = short} end
         end
@@ -683,7 +681,7 @@ local function probe(world, now)
                                     for _, fn in ipairs(MESH_CALLS) do
                                         local a1, a2 = CHEF.call('Mesh.' .. fn, mesh)
                                         if a1 ~= nil then
-                                            local t = type(a1) == 'userdata' and vec_text(a2 or a1) or tostring(a1)
+                                            local t = tostring(a1)
                                             said[#said + 1] = fn .. '=' .. t
                                         end
                                     end
@@ -972,8 +970,12 @@ local function collect_dots(now)
                     local mx, my, mz = node_position(p, keys[i].mount)
                     local from = nearest_from(arms, p, ARMS_NEAR, mx and {mx, my, mz} or p)
                     local armed_now = from ~= nil
+                    local still = now - v.still_since >= ARMS_STILL_S
                     if armed_now and not v.off then v.armed, v.lost = true, nil end
-                    if armed_now and not v.off and now - v.still_since >= ARMS_STILL_S then
+                    if v.armed and not armed_now and still and not v.off then
+                        v.off = true   -- its weapon gone while it stands still: destroyed, for good (2.3.0)
+                    end
+                    if armed_now and not v.off and still then
                         if v.arm == nil then
                             v.arm = from
                         elseif math.abs(from - v.arm) > ARM_MOVED then
@@ -982,7 +984,7 @@ local function collect_dots(now)
                                 string.match(keys[i].label, '([^/]+)$') or keys[i].label, from, v.arm))
                         end
                     end
-                    local destroyed = near(wrecks, p, WRECK_NEAR) or (v.armed and not armed_now) or v.off
+                    local destroyed = near(wrecks, p, WRECK_NEAR) or v.off
                     if destroyed and not v.lost then
                         v.lost = true
                         log('vehicle: ' .. (string.match(keys[i].label, '([^/]+)$') or keys[i].label)
