@@ -1128,9 +1128,10 @@ class ScreenTests(Case):
         """, self.fake)
         self.load()
         order = [i[len("pickup_dots."):] for i in self.fake.order.values()]
-        self.assertEqual(order, ["show_samples", "range_samples", "show_supplies", "range_supplies", "fade",
+        self.assertEqual(order, ["show_samples", "range_samples", "fade_samples", "show_supplies", "range_supplies", "fade",
                                  "show_mission", "range_mission", "show_objectives", "range_objectives",
-                                 "show_hellbombs", "range_hellbombs", "show_vehicles", "range_vehicles", "distance", "hide_near", "smallest_size", "opacity"])
+                                 "show_hellbombs", "range_hellbombs", "show_vehicles", "range_vehicles",
+                                 "show_deaths", "range_deaths", "distance", "hide_near", "smallest_size", "opacity"])
 
     def test_vehicles_get_their_kinds_framed_icon_sky_blue(self):
         self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
@@ -1268,6 +1269,75 @@ class ScreenTests(Case):
         self.assertEqual({t.color.a for t in tris if t.a._x < 960}, {127})
         self.assertEqual(max(t.color.a for t in tris if t.a._x > 960), 25)   # a fifth of that
 
+    def test_a_stim_up_close_is_solid_whatever_the_opacity(self):
+        self.set_options({"pickup_dots.opacity": 50})
+        stim = "content/fac_helldivers/discoverables/health_pack_discoverable_01/health_pack_discoverable_01"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(stim, [unit(-1, -5, 0), unit(1, 0, 0)])      # 3 m off; 8 m off
+        self.load()
+        self.settle()
+        tris = self.screen_tris()
+        self.assertEqual({t.color.a for t in tris if t.a._x < 960}, {255})   # up close: solid, as the game's icons there
+        self.assertEqual({t.color.a for t in tris if t.a._x > 960}, {127})   # farther: the opacity set
+
+    def test_samples_can_fade_far_away_too(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(SAMPLE, [unit(-2, 41.95, 0)])                 # 50 m, the edge of the 50 m sample range
+        self.load()
+        self.settle()
+        self.assertEqual({t.color.a for t in self.screen_tris()}, {255})     # off by default
+        self.tearDown(); self.setUp()
+        self.set_options({"pickup_dots.fade_samples": True})
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(SAMPLE, [unit(-2, 41.95, 0)])
+        self.load()
+        self.settle()
+        self.assertEqual({t.color.a for t in self.screen_tris()}, {51})      # a fifth at the edge, as supplies
+
+    def add_avatar(self, x, y, z=0.0):
+        """A helldiver coming into the world (the ones there keep their units)."""
+        avatars = self.fake.units[AVATAR]
+        avatars[len(avatars) + 1] = self.lua.table_from(unit(x, y, z))
+        return avatars[len(avatars)]
+
+    def look_at(self, x, y):
+        """The camera 2 m behind (x, y), looking along +y."""
+        self.lua.execute("local fake, x, y = ...; fake.cam.pos = {x, y - 2, 0.6}", self.fake, x, y)
+
+    def test_where_you_died_is_marked_till_you_pass_it(self):
+        self.set_units(AVATAR, [unit(0, -8, 0), unit(20, 0, 0)], loaded=False)   # you; a teammate
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        self.look_at(20, 0)                                            # you died: the camera on the teammate
+        self.frames(300, start=61.0)
+        self.assertNotIn("death: ", self.log_text())                   # a teammate there all along: not you
+        you = self.add_avatar(50, 0)                                   # reinforced: a new helldiver, the camera on it
+        self.look_at(50, 0)
+        self.frames(240, start=70.0)
+        self.assertIn("death: you died at 0.0 -8.0 0.0", self.log_text())
+        marks = [p for p in self.points() if abs(p[2] - 1.2) < 1e-6]
+        self.assertEqual(marks, [(0.0, -8.0, 1.2)])                    # the body's place, while it lies there
+        self.assertIn((255, 210, 60), {(t.color.r, t.color.g, t.color.b) for t in self.screen_tris()})
+        you.x, you.y = 0.5, -7                                         # back there
+        self.look_at(0.5, -7)
+        self.frames(30, start=80.0)
+        self.assertIn("death: the mark at 0.0 -8.0 0.0 passed - gone", self.log_text())
+        self.assertNotIn((0.0, -8.0, 1.2), self.points())
+
+    def test_a_teammate_reinforced_is_not_taken_for_your_death(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        self.add_avatar(30, 0)                                         # a teammate drops in, far from the camera
+        self.frames(300, start=70.0)
+        self.look_at(30, 0)                                            # the camera passes it for a moment
+        self.frames(60, start=80.0)
+        self.look_at(0, -8)
+        self.frames(300, start=82.0)
+        self.assertNotIn("death: ", self.log_text())
+
     def test_sample_and_supply_markers_sit_where_the_games_icons_do(self):
         self.set_units(AVATAR, [unit(0, -11, 0)], loaded=False)
         self.set_units(SAMPLE, [unit(0, 0, 0)])               # straight ahead: it would be centred at 960
@@ -1287,11 +1357,11 @@ class ScreenTests(Case):
         self.settle()
         self.assertEqual(self.screen_tris(), [])
         ids = sorted(self.fake.options.keys())
-        look = ["pickup_dots." + n for n in ("distance", "fade", "hide_near", "opacity", "smallest_size")]
+        look = ["pickup_dots." + n for n in ("distance", "fade", "fade_samples", "hide_near", "opacity", "smallest_size")]
         self.assertEqual([i for i in ids if not i.startswith(("pickup_dots.range_", "pickup_dots.show_"))], look)
-        self.assertEqual(len(ids), 12 + 5)
+        self.assertEqual(len(ids), 14 + 6)
         kinds = sorted(i[len("pickup_dots.show_"):] for i in ids if i.startswith("pickup_dots.show_"))
-        self.assertEqual(kinds, ["hellbombs", "mission", "objectives", "samples", "supplies", "vehicles"])
+        self.assertEqual(kinds, ["deaths", "hellbombs", "mission", "objectives", "samples", "supplies", "vehicles"])
         self.assertTrue(self.fake.options["pickup_dots.fade"].default)
         self.assertEqual(self.fake.options["pickup_dots.show_vehicles"].type, "toggle")
 
