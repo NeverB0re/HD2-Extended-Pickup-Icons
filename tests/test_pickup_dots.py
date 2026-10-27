@@ -1128,9 +1128,10 @@ class ScreenTests(Case):
         """, self.fake)
         self.load()
         order = [i[len("pickup_dots."):] for i in self.fake.order.values()]
-        self.assertEqual(order, ["show_samples", "range_samples", "show_supplies", "range_supplies", "fade",
+        self.assertEqual(order, ["show_samples", "range_samples", "fade_samples", "show_supplies", "range_supplies", "fade",
                                  "show_mission", "range_mission", "show_objectives", "range_objectives",
-                                 "show_hellbombs", "range_hellbombs", "show_vehicles", "range_vehicles", "distance", "hide_near", "smallest_size", "opacity"])
+                                 "show_hellbombs", "range_hellbombs", "show_vehicles", "range_vehicles",
+                                 "show_deaths", "range_deaths", "distance", "hide_near", "smallest_size", "opacity"])
 
     def test_vehicles_get_their_kinds_framed_icon_sky_blue(self):
         self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
@@ -1268,6 +1269,218 @@ class ScreenTests(Case):
         self.assertEqual({t.color.a for t in tris if t.a._x < 960}, {127})
         self.assertEqual(max(t.color.a for t in tris if t.a._x > 960), 25)   # a fifth of that
 
+    def test_a_stim_up_close_is_solid_whatever_the_opacity(self):
+        self.set_options({"pickup_dots.opacity": 50})
+        stim = "content/fac_helldivers/discoverables/health_pack_discoverable_01/health_pack_discoverable_01"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(stim, [unit(-1, -5, 0), unit(1, 0, 0)])      # 3 m off; 8 m off
+        self.load()
+        self.settle()
+        tris = self.screen_tris()
+        self.assertEqual({t.color.a for t in tris if t.a._x < 960}, {255})   # up close: solid, as the game's icons there
+        self.assertEqual({t.color.a for t in tris if t.a._x > 960}, {127})   # farther: the opacity set
+
+    def test_samples_can_fade_far_away_too(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(SAMPLE, [unit(-2, 41.95, 0)])                 # 50 m, the edge of the 50 m sample range
+        self.load()
+        self.settle()
+        self.assertEqual({t.color.a for t in self.screen_tris()}, {255})     # off by default
+        self.tearDown(); self.setUp()
+        self.set_options({"pickup_dots.fade_samples": True})
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(SAMPLE, [unit(-2, 41.95, 0)])
+        self.load()
+        self.settle()
+        self.assertEqual({t.color.a for t in self.screen_tris()}, {51})      # a fifth at the edge, as supplies
+
+    def add_avatar(self, x, y, z=0.0):
+        """A helldiver coming into the world (the ones there keep their units)."""
+        avatars = self.fake.units[AVATAR]
+        avatars[len(avatars) + 1] = self.lua.table_from(unit(x, y, z))
+        return avatars[len(avatars)]
+
+    def reinforce(self, x, y, start):
+        """A helldiver dropped in a hellpod at (x, y): 490 m up, the camera following it down, 1 s later on the ground."""
+        new = self.add_avatar(x, y, 490)
+        self.lua.execute("local fake, x, y = ...; fake.cam.pos = {x, y - 2, 490.6}", self.fake, x, y)
+        self.frames(30, start=start)
+        new.z = 0
+        self.look_at(x, y)
+        self.frames(240, start=start + 1)
+        return new
+
+    def look_at(self, x, y):
+        """The camera 2 m behind (x, y), looking along +y."""
+        self.lua.execute("local fake, x, y = ...; fake.cam.pos = {x, y - 2, 0.6}", self.fake, x, y)
+
+    def test_where_you_died_is_marked_till_you_get_there(self):
+        self.set_units(AVATAR, [unit(0, -8, 0), unit(20, 0, 0)], loaded=False)   # you; a teammate
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        self.look_at(20, 0)                                            # you died: the camera on the teammate
+        self.frames(300, start=61.0)
+        self.assertNotIn("death: ", self.log_text())                   # a teammate there all along: not you
+        you = self.reinforce(50, 0, start=70.0)                        # reinforced: a new helldiver, the camera on it
+        self.assertIn("death: you died at 0.0 -8.0 0.0", self.log_text())
+        marks = [p for p in self.points() if abs(p[2] - 1.2) < 1e-6]
+        self.assertEqual(marks, [(0.0, -8.0, 1.2)])                    # the body's place, while it lies there
+        self.fake.textures_loaded = True
+        (b,) = [b for b in self.bitmaps_now(start=79.0) if b.tex.startswith("skull_")]   # the death screen's skull, red
+        self.assertEqual((b.c.r, b.c.g, b.c.b), (235, 50, 40))
+        you.x, you.y = 0, -12.5                                        # 4.5 m off: still there
+        self.look_at(0, -12.5)
+        self.frames(30, start=80.0)
+        self.assertIn((0.0, -8.0, 1.2), self.points())
+        you.y = -11.5                                                  # 3.5 m off: reached
+        self.look_at(0, -11.5)
+        self.frames(30, start=81.0)
+        self.assertIn("death: the mark at 0.0 -8.0 0.0 reached - gone", self.log_text())
+        self.assertNotIn((0.0, -8.0, 1.2), self.points())
+
+    def test_a_body_flung_far_leaves_the_mark_where_your_sample_container_dropped(self):
+        self.lua.execute("stingray.IdString64 = { from_hex = function(hex) return { hex = hex } end }")
+        self.fake.loaded["hex:4d1c334d294dfa97"] = True                # the avatar, by id: the id self-test passes
+        box = "hex:a9936cbe561e8180"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(box, [unit(0.3, -8.2, 1.2)])                    # on your back
+        self.load()
+        self.settle()
+        self.frames(120, start=60.0)
+        you, carried = self.fake.units[AVATAR][1], self.fake.units[box][1]
+        carried.z = 0.2                                                # killed: it drops where you were ...
+        you.x = 20                                                     # ... and a blast flings the body 20 m
+        self.look_at(20, -8)
+        self.frames(120, start=62.0)
+        self.reinforce(50, 0, start=70.0)                              # reinforced
+        self.assertIn("death: you died at 0.3 -8.2 0.2 (your sample container; the body at 20.0 -8.0 0.0", self.log_text())
+        marks = [p for p in self.points() if abs(p[2] - 1.4) < 1e-6]
+        self.assertEqual(marks, [(0.3, -8.2, 1.4)])
+
+    def box_setup(self):
+        self.lua.execute("stingray.IdString64 = { from_hex = function(hex) return { hex = hex } end }")
+        self.fake.loaded["hex:4d1c334d294dfa97"] = True                # the avatar, by id: the id self-test passes
+        return "hex:a9936cbe561e8180"
+
+    def test_a_sample_container_you_dropped_and_walked_off_from_is_not_where_you_died(self):
+        box = self.box_setup()
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(box, [unit(0.3, -8.2, 1.2)])                    # on your back
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        you, dropped = self.fake.units[AVATAR][1], self.fake.units[box][1]
+        dropped.z = 0.2                                                # dropped on purpose ...
+        for k in range(600):                                           # ... and 30 m on, for 10 s
+            you.y = -8 + 30 * k / 599
+            self.look_at(0, you.y)
+            self.frames(1, start=61.0 + k / 60)
+        self.frames(120, start=72.0)                                   # killed there
+        self.reinforce(50, 0, start=80.0)
+        self.assertIn("death: you died at 0.0 22.0 0.0 (your body: your sample container is not by it", self.log_text())
+
+    def test_a_teammates_sample_container_you_stood_by_is_not_where_you_died(self):
+        box = self.box_setup()
+        self.set_units(AVATAR, [unit(0, -8, 0), unit(1.5, -8, 0)], loaded=False)   # you, by a teammate
+        self.set_units(box, [unit(1.7, -8.3, 1.2)])                    # on the teammate's back, within 2.5 m of you
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        mate, theirs = self.fake.units[AVATAR][2], self.fake.units[box][1]
+        self.frames(120, start=61.0)                                   # you are killed; they run on
+        mate.x, theirs.x = 30, 30.2
+        self.frames(60, start=64.0)
+        self.reinforce(50, 0, start=70.0)
+        self.assertIn("death: you died at 0.0 -8.0 0.0 (your body", self.log_text())
+
+    def test_a_new_death_moves_the_mark(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        second = self.reinforce(50, 0, start=70.0)                     # died at 0 -8; reinforced at 50 0
+        second.x, second.y = 80, 10                                    # walked off, died there, never back at the first
+        self.look_at(80, 10)
+        self.frames(60, start=80.0)
+        self.reinforce(120, 0, start=90.0)                             # reinforced again
+        marks = [p for p in self.points() if abs(p[2] - 1.2) < 1e-6]
+        self.assertEqual(marks, [(80.0, 10.0, 1.2)])                   # the last death's only
+
+    def test_a_body_gone_before_you_are_reinforced_leaves_the_mark_where_it_lay(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        body = self.fake.units[AVATAR][1]
+        body.x = 6                                                     # killed, flung 6 m ...
+        self.frames(60, start=61.0)
+        body.alive = False                                             # ... and gone minutes later, before you are back
+        self.frames(60, start=200.0)
+        self.reinforce(50, 0, start=210.0)
+        self.assertIn("death: you died at 6.0 -8.0 0.0 (your body;", self.log_text())
+        marks = [p for p in self.points() if abs(p[2] - 1.2) < 1e-6]
+        self.assertEqual(marks, [(6.0, -8.0, 1.2)])
+
+    def test_the_mark_shows_while_you_still_come_down(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        new = self.add_avatar(50, 0, 490)                              # your hellpod, the camera on it
+        for k in range(90):                                            # coming down at 150 m/s
+            new.z = 490 - 150 * k / 60
+            self.lua.execute("local fake, z = ...; fake.cam.pos = {50, -2, z + 0.6}", self.fake, new.z)
+            self.frames(1, start=70.0 + k / 60)
+        self.assertGreater(new.z, 250)                                 # still well up
+        self.assertIn("death: you died at 0.0 -8.0 0.0", self.log_text())
+        (mark,) = [d for d in self.mod.dots.values() if d[6] == "deaths"]
+        self.assertAlmostEqual(mark[4], math.hypot(50, 8), places=3)   # the walk to it, across the ground
+
+    def test_a_teammate_you_watch_reinforced_first_is_not_taken_for_you(self):
+        self.set_units(AVATAR, [unit(0, -8, 0), unit(30, 0, 0)], loaded=False)   # you; a teammate
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        self.look_at(30, 0)                                            # you died: watching the teammate
+        self.frames(120, start=61.0)
+        mate = self.reinforce(60, 0, start=70.0)                       # they died too, and came back first: followed
+        self.assertIn("death: you died at 0.0 -8.0 0.0", self.log_text())   # the mark is yours all the same
+        for k in range(120):                                           # they run over to your gear ...
+            mate.x, mate.y = 60 - 60 * k / 119, -8 * k / 119
+            self.look_at(mate.x, mate.y)
+            self.frames(1, start=80.0 + k / 60)
+        self.assertIn("reached - gone", self.log_text())
+        self.reinforce(100, 0, start=83.0)                             # ... as you come back
+        self.assertIn("taken for you was moving (a teammate you watched)", self.log_text())
+        self.assertIn("death: the mark at 0.0 -8.0 0.0 is back", self.log_text())
+        marks = [p for p in self.points() if abs(p[2] - 1.2) < 1e-6]
+        self.assertEqual(marks, [(0.0, -8.0, 1.2)])                    # one mark, yours, not at the teammate
+
+    def test_leaving_a_mission_the_ships_helldiver_is_not_taken_for_your_death(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        self.add_avatar(0, 2.5, 20)                                    # 20 m up, and stays there (test.3 log)
+        self.lua.execute("local fake = ...; fake.cam.pos = {0, 0.5, 20.6}", self.fake)   # the camera on it
+        self.frames(300, start=70.0)
+        self.assertIn("you: the helldiver at 0.0 2.5 20.0", self.log_text())
+        self.assertNotIn("death: ", self.log_text())
+
+    def test_a_teammate_reinforced_is_not_taken_for_your_death(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        self.add_avatar(30, 0)                                         # a teammate drops in, far from the camera
+        self.frames(300, start=70.0)
+        self.look_at(30, 0)                                            # the camera passes it for a moment
+        self.frames(60, start=80.0)
+        self.look_at(0, -8)
+        self.frames(300, start=82.0)
+        self.assertNotIn("death: ", self.log_text())
+
     def test_sample_and_supply_markers_sit_where_the_games_icons_do(self):
         self.set_units(AVATAR, [unit(0, -11, 0)], loaded=False)
         self.set_units(SAMPLE, [unit(0, 0, 0)])               # straight ahead: it would be centred at 960
@@ -1287,11 +1500,11 @@ class ScreenTests(Case):
         self.settle()
         self.assertEqual(self.screen_tris(), [])
         ids = sorted(self.fake.options.keys())
-        look = ["pickup_dots." + n for n in ("distance", "fade", "hide_near", "opacity", "smallest_size")]
+        look = ["pickup_dots." + n for n in ("distance", "fade", "fade_samples", "hide_near", "opacity", "smallest_size")]
         self.assertEqual([i for i in ids if not i.startswith(("pickup_dots.range_", "pickup_dots.show_"))], look)
-        self.assertEqual(len(ids), 12 + 5)
+        self.assertEqual(len(ids), 14 + 6)
         kinds = sorted(i[len("pickup_dots.show_"):] for i in ids if i.startswith("pickup_dots.show_"))
-        self.assertEqual(kinds, ["hellbombs", "mission", "objectives", "samples", "supplies", "vehicles"])
+        self.assertEqual(kinds, ["deaths", "hellbombs", "mission", "objectives", "samples", "supplies", "vehicles"])
         self.assertTrue(self.fake.options["pickup_dots.fade"].default)
         self.assertEqual(self.fake.options["pickup_dots.show_vehicles"].type, "toggle")
 

@@ -60,6 +60,8 @@ What gets a marker (default distance):
 - Hellbombs (100 m): the hellbombs lying about the map that blow up when shot, in red.
 - Vehicles (100 m): exosuits, FRVs and tanks, in sky blue; out of view, at the screen's edge
   with an arrow.
+- Where you died (500 m): a red skull where your gear lies (your sample container, else your
+  body), gone once you get there; out of view, at the screen's edge with an arrow.
 
 Vehicle and hellbomb markers show their distance. Markers sit where the game shows its own
 icon, get smaller farther away (supply markers fainter too), are sized to your screen
@@ -69,10 +71,10 @@ carrying, picked-up launch codes and keycards, hellbombs that blew up, destroyed
 and the vehicle you or a teammate are driving get no marker. Items close enough
 for the game to show its own icon get none either: samples within 9 m (Terminid eggs and
 Automaton super samples 20 m, sample containers 15 m) and ammo and grenade boxes within
-4 m. Stims have no icon of the game's and keep theirs.
+4 m. Stims have no icon of the game's and keep theirs, drawn solid within 5 m.
 
 Settings: press F9 in the game (Chef Shared Loader's options menu) and pick Extended
-Pickup Icons Range: turn each kind on or off and set its distance, fade supplies far away,
+Pickup Icons Range: turn each kind on or off and set its distance, fade supplies (and samples) far away,
 show or hide the distance above vehicles and hellbombs, keep markers on up close, and change their size far away
 and opacity.
 
@@ -82,6 +84,8 @@ in your mod manager (in Arsenal, by default, the bottom of the list).
 Good to know:
 - Valves and cranks stay marked after you turn them.
 - At most the 40 nearest markers are drawn at once.
+- Where you died is worked out from the camera (it takes your helldiver dropped in by a
+  hellpod); only your last death is marked.
 """
 
 

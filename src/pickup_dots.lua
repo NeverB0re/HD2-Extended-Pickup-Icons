@@ -22,12 +22,13 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.4.0'
+local VERSION = '2.5.0'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
 -- ------------------------------------------------------------------ settings --
-local RANGE = {samples = 50, supplies = 25, mission = 50, objectives = 50, hellbombs = 100, vehicles = 100}   -- metres, settings
+local RANGE = {samples = 50, supplies = 25, mission = 50, objectives = 50, hellbombs = 100, vehicles = 100,
+               deaths = 500}   -- metres, settings
 local SHOW = {}               -- a setting per kind: false hides it (nil or true: shown)
 -- The groups the settings take together (2.2.0): what you carry with mission items, drop-off points with valves.
 local SETTING_OF = {carry = 'mission', dropoffs = 'objectives', controls = 'objectives'}
@@ -41,6 +42,7 @@ local LOOK = {                -- settings (2.1.0)
     smallest = 0.7,           -- size at the edge of a kind's range (full size up to FULL_SIZE_M)
     opacity = 1,              -- 0..1
     fade = true,              -- supplies fainter with distance, down to FADE_LEAST of opacity at the edge
+    fade_samples = false,     -- samples too (2.5.0)
     distance = true,          -- the distance above a vehicle's or hellbomb's marker, in the game's font
 }
 -- The game's icons as textures of the mod's own patch (2.4.0; tools/bake_icons.py, packed by build.py): icon name ->
@@ -51,15 +53,16 @@ local ICON_TEX = "@ICONS@"
 -- (made to match the game's); the framed ones (the stratagem icons' red corners around them) a little bigger, the
 -- vehicles' 15% more again
 local ICON_SIZE = {ammo = 19, grenade = 22, stim = 27, egg = 20, tube = 20, common = 18, rare = 18, super = 18,
-                   package = 28, larva = 28, hellbomb = 28, tank = 34.5, car = 34.5, walker = 34.5}
+                   package = 28, larva = 28, hellbomb = 28, tank = 34.5, car = 34.5, walker = 34.5, skull = 28}
 local VEHICLE_RGB = {110, 205, 255}   -- vehicles: the sky blue of the HUD's support weapon icons
 local HELLBOMB_RGB = {255, 90, 70}    -- hellbombs lying about the map (2.3.0): red, they blow up when shot
+local DEATH_RGB = {235, 50, 40}       -- where you died (2.5.0): the skull of the game's death screen, red
 -- The icons (all white textures) drawn in a colour: the vehicles and what you carry on your back sky blue (2.3.0),
--- the hellbomb red
+-- the hellbomb and the skull red
 local ICON_RGB = {package = VEHICLE_RGB, larva = VEHICLE_RGB, tank = VEHICLE_RGB, car = VEHICLE_RGB, walker = VEHICLE_RGB,
-                  hellbomb = HELLBOMB_RGB}
-local GROUP_RGB = {vehicles = VEHICLE_RGB, hellbombs = HELLBOMB_RGB}   -- their shapes (V, arrow), and the distance
-                                                                       -- above them (2.4.0: hellbombs too)
+                  hellbomb = HELLBOMB_RGB, skull = DEATH_RGB}
+-- their shapes (V, arrow), and the distance above them (2.4.0: hellbombs too; 2.5.0: where you died)
+local GROUP_RGB = {vehicles = VEHICLE_RGB, hellbombs = HELLBOMB_RGB, deaths = DEATH_RGB}
 local DISTANCE_PX = 1.6       -- the loader's text size at 1080 pixels of screen (8 drew far too big)
 local BOLD = {{0, 0}, {1, 0}, {0, 1}, {1, 1}}   -- the distance drawn at each, in the loader's screen pixels
 local DOT_HEIGHT = 0.6        -- metres above the unit's origin
@@ -271,6 +274,7 @@ end
 
 -- --------------------------------------------------------------- the sweep --
 local keys = {}          -- { group, label, name or hex }
+local box_keys = {}      -- the indices of the sample container's ('box' targets: the death mark, 2.5.0)
 local found = {}         -- per key index: list of {x, y, z} from the last time it was read
 local players = {}       -- list of {x, y, z}: every helldiver avatar (teammates and bodies too)
 local me                 -- the one of them nearest the camera: you (or whoever the camera follows)
@@ -281,11 +285,14 @@ local function build_keys()
     local unnamed = 0
     for _, t in ipairs(TARGETS) do
         if t.name then
-            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount}
+            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount, box = t.box}
         elseif t.hex then
             unnamed = unnamed + 1
-            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount}
+            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount, box = t.box}
         end
+    end
+    for i, k in ipairs(keys) do
+        if k.box then box_keys[#box_keys + 1] = i end
     end
     log(string.format('%d target resources: %d named, %d by id only (looked up if the id self-test passes)',
         #keys, #keys - unnamed, unnamed))
@@ -483,7 +490,7 @@ local function near(list, p, r)
     return false
 end
 
-local SHIP_HIDDEN = {mission = true, carry = true, dropoffs = true, controls = true}
+local SHIP_HIDDEN = {mission = true, carry = true, dropoffs = true, controls = true, deaths = true}
 
 -- Last frame's counts per group, for the status line: drawn, hidden as worn/held, out of range.
 local last_counts = {}
@@ -492,6 +499,38 @@ local last_counts = {}
 -- same (one key for all would mix units up).
 local function by_unit() return setmetatable({}, {__mode = 'k'}) end
 local taken = by_unit()       -- per unit: picked up (this world)
+
+-- Where you died (2.5.0): your gear lies there. The game doesn't say who you are or when you die, so it is worked
+-- out from the camera: after a death the camera goes to a teammate (or stays on the body), and once you are
+-- reinforced it goes to a helldiver that has only just come into the world. So: you are a helldiver the camera
+-- follows (me); when the camera settles (DEATH_CONFIRM_S) on one that appeared under DEATH_NEW_S before it took the
+-- camera, the helldiver you were before died, where its body lies (or was last seen). One mark, the last death's (a
+-- new death moves it: you may leave your gear); it goes once you come within DEATH_CLEAR_M of it.
+local DEATH_NEW_S = 20        -- a reinforced helldiver: in the world this short a time before the camera took it
+local DEATH_CONFIRM_S = 1     -- the camera on it this long (not a teammate's new helldiver passing the camera)
+local DEATH_DROP_M = 30       -- and it came down this far since it appeared: dropped in a hellpod (test.3 log: they
+                              -- appear about 490 m up), so the mark shows while you still come down (test.5). Leaving
+                              -- a mission, the ship's helldiver appeared 20 m up and stayed there, taken for one
+                              -- reinforced (test.3).
+-- The helldiver taken for you before moved within DEATH_STILL_S (more than DEATH_STILL_M): it was no body but a
+-- teammate, whose reinforcement the camera followed while you watched them (their new helldiver taken for yours). No
+-- new mark then: you are the new one, and a mark that teammate came to is put back.
+local DEATH_STILL_S = 3
+local DEATH_STILL_M = 1
+local DEATH_CLEAR_M = 4       -- you this close (across the ground): the mark goes
+local DEATH_HEIGHT = 1.2      -- the mark this high above the ground
+local deaths = {}             -- the mark, {x, y, z}: one at most
+local cleared = nil           -- {mark, by}: the last mark come to, and by which helldiver taken for you
+local avatar_since = by_unit()   -- when each helldiver came into the world (this world)
+local avatar_z0 = by_unit()      -- and how high it was then
+local own = nil               -- {unit, x, y, z, anchor, moved, box, box_at}: the helldiver you are (last seen
+                              -- there), where and when it last moved (DEATH_STILL_M), and the sample container last
+                              -- on your back (a 'box' target) and when: it drops where you die, with your gear, where
+                              -- a blast may fling your body far off. Taken only when it was on you as you died (up
+                              -- to DEATH_BOX_S before the body came to rest: not one you dropped and walked off from)
+                              -- and is on nobody now (not a teammate's you stood by).
+local DEATH_BOX_S = 5
+local candidate = nil         -- {unit, since}: a new helldiver the camera took, not yet confirmed
 
 -- Has this unit no visible mesh left? Unit.box over the visible meshes (its second argument true) comes back
 -- empty (2.3.0: a hellbomb that blew up, alive and in place otherwise; not launch codes picked up: test.11).
@@ -699,6 +738,14 @@ local function collect_dots(now)
     hot = new_hot
     vehicles_near = any_vehicle
     vehicles_seen = seen_now
+    local range = SHOW.deaths ~= false and not on_ship and RANGE.deaths or 0
+    if me ~= nil and range > 0 then
+        for _, m in ipairs(deaths) do   -- across the ground: shown while you come down (490 m up), the walk to it
+            local dx, dy = m[1] - me[1], m[2] - me[2]
+            local d = math.sqrt(dx * dx + dy * dy)
+            if d <= range then dots[#dots + 1] = {m[1], m[2], m[3] + DEATH_HEIGHT, d, me, 'deaths', 'skull'} end
+        end
+    end
     if #dots > MAX_DOTS then
         table.sort(dots, function(a, b) return a[4] < b[4] end)
         for i = #dots, MAX_DOTS + 1, -1 do dots[i] = nil end
@@ -769,7 +816,9 @@ local UI_W, UI_H = 1920, 1080
 local SMALLEST = 0.7          -- the smallest of the game icons' pixel sizes (ICON_PIXELS); smaller: scaled from it
 local FADE_LEAST = 0.2
 local POINTER = {gap = 3, half = 9, slope = 0.5, line = 2}   -- the wide V under a vehicle's icon, pixels at full size
--- A vehicle off screen (2.3.0): at the screen's edge, this much smaller, with an arrow toward it
+-- A vehicle off screen (2.3.0), or where you died (2.5.0): at the screen's edge, this much smaller, with an arrow
+-- toward it
+local EDGE_GROUPS = {vehicles = true, deaths = true}
 local EDGE = {margin = 40, size = 0.7, gap = 4, long = 9, half = 6}   -- pixels at full size (margin: from the edge)
 -- 0 up to FULL_SIZE_M away, 1 at the edge of its kind's range
 local function far_share(d)
@@ -785,8 +834,13 @@ local function scale_of(size)
     if size < SMALLEST then return size / SMALLEST end
     return 1
 end
+-- A stim this close is drawn solid (2.5.0): the game shows no icon of its own for stims, so up close, where the game's
+-- icons of the supplies around it show solid, a see-through one of ours stood out.
+local STIM_SOLID_M = 5
 local function opacity_of(d)
-    if not LOOK.fade or d[6] ~= 'supplies' then return LOOK.opacity end   -- mission markers stay easy to find
+    if d[7] == 'stim' and d[4] < STIM_SOLID_M then return 1 end
+    local fades = (d[6] == 'supplies' and LOOK.fade) or (d[6] == 'samples' and LOOK.fade_samples)
+    if not fades then return LOOK.opacity end   -- mission markers stay easy to find
     return LOOK.opacity * (1 - (1 - FADE_LEAST) * far_share(d))
 end
 
@@ -965,8 +1019,8 @@ local function screen_draw(dots, cam)
         local ui = math.min(width / UI_W, height / UI_H)
         for _, d in ipairs(dots) do
             local sx, sy = project(cam, d, width, height, f)
-            local dir   -- a vehicle off screen: the way to it
-            if not sx and d[6] == 'vehicles' then sx, sy, dir = edge(cam, d, width, height, ui) end
+            local dir   -- a vehicle (or where you died) off screen: the way to it
+            if not sx and EDGE_GROUPS[d[6]] then sx, sy, dir = edge(cam, d, width, height, ui) end
             if sx then
                 local size = size_of(d) * (dir and EDGE.size or 1) * ui
                 opacity = opacity_of(d)
@@ -1070,6 +1124,96 @@ local function pick_me(cam)
     return who
 end
 
+-- Is q on helldiver p (within the container's reach)? The squared distance across the ground, or nil.
+local function on_body(q, p, reach)
+    local dx, dy, dz = q[1] - p[1], q[2] - p[2], q[3] - p[3]
+    local d = dx * dx + dy * dy
+    if d < reach * reach and dz > CARRIED_LOW and dz < CARRIED_HEIGHT then return d end
+end
+
+-- The sample container on helldiver p: the nearest one within its reach (its 'worn'), or nil.
+local function nearest_box(p)
+    local best, best_d
+    for _, i in ipairs(box_keys) do
+        for _, q in ipairs(found[i] or {}) do
+            local d = on_body(q, p, keys[i].worn or CARRIED_RADIUS)
+            if d and (best_d == nil or d < best_d) then best, best_d = q, d end
+        end
+    end
+    return best
+end
+
+-- Where this sample container is now: nil once it is gone, or while a helldiver other than `body` has it on.
+local function box_lying(unit, body)
+    for _, i in ipairs(box_keys) do
+        for _, q in ipairs(found[i] or {}) do
+            if q.unit == unit then
+                for _, p in ipairs(players) do
+                    if p.unit ~= body and on_body(q, p, keys[i].worn or CARRIED_RADIUS) then return nil end
+                end
+                return q
+            end
+        end
+    end
+end
+
+local function own_as(p, now)
+    return {unit = p.unit, p[1], p[2], p[3], anchor = {p[1], p[2], p[3]}, moved = now}
+end
+
+local function follow_own(now)
+    for _, p in ipairs(players) do
+        if p.unit ~= nil and avatar_since[p.unit] == nil then avatar_since[p.unit], avatar_z0[p.unit] = now, p[3] end
+        if own ~= nil and p.unit == own.unit then
+            own[1], own[2], own[3] = p[1], p[2], p[3]
+            local a = own.anchor
+            local dx, dy, dz = p[1] - a[1], p[2] - a[2], p[3] - a[3]
+            if dx * dx + dy * dy + dz * dz > DEATH_STILL_M * DEATH_STILL_M then own.anchor, own.moved = {p[1], p[2], p[3]}, now end
+        end
+    end
+    if me == nil or me.unit == nil then return end
+    if own == nil then   -- the first helldiver the camera follows: you
+        own = own_as(me, now)
+        return
+    end
+    if me.unit == own.unit then
+        candidate = nil
+        local box = nearest_box(own)
+        if box ~= nil then own.box, own.box_at = box.unit, now end
+    elseif candidate == nil or candidate.unit ~= me.unit then
+        local since = avatar_since[me.unit]
+        if since ~= nil and now - since < DEATH_NEW_S then candidate = {unit = me.unit, since = now} else candidate = nil end
+    elseif now - candidate.since >= DEATH_CONFIRM_S and (avatar_z0[me.unit] or me[3]) - me[3] > DEATH_DROP_M
+        and now - own.moved < DEATH_STILL_S then
+        -- the one taken for you moved till now: a teammate you watched, not your body
+        log(string.format('death: none - the helldiver at %.1f %.1f %.1f taken for you was moving (a teammate you '
+            .. 'watched); you are the one that came at %.1f %.1f %.1f', own[1], own[2], own[3], me[1], me[2], me[3]))
+        if cleared ~= nil and cleared.by == own.unit and #deaths == 0 then
+            deaths = {cleared.mark}
+            log(string.format('death: the mark at %.1f %.1f %.1f is back (that teammate came to it, not you)',
+                cleared.mark[1], cleared.mark[2], cleared.mark[3]))
+        end
+        own, candidate = own_as(me, now), nil
+    elseif now - candidate.since >= DEATH_CONFIRM_S and (avatar_z0[me.unit] or me[3]) - me[3] > DEATH_DROP_M then
+        local box = own.box and own.moved - own.box_at <= DEATH_BOX_S and box_lying(own.box, own.unit)
+        local at = box or own
+        deaths = {{at[1], at[2], at[3]}}   -- the last death's only
+        log(string.format('death: you died at %.1f %.1f %.1f (%s; your next helldiver came at %.1f %.1f %.1f)',
+            at[1], at[2], at[3], box and string.format('your sample container; the body at %.1f %.1f %.1f', own[1], own[2], own[3])
+            or (own.box and 'your body: your sample container is not by it' or 'your body'), me[1], me[2], me[3]))
+        own, candidate, cleared = own_as(me, now), nil, nil
+    end
+    for i = #deaths, 1, -1 do   -- come to: gone
+        local m = deaths[i]
+        local dx, dy = m[1] - own[1], m[2] - own[2]
+        if me.unit == own.unit and dx * dx + dy * dy < DEATH_CLEAR_M * DEATH_CLEAR_M and math.abs(m[3] - own[3]) < 3 then
+            table.remove(deaths, i)
+            cleared = {mark = m, by = own.unit}
+            log(string.format('death: the mark at %.1f %.1f %.1f reached - gone', m[1], m[2], m[3]))
+        end
+    end
+end
+
 -- -------------------------------------------------------------------- tick --
 local started_at, next_status, last_world, world_seen_at
 local world_seq, world_id = 0, nil
@@ -1095,6 +1239,7 @@ local function tick()
         vehicles_seen = {}
         wrecked = by_unit()
         taken, blown, first_visible, me_unit = by_unit(), by_unit(), by_unit(), nil
+        deaths, cleared, avatar_since, avatar_z0, own, candidate = {}, nil, by_unit(), by_unit(), nil, nil
         hot = {}
         log('world changed: ' .. world_id)
     end
@@ -1105,6 +1250,7 @@ local function tick()
         read_players(world, now)   -- every frame: a running helldiver's own items stay hidden
         local cam = camera_of()   -- once a frame, after the game moved it
         me = pick_me(cam)
+        follow_own(now)
         if #players > 0 and can_get then
             detect_id_form()
             sweep_step(world)
@@ -1141,12 +1287,14 @@ end
 -- valves another (mission objectives); kinds and how they look sit together.
 local ROWS = {   -- {id, kind ('show', 'range' with its most metres, or a LOOK field's)}
     {'show_samples', 'show', 'samples'}, {'range_samples', 'range', 'samples', 150},
+    {'fade_samples', 'toggle', 'fade_samples'},
     {'show_supplies', 'show', 'supplies'}, {'range_supplies', 'range', 'supplies', 150},
     {'fade', 'toggle', 'fade'},
     {'show_mission', 'show', 'mission'}, {'range_mission', 'range', 'mission', 150},
     {'show_objectives', 'show', 'objectives'}, {'range_objectives', 'range', 'objectives', 150},
     {'show_hellbombs', 'show', 'hellbombs'}, {'range_hellbombs', 'range', 'hellbombs', 300},
     {'show_vehicles', 'show', 'vehicles'}, {'range_vehicles', 'range', 'vehicles', 300},
+    {'show_deaths', 'show', 'deaths'}, {'range_deaths', 'range', 'deaths', 1000},
     {'distance', 'toggle', 'distance'},
     {'hide_near', 'toggle', 'hide_near'},
     {'smallest_size', 'percent', 'smallest', 10, 70},
@@ -1160,6 +1308,9 @@ local TEXTS = {
     show_supplies = {'Show supplies (ammo, grenades, stims, resupply)', 'Ammo boxes, grenade boxes, stims and resupply pod crates.'},
     range_supplies = {'Supplies distance (m)', 'Marked within this many metres of you. 0 shows none.'},
     fade = {'Fade supplies far away', 'Supply markers get fainter the farther away they are.'},
+    fade_samples = {'Fade samples far away', 'Sample markers get fainter the farther away they are.'},
+    show_deaths = {'Show where you died', 'A skull where you last died (your gear): gone once you get there.'},
+    range_deaths = {'Where you died distance (m)', 'Marked within this many metres of you. 0 shows none.'},
     show_mission = {'Show mission items (SSSDs, launch codes, shells)', 'Mission items you pick up or carry: SSSDs, data drives, launch codes, keycards, artillery shells, warheads.'},
     range_mission = {'Mission items distance (m)', 'Marked within this many metres of you. 0 shows none.'},
     show_objectives = {'Show mission objectives (drop-off points, valves, cranks)', 'Drop-off points, cargo containers, valves and cranks.'},
@@ -1272,7 +1423,7 @@ local function install()
     M.status = 'running'
     log('running: ranges samples=' .. RANGE.samples .. ' supplies=' .. RANGE.supplies
         .. ' mission=' .. RANGE.mission .. ' objectives=' .. RANGE.objectives .. ' hellbombs=' .. RANGE.hellbombs
-        .. ' vehicles=' .. RANGE.vehicles)
+        .. ' vehicles=' .. RANGE.vehicles .. ' deaths=' .. RANGE.deaths)
     return M
 end
 
