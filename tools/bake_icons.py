@@ -4,12 +4,11 @@ build.py packs them into the mod's patch; Chef Shared Loader's chef.bitmap draws
 
 ICONS: name -> (file, how its pixels give the icon, framed):
   'alpha'   white, see-through by the image's alpha (white icons)
-  'rgb'     in its own colours, see-through by its brightest channel (the game's white icons on black have a blue
-            outline in the blue channel: it is kept, 2.4.0-test.8; without it they looked dull)
+  'red'     white, see-through by its red channel (white icons on black, a blue outline in the other channels)
   'green'   white, its green part only (a stratagem icon's picture, without its red frame)
   'body'    white, its red part only (a vehicle stratagem icon's vehicle, without what it carries)
 framed: inside the red corner frame of the game's stratagem icons (FRAME), fitted to where their picture sits.
-The others are white: the mod tints them as it draws them (ICON_RGB)."""
+All white: the mod tints them as it draws them (ICON_RGB)."""
 import os
 import struct
 import zlib
@@ -21,10 +20,10 @@ SIZES = (12, 16, 20, 24, 28, 32, 40, 48, 64)   # pixels along the longer side; t
 
 ICONS = {
     "ammo": ("ammo.png", "alpha", False),
-    "grenade": ("grenade.png", "rgb", False),
-    "stim": ("stim.png", "rgb", False),
-    "egg": ("egg.png", "rgb", False),
-    "tube": ("tube.png", "rgb", False),
+    "grenade": ("grenade.png", "red", False),
+    "stim": ("stim.png", "red", False),
+    "egg": ("egg.png", "red", False),
+    "tube": ("tube.png", "red", False),
     "common": ("sample_common.png", "alpha", False),
     "rare": ("sample_rare.png", "alpha", False),
     "super": ("sample_super.png", "alpha", False),
@@ -96,8 +95,8 @@ def alpha_grid(path, mode):
             p = [r[x * bpp + k] for k in range(bpp)]
             if mode == "alpha":
                 a = p[3] / 255 if bpp == 4 else max(p[:3]) / 255
-            elif mode == "rgb":
-                a = max(p[:3]) / 255
+            elif mode == "red":
+                a = p[0] / 255
             elif mode == "green":
                 a = max(0, p[1] - p[0]) / 255
             elif mode == "body":
@@ -109,18 +108,12 @@ def alpha_grid(path, mode):
     return out
 
 
-def bounds(grid):
-    """Where it shows: x0, x1, y0, y1 (x1 and y1 included)."""
+def crop(grid):
+    """Cut to where it shows."""
     h, w = len(grid), len(grid[0])
     ys = [y for y in range(h) if any(v > 0.04 for v in grid[y])]
     xs = [x for x in range(w) if any(grid[y][x] > 0.04 for y in range(h))]
-    return min(xs), max(xs), min(ys), max(ys)
-
-
-def crop(grid):
-    """Cut to where it shows."""
-    x0, x1, y0, y1 = bounds(grid)
-    return [line[x0:x1 + 1] for line in grid[y0:y1 + 1]]
+    return [line[min(xs):max(xs) + 1] for line in grid[min(ys):max(ys) + 1]]
 
 
 def resample(grid, W, H):
@@ -149,13 +142,8 @@ def resample(grid, W, H):
 
 
 def icon_pixels(path, mode, framed=False):
-    """The icon as premultiplied (r, g, b, a), 0..1 per pixel, cut to where it shows: white (a, a, a, a), or in its
-    own colours ('rgb'); framed: its picture fitted inside the stratagem icons' red corner frame."""
-    if mode == "rgb":
-        w, h, bpp, rows = decode(path)
-        x0, x1, y0, y1 = bounds(alpha_grid(path, mode))
-        return [[(rows[y][x * bpp] / 255, rows[y][x * bpp + 1] / 255, rows[y][x * bpp + 2] / 255,
-                  max(rows[y][x * bpp:x * bpp + 3]) / 255) for x in range(x0, x1 + 1)] for y in range(y0, y1 + 1)]
+    """The icon as premultiplied white (a, a, a, a), 0..1 per pixel, cut to where it shows; framed: its picture
+    fitted inside the stratagem icons' red corner frame."""
     grid = crop(alpha_grid(path, mode))
     if framed:
         frame = alpha_grid(os.path.join(GAME, FRAME), "frame")
