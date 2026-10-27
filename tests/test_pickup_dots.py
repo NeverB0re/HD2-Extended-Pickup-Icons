@@ -1371,6 +1371,41 @@ class ScreenTests(Case):
         marks = [p for p in self.points() if abs(p[2] - 1.2) < 1e-6]
         self.assertEqual(marks, [(80.0, 10.0, 1.2)])                   # the last death's only
 
+    def test_the_mark_shows_while_you_still_come_down(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        new = self.add_avatar(50, 0, 490)                              # your hellpod, the camera on it
+        for k in range(90):                                            # coming down at 150 m/s
+            new.z = 490 - 150 * k / 60
+            self.lua.execute("local fake, z = ...; fake.cam.pos = {50, -2, z + 0.6}", self.fake, new.z)
+            self.frames(1, start=70.0 + k / 60)
+        self.assertGreater(new.z, 250)                                 # still well up
+        self.assertIn("death: you died at 0.0 -8.0 0.0", self.log_text())
+        (mark,) = [d for d in self.mod.dots.values() if d[6] == "deaths"]
+        self.assertAlmostEqual(mark[4], math.hypot(50, 8), places=3)   # the walk to it, across the ground
+
+    def test_a_teammate_you_watch_reinforced_first_is_not_taken_for_you(self):
+        self.set_units(AVATAR, [unit(0, -8, 0), unit(30, 0, 0)], loaded=False)   # you; a teammate
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        self.look_at(30, 0)                                            # you died: watching the teammate
+        self.frames(120, start=61.0)
+        mate = self.reinforce(60, 0, start=70.0)                       # they died too, and came back first: followed
+        self.assertIn("death: you died at 0.0 -8.0 0.0", self.log_text())   # the mark is yours all the same
+        for k in range(120):                                           # they run over to your gear ...
+            mate.x, mate.y = 60 - 60 * k / 119, -8 * k / 119
+            self.look_at(mate.x, mate.y)
+            self.frames(1, start=80.0 + k / 60)
+        self.assertIn("reached - gone", self.log_text())
+        self.reinforce(100, 0, start=83.0)                             # ... as you come back
+        self.assertIn("taken for you was moving (a teammate you watched)", self.log_text())
+        self.assertIn("death: the mark at 0.0 -8.0 0.0 is back", self.log_text())
+        marks = [p for p in self.points() if abs(p[2] - 1.2) < 1e-6]
+        self.assertEqual(marks, [(0.0, -8.0, 1.2)])                    # one mark, yours, not at the teammate
+
     def test_leaving_a_mission_the_ships_helldiver_is_not_taken_for_your_death(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.load()

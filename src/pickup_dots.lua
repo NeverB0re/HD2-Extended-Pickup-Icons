@@ -22,7 +22,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.5.0-test.4'
+local VERSION = '2.5.0-test.5'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -503,16 +503,24 @@ local taken = by_unit()       -- per unit: picked up (this world)
 -- camera, the helldiver you were before died, where its body lies (or was last seen). One mark, the last death's (a
 -- new death moves it: you may leave your gear); it goes once you come within DEATH_CLEAR_M of it.
 local DEATH_NEW_S = 20        -- a reinforced helldiver: in the world this short a time before the camera took it
-local DEATH_CONFIRM_S = 3     -- the camera on it this long (not a teammate's new helldiver passing the camera)
-local DEATH_DROP_M = 100      -- and it came down this far since it appeared: dropped in a hellpod (test.3 log: they
-                              -- appear about 490 m up). Leaving a mission, the ship's helldiver appeared 20 m up and
-                              -- stayed there, taken for one reinforced.
+local DEATH_CONFIRM_S = 1     -- the camera on it this long (not a teammate's new helldiver passing the camera)
+local DEATH_DROP_M = 30       -- and it came down this far since it appeared: dropped in a hellpod (test.3 log: they
+                              -- appear about 490 m up), so the mark shows while you still come down (test.5). Leaving
+                              -- a mission, the ship's helldiver appeared 20 m up and stayed there, taken for one
+                              -- reinforced (test.3).
+-- The helldiver taken for you before moved within DEATH_STILL_S (more than DEATH_STILL_M): it was no body but a
+-- teammate, whose reinforcement the camera followed while you watched them (their new helldiver taken for yours). No
+-- new mark then: you are the new one, and a mark that teammate came to is put back.
+local DEATH_STILL_S = 3
+local DEATH_STILL_M = 1
 local DEATH_CLEAR_M = 4       -- you this close (across the ground): the mark goes
 local DEATH_HEIGHT = 1.2      -- the mark this high above the ground
 local deaths = {}             -- the mark, {x, y, z}: one at most
+local cleared = nil           -- {mark, by}: the last mark come to, and by which helldiver taken for you
 local avatar_since = by_unit()   -- when each helldiver came into the world (this world)
 local avatar_z0 = by_unit()      -- and how high it was then
-local own = nil               -- {unit, x, y, z, box}: the helldiver you are (last seen there), and the sample
+local own = nil               -- {unit, x, y, z, box, anchor, moved}: the helldiver you are (last seen there), where
+                              -- and when it last moved (DEATH_STILL_M), and the sample
                               -- container on your back (a 'box' target): it drops where you die, with your gear,
                               -- where your body may be flung far off by a blast
 local candidate = nil         -- {unit, since}: a new helldiver the camera took, not yet confirmed
@@ -725,9 +733,9 @@ local function collect_dots(now)
     vehicles_seen = seen_now
     local range = SHOW.deaths ~= false and not on_ship and RANGE.deaths or 0
     if me ~= nil and range > 0 then
-        for _, m in ipairs(deaths) do
-            local dx, dy, dz = m[1] - me[1], m[2] - me[2], m[3] - me[3]
-            local d = math.sqrt(dx * dx + dy * dy + dz * dz)
+        for _, m in ipairs(deaths) do   -- across the ground: shown while you come down (490 m up), the walk to it
+            local dx, dy = m[1] - me[1], m[2] - me[2]
+            local d = math.sqrt(dx * dx + dy * dy)
             if d <= range then dots[#dots + 1] = {m[1], m[2], m[3] + DEATH_HEIGHT, d, me, 'deaths', 'skull'} end
         end
     end
@@ -1138,14 +1146,23 @@ local function box_reading(unit)
     end
 end
 
+local function own_as(p, now)
+    return {unit = p.unit, p[1], p[2], p[3], anchor = {p[1], p[2], p[3]}, moved = now}
+end
+
 local function follow_own(now)
     for _, p in ipairs(players) do
         if p.unit ~= nil and avatar_since[p.unit] == nil then avatar_since[p.unit], avatar_z0[p.unit] = now, p[3] end
-        if own ~= nil and p.unit == own.unit then own[1], own[2], own[3] = p[1], p[2], p[3] end
+        if own ~= nil and p.unit == own.unit then
+            own[1], own[2], own[3] = p[1], p[2], p[3]
+            local a = own.anchor
+            local dx, dy, dz = p[1] - a[1], p[2] - a[2], p[3] - a[3]
+            if dx * dx + dy * dy + dz * dz > DEATH_STILL_M * DEATH_STILL_M then own.anchor, own.moved = {p[1], p[2], p[3]}, now end
+        end
     end
     if me == nil or me.unit == nil then return end
     if own == nil then   -- the first helldiver the camera follows: you
-        own = {unit = me.unit, me[1], me[2], me[3]}
+        own = own_as(me, now)
         return
     end
     if me.unit == own.unit then
@@ -1155,6 +1172,17 @@ local function follow_own(now)
     elseif candidate == nil or candidate.unit ~= me.unit then
         local since = avatar_since[me.unit]
         if since ~= nil and now - since < DEATH_NEW_S then candidate = {unit = me.unit, since = now} else candidate = nil end
+    elseif now - candidate.since >= DEATH_CONFIRM_S and (avatar_z0[me.unit] or me[3]) - me[3] > DEATH_DROP_M
+        and now - own.moved < DEATH_STILL_S then
+        -- the one taken for you moved till now: a teammate you watched, not your body
+        log(string.format('death: none - the helldiver at %.1f %.1f %.1f taken for you was moving (a teammate you '
+            .. 'watched); you are the one that came at %.1f %.1f %.1f', own[1], own[2], own[3], me[1], me[2], me[3]))
+        if cleared ~= nil and cleared.by == own.unit and #deaths == 0 then
+            deaths = {cleared.mark}
+            log(string.format('death: the mark at %.1f %.1f %.1f is back (that teammate came to it, not you)',
+                cleared.mark[1], cleared.mark[2], cleared.mark[3]))
+        end
+        own, candidate = own_as(me, now), nil
     elseif now - candidate.since >= DEATH_CONFIRM_S and (avatar_z0[me.unit] or me[3]) - me[3] > DEATH_DROP_M then
         local box = own.box and box_reading(own.box)
         local at = box or own
@@ -1162,13 +1190,14 @@ local function follow_own(now)
         log(string.format('death: you died at %.1f %.1f %.1f (%s; your next helldiver came at %.1f %.1f %.1f)',
             at[1], at[2], at[3], box and string.format('your sample container; the body at %.1f %.1f %.1f', own[1], own[2], own[3])
             or (own.box and 'your body: your sample container is gone' or 'your body'), me[1], me[2], me[3]))
-        own, candidate = {unit = me.unit, me[1], me[2], me[3]}, nil
+        own, candidate, cleared = own_as(me, now), nil, nil
     end
     for i = #deaths, 1, -1 do   -- come to: gone
         local m = deaths[i]
         local dx, dy = m[1] - own[1], m[2] - own[2]
         if me.unit == own.unit and dx * dx + dy * dy < DEATH_CLEAR_M * DEATH_CLEAR_M and math.abs(m[3] - own[3]) < 3 then
             table.remove(deaths, i)
+            cleared = {mark = m, by = own.unit}
             log(string.format('death: the mark at %.1f %.1f %.1f reached - gone', m[1], m[2], m[3]))
         end
     end
@@ -1199,7 +1228,7 @@ local function tick()
         vehicles_seen = {}
         wrecked = by_unit()
         taken, blown, first_visible, me_unit = by_unit(), by_unit(), by_unit(), nil
-        deaths, avatar_since, avatar_z0, own, candidate = {}, by_unit(), by_unit(), nil, nil
+        deaths, cleared, avatar_since, avatar_z0, own, candidate = {}, nil, by_unit(), by_unit(), nil, nil
         hot = {}
         log('world changed: ' .. world_id)
     end
