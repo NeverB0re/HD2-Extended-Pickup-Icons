@@ -1371,6 +1371,21 @@ class ScreenTests(Case):
         marks = [p for p in self.points() if abs(p[2] - 1.2) < 1e-6]
         self.assertEqual(marks, [(80.0, 10.0, 1.2)])                   # the last death's only
 
+    def test_a_body_gone_before_you_are_reinforced_leaves_the_mark_where_it_lay(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        body = self.fake.units[AVATAR][1]
+        body.x = 6                                                     # killed, flung 6 m ...
+        self.frames(60, start=61.0)
+        body.alive = False                                             # ... and gone minutes later, before you are back
+        self.frames(60, start=200.0)
+        self.reinforce(50, 0, start=210.0)
+        self.assertIn("death: you died at 6.0 -8.0 0.0 (your body;", self.log_text())
+        marks = [p for p in self.points() if abs(p[2] - 1.2) < 1e-6]
+        self.assertEqual(marks, [(6.0, -8.0, 1.2)])
+
     def test_the_mark_shows_while_you_still_come_down(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.load()
