@@ -1394,6 +1394,29 @@ class ScreenTests(Case):
         self.reinforce(50, 0, start=70.0)
         self.assertIn("death: you died at 0.0 -8.0 0.0 (your body", self.log_text())
 
+    def test_your_sample_container_picked_up_by_a_teammate(self):
+        box = self.box_setup()
+        self.set_units(AVATAR, [unit(0, -8, 0), unit(30, 0, 0)], loaded=False)   # you; a teammate
+        self.set_units(box, [unit(0.3, -8.2, 1.2)])                    # on your back
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        you, mate, yours = self.fake.units[AVATAR][1], self.fake.units[AVATAR][2], self.fake.units[box][1]
+        yours.z = 0.2                                                  # killed: it drops ...
+        you.x = 12                                                     # ... the body flung 12 m
+        self.look_at(30, 0)                                            # watching the teammate
+        self.frames(120, start=61.0)
+        mate.x, mate.y = 0.3, -8                                       # they come and take it up before you are back
+        yours.x, yours.y, yours.z = 0.4, -8.3, 1.2
+        self.frames(120, start=64.0)
+        self.reinforce(50, 0, start=70.0)
+        self.assertIn("death: you died at 12.0 -8.0 0.0 (your body: your sample container is not by it", self.log_text())
+        yours.x, yours.y = 20, 20                                      # carried off: the mark stays
+        mate.x, mate.y = 20, 20.2
+        self.frames(60, start=80.0)
+        marks = [p for p in self.points() if abs(p[2] - 1.2) < 1e-6]
+        self.assertEqual(marks, [(12.0, -8.0, 1.2)])
+
     def test_a_new_death_moves_the_mark(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.load()
