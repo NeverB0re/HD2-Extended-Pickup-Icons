@@ -377,7 +377,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.4.0-test.3 loading", text)
+            self.assertIn("Pickup Dots 2.4.0-test.4 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -1240,7 +1240,7 @@ class ScreenTests(Case):
                                  "show_mission", "range_mission", "show_objectives", "range_objectives",
                                  "show_hellbombs", "range_hellbombs", "show_vehicles", "range_vehicles", "distance", "hide_near", "smallest_size", "opacity"])
 
-    def test_vehicles_are_their_stratagem_icons_with_a_sky_blue_v(self):
+    def test_every_vehicle_is_the_one_framed_vehicle_icon_sky_blue(self):
         self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
                                                   "fov": math.radians(50)})
         self.fake.textures_loaded = True
@@ -1250,7 +1250,9 @@ class ScreenTests(Case):
         self.set_units(tank, [unit(4, 20, 0)])
         self.load_with_chef()
         self.settle()
-        self.assertEqual(sorted(b.tex.rsplit("_", 1)[0] for b in self.bitmaps_now()), ["car", "tank_storm"])
+        shown = self.bitmaps_now()
+        self.assertEqual([b.tex.rsplit("_", 1)[0] for b in shown], ["vehicle", "vehicle"])
+        self.assertEqual({(b.c.r, b.c.g, b.c.b) for b in shown}, {(110, 205, 255)})
         colours = {(t.color.r, t.color.g, t.color.b) for t in self.screen_tris()}
         self.assertEqual(colours, {(110, 205, 255)})                   # the Vs under them
 
@@ -1267,7 +1269,7 @@ class ScreenTests(Case):
         self.settle()
         (b,) = self.bitmaps_now()
         self.assertTrue(b.tex.startswith("hellbomb_"))
-        self.assertEqual((b.c.r, b.c.g, b.c.b), (255, 255, 255))           # its own colours
+        self.assertEqual((b.c.r, b.c.g, b.c.b), (255, 90, 70))             # framed, red
         texts = list(self.fake.texts.values())
         self.assertEqual({t.s for t in texts}, {"88m"})                    # its distance above it, in red
         self.assertEqual({(t.c.r, t.c.g, t.c.b) for t in texts}, {(255, 90, 70)})

@@ -2,42 +2,38 @@
 coloured as the mod draws it, and shrunk to every size in SIZES along its longer side (box filter, as a mip would), as RGBA8 pixels.
 build.py packs them into the mod's patch; Chef Shared Loader's chef.bitmap draws a texture shipped there.
 
-ICONS: name -> (file, how its pixels give the icon):
+ICONS: name -> (file, how its pixels give the icon, framed):
   'alpha'   white, see-through by the image's alpha (white icons)
   'red'     white, see-through by its red channel (white icons on black, a blue outline in the other channels)
-  'colour'  its own colours, see-through by its brightest channel (the game's stratagem icons on black)
-  'vehicle' its red part (the vehicle) sky blue and its green part (what it carries) white, as the game's own
-            vehicle stratagem icons show"""
+  'green'   white, its green part only (a stratagem icon's picture, without its red frame)
+  'body'    white, its red part only (a vehicle stratagem icon's vehicle, without what it carries)
+framed: inside the red corner frame of the game's stratagem icons (FRAME), fitted to where their picture sits.
+All white: the mod tints them as it draws them (ICON_RGB)."""
 import os
 import struct
 import zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GAME = os.path.join(HERE, "icons", "game")
-VEHICLE_BLUE = (110, 205, 255)
-WHITE = (255, 255, 255)
 SIZES = (12, 16, 20, 24, 28, 32, 40, 48, 64)   # pixels along the longer side; the mod draws the smallest that is
                                                 # at least as big as it needs
 
 ICONS = {
-    "ammo": ("ammo.png", "alpha"),
-    "grenade": ("grenade.png", "red"),
-    "stim": ("stim.png", "red"),
-    "package": ("package.png", "alpha"),
-    "egg": ("egg.png", "red"),
-    "tube": ("tube.png", "red"),
-    "common": ("sample_common.png", "alpha"),
-    "rare": ("sample_rare.png", "alpha"),
-    "super": ("sample_super.png", "alpha"),
-    "larva": ("larva.png", "colour"),
-    "hellbomb": ("hellbomb.png", "colour"),
-    "tank": ("vehicle_bastion_tank.png", "vehicle"),
-    "tank_storm": ("vehicle_tank_storm.png", "vehicle"),
-    "walker": ("vehicle_combatwalker.png", "vehicle"),
-    "car": ("vehicle_frv_hmg.png", "vehicle"),
-    "car_flamer": ("vehicle_frv_flamer.png", "vehicle"),
-    "car_supply": ("vehicle_frv_supply.png", "vehicle"),
+    "ammo": ("ammo.png", "alpha", False),
+    "grenade": ("grenade.png", "red", False),
+    "stim": ("stim.png", "red", False),
+    "egg": ("egg.png", "red", False),
+    "tube": ("tube.png", "red", False),
+    "common": ("sample_common.png", "alpha", False),
+    "rare": ("sample_rare.png", "alpha", False),
+    "super": ("sample_super.png", "alpha", False),
+    "package": ("package.png", "alpha", True),
+    "larva": ("larva.png", "green", True),
+    "hellbomb": ("hellbomb.png", "green", True),
+    "vehicle": ("vehicle_bastion_tank.png", "body", True),   # one for every vehicle: the tank's (they look alike)
 }
+FRAME = "hellbomb.png"   # its red corners (256 x 256 frame, corners at 24..231)
+PICTURE = (150, 160)     # the picture fitted into this, centred in the frame (the hellbomb's is 144 x 160)
 
 
 def decode(path):
@@ -86,8 +82,8 @@ def encode(w, h, rgba):
             + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
 
 
-def icon_pixels(path, mode):
-    """The icon as premultiplied (r, g, b, a) floats 0..1 per pixel, cut to where it shows."""
+def alpha_grid(path, mode):
+    """How much each pixel shows (0..1) by this mode, as rows."""
     w, h, bpp, rows = decode(path)
     out = []
     for y in range(h):
@@ -97,22 +93,69 @@ def icon_pixels(path, mode):
             p = [r[x * bpp + k] for k in range(bpp)]
             if mode == "alpha":
                 a = p[3] / 255 if bpp == 4 else max(p[:3]) / 255
-                col = WHITE
             elif mode == "red":
-                a, col = p[0] / 255, WHITE
-            elif mode == "colour":
-                a = max(p[:3]) / 255
-                col = tuple(int(v * 255 / max(1, max(p[:3]))) for v in p[:3])
-            else:   # vehicle
-                red, green = p[0], p[1]
-                a = max(red, green) / 255
-                col = tuple((red * VEHICLE_BLUE[k] + green * WHITE[k]) // max(1, red + green) for k in range(3))
-            line.append((col[0] / 255 * a, col[1] / 255 * a, col[2] / 255 * a, a))
+                a = p[0] / 255
+            elif mode == "green":
+                a = max(0, p[1] - p[0]) / 255
+            elif mode == "body":
+                a = max(0, p[0] - p[1]) / 255
+            else:   # the frame: the red corners
+                a = max(0, p[0] - p[1]) / 255
+            line.append(a)
         out.append(line)
-    ys = [y for y in range(h) if any(px[3] > 0.04 for px in out[y])]
-    xs = [x for x in range(w) if any(out[y][x][3] > 0.04 for y in range(h))]
-    x0, x1, y0, y1 = min(xs), max(xs) + 1, min(ys), max(ys) + 1
-    return [line[x0:x1] for line in out[y0:y1]]
+    return out
+
+
+def crop(grid):
+    """Cut to where it shows."""
+    h, w = len(grid), len(grid[0])
+    ys = [y for y in range(h) if any(v > 0.04 for v in grid[y])]
+    xs = [x for x in range(w) if any(grid[y][x] > 0.04 for y in range(h))]
+    return [line[min(xs):max(xs) + 1] for line in grid[min(ys):max(ys) + 1]]
+
+
+def resample(grid, W, H):
+    """Area average to W x H."""
+    h, w = len(grid), len(grid[0])
+    out = []
+    for j in range(H):
+        sy0, sy1 = j * h / H, (j + 1) * h / H
+        line = []
+        for i in range(W):
+            sx0, sx1 = i * w / W, (i + 1) * w / W
+            total = weight = 0.0
+            y = int(sy0)
+            while y < sy1:
+                hy = min(sy1, y + 1) - max(sy0, y)
+                x = int(sx0)
+                while x < sx1:
+                    k = (min(sx1, x + 1) - max(sx0, x)) * hy
+                    total += grid[min(y, h - 1)][min(x, w - 1)] * k
+                    weight += k
+                    x += 1
+                y += 1
+            line.append(total / weight)
+        out.append(line)
+    return out
+
+
+def icon_pixels(path, mode, framed=False):
+    """The icon as premultiplied white (a, a, a, a), 0..1 per pixel, cut to where it shows; framed: its picture
+    fitted inside the stratagem icons' red corner frame."""
+    grid = crop(alpha_grid(path, mode))
+    if framed:
+        frame = alpha_grid(os.path.join(GAME, FRAME), "frame")
+        h, w = len(grid), len(grid[0])
+        k = min(PICTURE[0] / w, PICTURE[1] / h)
+        W, H = max(1, round(w * k)), max(1, round(h * k))
+        pic = resample(grid, W, H)
+        size = len(frame)
+        x0, y0 = (size - W) // 2, (size - H) // 2
+        for y in range(H):
+            for x in range(W):
+                frame[y0 + y][x0 + x] = max(frame[y0 + y][x0 + x], pic[y][x])
+        grid = crop(frame)
+    return [[(a, a, a, a) for a in line] for line in grid]
 
 
 def shrink(px, size):
@@ -152,8 +195,8 @@ def shrink(px, size):
 def baked():
     """[(icon name, size, width, height, RGBA8 pixels)] for every icon and size."""
     out = []
-    for name, (file, mode) in sorted(ICONS.items()):
-        px = icon_pixels(os.path.join(GAME, file), mode)
+    for name, (file, mode, framed) in sorted(ICONS.items()):
+        px = icon_pixels(os.path.join(GAME, file), mode, framed)
         for size in SIZES:
             w, h, rgba = shrink(px, size)
             out.append((name, size, w, h, rgba))
