@@ -18,15 +18,12 @@ SAMPLE = "content/env_super_earth/samples/research_tech_sample_01"
 MARK = "content/objectives/obj_illuminate/il_sarcophagus/il_sarcophagus"   # drawn as a diamond (samples get icons, 0.20)
 
 FAKE_ENGINE = r"""
-local fake = { now = 0, lines = {}, dispatched = 0, created = 0, lookups = {}, units = {}, loaded = {},
-               logs = {}, gui_mode = 'immediate', layered = true, guis = 0, tris = {}, frame_tris = {},
-               live = {}, next_id = 0, assets = {} }
+local fake = { now = 0, lookups = {}, units = {}, loaded = {}, tris = {}, frame_tris = {}, assets = {} }
 os.clock = function() return fake.now end
 local real_getenv = os.getenv
 fake.appdata = 'Z:\\no-such-folder'
 os.getenv = function(k)
   if k == 'APPDATA' then return fake.appdata end
-  if k == 'LOCALAPPDATA' then return fake.localappdata end   -- nil: the mod falls back to open_log
   return real_getenv(k)
 end
 
@@ -61,74 +58,99 @@ stingray = {
       fake.lookups[key] = (fake.lookups[key] or 0) + 1
       return fake.units[key] or {}
     end,
-    create_line_object = function(world, no_depth)
-      fake.created = fake.created + 1
-      return { world = world, no_depth = no_depth }
-    end,
-    create_world_gui = function(world, pose, w, h, flag)
-      assert(pose == 'IDENTITY' and w == 1 and h == 1)
-      if fake.gui_mode == 'retained' and flag ~= nil then error('unknown flag ' .. tostring(flag)) end
-      fake.guis = fake.guis + 1
-      return { immediate = flag == 'immediate', world = world }
-    end,
-    destroy_line_object = function() error('must not be called') end,
-    destroy_gui = function(world, gui) fake.destroyed_gui = { world = world, gui = gui } end,
   },
   Unit = {
     alive = function(u) return u.alive ~= false end,
     world_position = function(u, node) return vec(u.x, u.y, u.z) end,
   },
-  LineObject = {
-    reset = function(lo) fake.lines = {} end,
-    add_line = function(lo, color, a, b) fake.lines[#fake.lines + 1] = { color = color, a = a, b = b } end,
-    dispatch = function(world, lo)
-      assert(#fake.lines > 0, 'dispatched an empty line object')
-      fake.dispatched = fake.dispatched + 1
-    end,
-  },
-  Gui = {
-    triangle = function(g, a, b, c, layer, color)
-      if fake.layered then
-        assert(type(layer) == 'number' and is_color(color), 'native: bad arguments')
-      else
-        assert(is_color(layer) and color == nil, 'native: bad arguments')
-        color = layer
-      end
-      assert(is_vec(a) and is_vec(b) and is_vec(c))
-      fake.next_id = fake.next_id + 1
-      local tri = { a = a, b = b, c = c, color = color, id = fake.next_id, wname = tostring(g.world), layer = layer }
-      tri.screen = g.screen
-      if g.immediate then fake.tris[#fake.tris + 1] = tri else fake.live[#fake.live + 1] = tri end
-      return fake.next_id
-    end,
-    destroy_triangle = function(g, id)
-      for i, tri in ipairs(fake.live) do
-        if tri.id == id then table.remove(fake.live, i); return end
-      end
-      error('destroyed an unknown triangle')
-    end,
-  },
-  Matrix4x4 = { identity = function() return 'IDENTITY' end },
+  Gui = { resolution = function() return 1920, 1200 end },
   Script = { temp_byte_count = function() return 7 end, set_temp_byte_count = function(n) fake.temp = n end },
   Vector3 = Vector3,
-  Color = function(a, r, g, b) return { a = a, r = r, g = g, b = b } end,
 }
 
-CowboyBingusModLoader = {
-  open_log = function(name)
-    fake.logs[name] = fake.logs[name] or {}
-    local sink = fake.logs[name]
-    return {
-      write = function(self, ...) for _, part in ipairs({ ... }) do sink[#sink + 1] = tostring(part) end end,
-      flush = function() end, close = function() end,
-    }
+-- camera 10 m behind the origin, 0.6 m up, looking along +y: right +x, up +z; a 50 degree field of view
+fake.cam = { pos = {0, -10, 0.6}, fwd = {0, 1, 0} }
+fake.fov = math.rad(50)
+
+-- Chef Shared Loader's helpers, handed to the mod as the chunk's argument
+fake.texts = {}
+fake.mission = true
+fake.chef = {
+  camera = function()
+    if fake.chef_cam then return fake.chef_cam end
+    if fake.no_camera then return nil end
+    local c = fake.cam
+    return { x = c.pos[1], y = c.pos[2], z = c.pos[3], fx = c.fwd[1], fy = c.fwd[2], fz = c.fwd[3], fov = fake.fov }
   end,
+  in_mission = function() return fake.mission end,
+  screen = function() return stingray.Gui.resolution() end,
+  color = function(r, g, b, a) return {r = r, g = g, b = b, a = a} end,
+  -- the shapes, recorded as triangles of points (x, 0, y) for this frame; a rect as two
+  triangle = function(x1, y1, x2, y2, x3, y3, c, layer)
+    fake.frame_tris[#fake.frame_tris + 1] = { a = vec(x1, 0, y1), b = vec(x2, 0, y2), c = vec(x3, 0, y3), color = c,
+                                              layer = layer }
+  end,
+  rect = function(x, y, w, h, c, layer)
+    fake.rects = (fake.rects or 0) + 1
+    for _, t in ipairs({ { x, y, x + w, y, x + w, y + h }, { x, y, x + w, y + h, x, y + h } }) do
+      fake.chef.triangle(t[1], t[2], t[3], t[4], t[5], t[6], c, layer)
+    end
+  end,
+  text_width = function(s, px) return #s * px / 2 end,
+  text = function(x, y, s, px, c) fake.texts[#fake.texts + 1] = {x = x, y = y, s = s, px = px, c = c} end,
+  unit_alive = function(u) return u.alive ~= false end,
+  unit_position = function(u, node)
+    if node == 7 and u.ix then return u.ix, u.iy, u.iz end   -- its 'interact' node
+    if node == 8 and u.mx then return u.mx, u.my, u.mz end   -- its 'gun_mount' node
+    if node and node > 1 then return u.x, u.y + node, u.z + (u.blast or 0) * node end
+    return u.x, u.y, u.z
+  end,
+  unit_node = function(u, name)
+    if name == 'interact' and u.ix then return 7 end
+    if name == 'gun_mount' and u.mx then return 8 end
+    return nil
+  end,
+  call_kind = function(name, kind, ...)
+    assert(name == 'World.units_by_resource', name)
+    local ok, value = pcall(stingray.World.units_by_resource, ...)
+    if not ok then return nil, value end
+    return value
+  end,
+  call = function(name, ...)
+    if name == 'Unit.num_meshes' then local u = ...; return u.meshes end
+    if name == 'Unit.mesh' then local u, m = ...; return {unit = u, index = m} end
+    if name == 'Mesh.visibility' then
+      local mesh = ...
+      return mesh.index <= mesh.unit.meshes - (mesh.unit.hidden or 0)
+    end
+    if name == 'Unit.box' then
+      local u, visible = ...
+      if visible and u.blown then return 'POSE', stingray.Vector3(0, 0, 0) end
+      return 'POSE', stingray.Vector3(0.67, 0.67, 1.05)
+    end
+    return nil, 'not in the fake'
+  end,
+  bitmap = function(tex, x, y, w, h, c, layer)
+    fake.bitmaps = fake.bitmaps or {}
+    if fake.textures_loaded == true then
+      fake.bitmaps[#fake.bitmaps + 1] = {tex = tex, x = x, y = y, w = w, h = h, c = c, layer = layer}
+    end
+    return fake.textures_loaded == true
+  end,
+}
+
+fake.options = {}
+ModOptionsMenu = {
+  api = 1,
+  register_option = function(id, spec) fake.options[id] = spec; return true end,
+  get = function(id) end,
+  on_change = function(id, fn) return true end,
 }
 
 fake.updates = 0
 function update(dt)
-  -- an immediate GUI shows what it was given this frame only: drawn after the game's update (0.17), so
-  -- this frame's table is the one filled from here on
+  -- the loader draws what it was given this frame only: drawn after the game's update (0.17), so this frame's
+  -- table is the one filled from here on
   fake.tris = {}
   fake.frame_tris = fake.tris
   fake.updates = fake.updates + 1
@@ -160,8 +182,13 @@ class Case(unittest.TestCase):
     def setUp(self):
         self.lua = lua51.LuaRuntime(unpack_returned_tuples=True)
         self.fake = self.lua.execute(FAKE_ENGINE)
+        self.folder = tempfile.TemporaryDirectory()          # the loader's folder: the log goes there
+        self.addCleanup(self.folder.cleanup)
+        self.addCleanup(lambda: self.mod is not None and self.lua.globals().shutdown())   # (closes the log)
+        self.fake.chef.log_directory = self.folder.name
         build.ICON_TABLE = TEST_ICONS
         self.source = build.built_source()
+        self.mod = None
 
     def set_units(self, key, units, loaded=True):
         self.fake.units[key] = self.lua.table(*[self.lua.table_from(u) for u in units])
@@ -169,13 +196,19 @@ class Case(unittest.TestCase):
             self.fake.loaded[key] = True
 
     def load(self):
-        mod = self.lua.execute(self.source)
-        self.assertEqual(mod.status, "running", self.log_text())
-        return mod
+        self.mod = self.lua.execute(self.source, self.fake.chef)
+        self.assertEqual(self.mod.status, "running", self.log_text())
+        return self.mod
 
-    def log_text(self, name="PickupDots.log"):
-        sink = self.fake.logs[name]
-        return "".join(sink.values()) if sink else ""
+    def load_with_chef(self):
+        return self.load()
+
+    def log_text(self):
+        path = os.path.join(self.folder.name, "PickupDots.log")
+        if not os.path.exists(path):
+            return ""
+        with open(path, encoding="utf-8") as f:
+            return f.read()
 
     def frames(self, count, start, step=1 / 60):
         update = self.lua.globals().update
@@ -188,20 +221,33 @@ class Case(unittest.TestCase):
         self.frames(1, start=11.0)          # world first seen at 11 s
         self.frames(count, start=20.0)      # 9 s later
 
-    def shapes(self):
-        """The diamonds drawn in the 3D scene now (line outlines), each as its corners (top, right, bottom, left)."""
-        lines = [l for l in self.fake.lines.values() if l.color.a > 0]
-        self.assertEqual(len(lines) % 4, 0)
-        for l in lines:
-            self.assertEqual((l.color.a, l.color.r, l.color.g, l.color.b), (255, 255, 255, 255))
-        return [[xyz(lines[i + k].a) for k in range(4)] for i in range(0, len(lines), 4)]
+    def points(self):
+        """Where this frame's markers are, in the world (x, y, z), on screen or not."""
+        dots = self.mod.dots if self.mod is not None else None
+        if dots is None:
+            return []
+        return [(d[1], d[2], d[3]) for d in dots.values()]
 
     def dots(self):
-        return len(self.shapes())
+        return len(self.points())
 
     def centre(self):
-        pts = [p for shape in self.shapes() for p in shape]
+        pts = self.points()
         return tuple(sum(c) / len(pts) for c in zip(*pts))
+
+    TRIS_PER_ICON = 9   # an outline (two triangles per side), then the filled lower half
+
+    def screen_tris(self):
+        return list(self.fake.frame_tris.values())
+
+    def screen_points(self):
+        tris = self.screen_tris()
+        self.assertEqual(len(tris) % self.TRIS_PER_ICON, 0)
+        out = []
+        for i in range(0, len(tris), self.TRIS_PER_ICON):
+            pts = [xyz(v) for t in tris[i:i + 8] for v in (t.a, t.b, t.c)]   # the outline: centred
+            out.append((sum(q[0] for q in pts) / len(pts), sum(q[2] for q in pts) / len(pts)))
+        return out
 
 
 class DrawingTests(Case):
@@ -225,27 +271,6 @@ class DrawingTests(Case):
         log = self.log_text()
         self.assertIn("found: il_sarcophagus=2", log)
         self.assertIn("mission drawn=1 worn=0 far=1", log)
-
-    def test_diamond_faces_the_helldiver_point_up_and_scales_with_distance(self):
-        self.set_units(AVATAR, [unit(0)], loaded=False)
-        self.set_units(MARK, [unit(20, 5, 0)])
-        self.load()
-        self.settle()
-        (shape,) = self.shapes()
-        top, right, bottom, left = shape
-        c = (20.0, 5.0, 0.6)
-        view = (c[0] - 0.0, c[1] - 0.0, c[2] - 1.6)
-        vl = math.sqrt(sum(v * v for v in view))
-        for p in shape:  # every corner lies across the line of sight
-            d = tuple(a - b for a, b in zip(p, c))
-            self.assertAlmostEqual(sum(a * b for a, b in zip(d, view)) / vl, 0.0, places=6)
-        h = min(0.4, max(0.05, math.sqrt(20 ** 2 + 5 ** 2) * 0.008))
-        self.assertAlmostEqual(math.dist(top, c), h, places=6)
-        self.assertAlmostEqual(math.dist(bottom, c), h, places=6)
-        self.assertAlmostEqual(math.dist(left, c), h, places=6)   # a square on its corner
-        self.assertAlmostEqual(math.dist(right, c), h, places=6)
-        self.assertGreater(top[2], c[2])     # the top corner points up
-        self.assertAlmostEqual(left[2], c[2], places=6)   # the side corners are level
 
     def test_supply_range_is_shorter(self):
         self.set_units(AVATAR, [unit(0)], loaded=False)
@@ -298,7 +323,7 @@ class DrawingTests(Case):
         self.load()
         self.settle()
         self.assertEqual(self.dots(), 40)
-        self.assertLess(max(p[0] for s in self.shapes() for p in s), 2 + 40 * 0.3 + 1)
+        self.assertLess(max(p[0] for p in self.points()), 2 + 40 * 0.3 + 1)
 
     def test_world_change_forgets_old_units_and_draws_in_the_new_world(self):
         self.set_units(AVATAR, [unit(0)], loaded=False)
@@ -362,23 +387,16 @@ class DrawingTests(Case):
         self.assertEqual(self.dots(), 1)
         self.assertAlmostEqual(self.centre()[0], 12.0, places=6)
 
-    def test_the_log_is_written_fresh_each_launch_and_the_last_one_kept(self):
-        import tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            folder = os.path.join(tmp, "CowboyBingus", "Helldivers2", "Logs")
-            os.makedirs(folder)
-            with open(os.path.join(folder, "PickupDots.log"), "w") as f:
-                f.write("last launch" + chr(10))
-            self.fake.localappdata = tmp
-            self.set_units(AVATAR, [unit(0)], loaded=False)
-            self.load()
-            self.lua.globals().shutdown()
-            with open(os.path.join(folder, "PickupDots.previous.log")) as f:
-                self.assertEqual(f.read(), "last launch" + chr(10))
-            with open(os.path.join(folder, "PickupDots.log")) as f:
-                text = f.read()
-            self.assertIn("Pickup Dots 2.4.0 loading", text)
-            self.assertNotIn("last launch", text)
+    def test_the_log_is_written_fresh_each_launch_in_the_loaders_folder(self):
+        with open(os.path.join(self.folder.name, "PickupDots.log"), "w") as f:
+            f.write("last launch" + chr(10))
+        self.set_units(AVATAR, [unit(0)], loaded=False)
+        self.load()
+        self.lua.globals().shutdown()
+        text = self.log_text()
+        self.assertRegex(text, r"Pickup Dots S+ loading")
+        self.assertIn("shutdown: frames=0", text)
+        self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
         stim = "content/fac_helldivers/discoverables/health_pack_discoverable_01/health_pack_discoverable_01"
@@ -391,7 +409,7 @@ class DrawingTests(Case):
         self.load()
         self.settle()
         self.assertEqual(self.dots(), 3)
-        xs = sorted(round(sum(p[0] for p in s) / 4, 1) for s in self.shapes())
+        xs = sorted(round(p[0], 1) for p in self.points())
         self.assertEqual(xs, [-1.5, 0.0, 8.6])
 
     def test_super_samples_are_left_to_the_game_further_off(self):
@@ -401,7 +419,7 @@ class DrawingTests(Case):
         self.set_units(SAMPLE, [unit(-15)])                    # a common sample's only to 9 m
         self.load()
         self.settle()
-        xs = [round(sum(p[0] for p in s) / 4, 1) for s in self.shapes()]
+        xs = [round(p[0], 1) for p in self.points()]
         self.assertEqual(xs, [-15.0])
 
     def test_a_running_teammates_items_stay_hidden(self):
@@ -452,56 +470,8 @@ class DrawingTests(Case):
         return [dict(rows[i].items()) for i in range(1, len(rows) + 1)]
 
 
-SCREEN_ENGINE = r"""
-fake.ui = fake.new_world('ui-world')
-stingray.Application.worlds = function() return { fake.world, fake.ui } end
--- camera 10 m behind the origin, 0.6 m up, looking along +y: right +x, up +z
-fake.cam = { pos = {0, -10, 0.6}, right = {1, 0, 0}, fwd = {0, 1, 0}, up = {0, 0, 1} }
-stingray.World.debug_camera_pose = function(w) return 'POSE' end
-local function v(t) return stingray.Vector3(t[1], t[2], t[3]) end
-stingray.Matrix4x4.translation = function(m) return v(fake.cam.pos) end
-stingray.Matrix4x4.right = function(m) return v(fake.cam.right) end
-stingray.Matrix4x4.forward = function(m) return v(fake.cam.fwd) end
-stingray.Matrix4x4.up = function(m) return v(fake.cam.up) end
-stingray.Gui.resolution = function() return 1920, 1200 end
-fake.screen_guis = 0
-stingray.World.create_screen_gui = function(world, flag, ...)
-  assert(tostring(world) == (fake.screen_world or 'ui-world'), 'screen GUI on the wrong world: ' .. tostring(world))
-  if fake.screen_mode == 'retained' and flag == 'immediate' then error('unknown flag') end
-  fake.screen_guis = fake.screen_guis + 1
-  return { immediate = flag == 'immediate', screen = true, world = world }
-end
-fake.options = {}
-ModOptionsMenu = {
-  api = 1,
-  register_option = function(id, spec) fake.options[id] = spec; return true end,
-  get = function(id) if id == 'pickup_dots.fov_override' then return fake.option_value end end,
-  on_change = function(id, fn) if id == 'pickup_dots.fov_override' then fake.option_changed = fn end; return true end,
-}
-"""
-
-
 class ScreenTests(Case):
-    def setUp(self):
-        super().setUp()
-        self.lua.execute("local fake = ...; " + SCREEN_ENGINE.replace("\n", "\n"), self.fake)
-
-    TRIS_PER_ICON = 9   # an outline (two triangles per side), then the filled lower half
-
-    def screen_tris(self, live=False):
-        source = self.fake.live if live else self.fake.frame_tris
-        return [t for t in source.values() if t.screen]
-
-    def screen_points(self, live=False):
-        tris = self.screen_tris(live)
-        self.assertEqual(len(tris) % self.TRIS_PER_ICON, 0)
-        out = []
-        for i in range(0, len(tris), self.TRIS_PER_ICON):
-            pts = [xyz(v) for t in tris[i:i + 8] for v in (t.a, t.b, t.c)]   # the outline: centred
-            out.append((sum(q[0] for q in pts) / len(pts), sum(q[2] for q in pts) / len(pts)))
-        return out
-
-    def test_item_ahead_is_drawn_at_screen_centre_and_nothing_in_3d(self):
+    def test_item_ahead_is_drawn_at_screen_centre(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(MARK, [unit(0, 0, 0)])
         self.load()
@@ -509,9 +479,6 @@ class ScreenTests(Case):
         (pt,) = self.screen_points()
         self.assertAlmostEqual(pt[0], 960.0, places=4)
         self.assertAlmostEqual(pt[1], 600.0, places=4)   # dot height 0.6 = camera height: centre
-        self.assertEqual(self.fake.created, 0)  # nothing in the 3D scene
-        self.assertIn("drawing: 2 world(s), 1 besides the main one, setting 1; screen GUI goes on other world #1", self.log_text())
-        self.assertIn("drawing: immediate screen GUI", self.log_text())
 
     def test_field_of_view_comes_from_the_game_settings(self):
         import tempfile
@@ -521,6 +488,7 @@ class ScreenTests(Case):
             with open(os.path.join(folder, "user_settings.config"), "w", encoding="utf-8") as f:
                 f.write("aspect_ratio = -1\nvertical_fov = 55\nupscaling_method = 0\n")
             self.fake.appdata = tmp
+            self.fake.fov = None                   # the camera doesn't give it
             self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
             self.set_units(MARK, [unit(1, 0, 0)])  # 1 m right, 10 m ahead
             self.load()
@@ -531,6 +499,7 @@ class ScreenTests(Case):
             self.assertIn("field of view: 55 degrees from the game settings", self.log_text())
 
     def test_without_the_game_settings_50_degrees_is_used(self):
+        self.fake.fov = None
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(MARK, [unit(1, 0, 0)])
         self.load()
@@ -545,16 +514,7 @@ class ScreenTests(Case):
         self.settle()
         self.assertEqual(len(self.screen_points()), 1)
 
-    def test_the_screen_gui_is_destroyed_at_shutdown(self):
-        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(MARK, [unit(0, 0, 0)])
-        self.load()
-        self.settle()
-        self.lua.globals().shutdown()
-        self.assertEqual(str(self.fake.destroyed_gui.world), "ui-world")
-        self.assertIn("shutdown: screen GUI destroyed", self.log_text())
-
-    def test_diamond_is_smaller_with_its_lower_half_filled_on_a_low_layer(self):
+    def test_diamond_is_smaller_with_its_lower_half_filled_on_the_loaders_layer(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(MARK, [unit(0, 0, 0)])
         self.load()
@@ -564,7 +524,7 @@ class ScreenTests(Case):
         fill = [xyz(v) for v in (tris[8].a, tris[8].b, tris[8].c)]
         self.assertEqual(sorted((round(x, 3), round(y, 3)) for x, _, y in fill),
                          [(952.08, 600.0), (960.0, 592.08), (967.92, 600.0)])   # left, bottom, right
-        self.assertEqual({t.layer for t in tris}, {1})
+        self.assertEqual({t.layer for t in tris}, {900})
 
     def test_on_a_bigger_screen_markers_grow_as_the_games_hud_does(self):
         self.lua.execute("stingray.Gui.resolution = function() return 2560, 1440 end")
@@ -678,6 +638,40 @@ class ScreenTests(Case):
         self.frames(60, start=60.0)
         self.assertIn("vehicles drawn=0", self.status_now())
 
+    def test_an_exosuit_landing_by_an_old_wreck_is_marked_once_it_walks_off(self):
+        wreck = "content/fac_helldivers/vehicles/combat_walker_wreck/combat_walker_wreck"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(self.MECH, [unit(0, 20, 0)])
+        self.set_units(self.MECH_ARM, [unit(1, 20, 3)])
+        self.set_units(wreck, [unit(0.5, 20, 0)])                      # the last one's wreck, where the new one lands
+        self.load()
+        self.settle()
+        self.assertIn("vehicles drawn=0 worn=1", self.status_now())
+        mech, arm = self.fake.units[self.MECH][1], self.fake.units[self.MECH_ARM][1]
+        mech.x, arm.x = 10, 11                                         # walked off
+        self.frames(60, start=210.0)
+        self.frames(1, start=300.0)                                    # the next status line
+        last = [l for l in self.log_text().splitlines() if "last frame:" in l][-1]
+        self.assertIn("vehicles drawn=1 worn=0", last)
+
+    def test_a_wrecks_unit_is_let_go_once_it_is_gone(self):
+        gun = "content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(self.VEHICLE, [unit(0, 20, 0)])
+        self.set_units(gun, [unit(0, 20, 1.5)])
+        self.load()
+        self.settle()
+        body = self.fake.units[self.VEHICLE][1]
+        self.fake.units[gun] = self.lua.table()                        # destroyed
+        self.frames(60, start=40.0)
+        self.assertIn("frv lost its weapons", self.log_text())
+        self.fake.units[self.VEHICLE] = self.lua.table()               # despawned
+        self.frames(60, start=50.0)
+        self.fake.units[self.VEHICLE] = self.lua.table(body)           # the engine hands the same unit to a new FRV
+        self.set_units(gun, [unit(0, 20, 1.5)])
+        self.frames(60, start=60.0)
+        self.assertIn("vehicles drawn=1", self.status_now())
+
     def test_vehicles_side_by_side_each_get_a_marker(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(self.MECH, [unit(-1, 20, 0), unit(1, 20, 0)])   # two exosuits 2 m apart
@@ -755,51 +749,10 @@ class ScreenTests(Case):
         self.frames(1, start=200.0)
         return self.log_text()
 
-    def test_retained_screen_gui_removes_last_frames_triangles(self):
-        self.fake.screen_mode = "retained"
-        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(MARK, [unit(0, 0, 0)])
-        self.load()
-        self.settle()
-        self.assertEqual(len(self.screen_tris(live=True)), 9)
-        self.assertIn("retained screen GUI", self.log_text())
-        self.set_units(MARK, [unit(0, 60, 0)])  # out of range: cleared
-        self.frames(40, start=21.0)
-        self.assertEqual(len([t for t in self.fake.live.values() if t.screen]), 0)
-
-    def test_without_a_ui_world_the_screen_gui_goes_on_the_main_world(self):
-        self.lua.execute("""local fake = ...
-            stingray.Application.worlds = function() return { fake.world } end
-            fake.screen_world = 'world-1'""", self.fake)
-        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(MARK, [unit(0, 0, 0)])
-        self.load()
-        self.settle()
-        self.assertEqual(len(self.screen_points()), 1)
-        log = self.log_text()
-        self.assertIn("drawing: 1 world(s), 0 besides the main one, setting 1; screen GUI goes on the main world", log)
-
-    def test_says_why_when_there_is_no_camera_pose(self):
-        self.lua.execute("local fake = ...; fake.cam.pos = {0, 0, 0}", self.fake)
-        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(MARK, [unit(0, 0, 0)])
-        self.load()
-        self.settle(count=700)
-        self.assertIn("screen GUI not used here (no camera pose for 600 frames)", self.log_text())
-
     def test_worlds_that_all_print_the_same_are_still_told_apart(self):
         # in the game every world prints as '[World]' (0.6.1 log); the engine compares them with ==
         self.lua.execute("""local fake = ...
-            local mt = { __tostring = function() return '[World]' end }
-            fake.world = setmetatable({}, mt)
-            fake.ui = setmetatable({}, mt)
-            stingray.Application.worlds = function() return { fake.world, fake.ui } end
-            fake.screen_world = '[World]'
-            local create = stingray.World.create_screen_gui
-            stingray.World.create_screen_gui = function(world, ...)
-              assert(rawequal(world, fake.ui), 'screen GUI must go on the other world')
-              return create(world, ...)
-            end""", self.fake)
+            fake.world = setmetatable({}, { __tostring = function() return '[World]' end })""", self.fake)
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(MARK, [unit(0, 0, 0)])
         self.load()
@@ -825,23 +778,6 @@ class ScreenTests(Case):
         self.load()
         self.settle()
         self.assertEqual(self.screen_points(), [])
-
-    def test_the_screen_gui_is_kept_across_missions_and_replaced_with_its_world(self):
-        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
-        self.set_units(MARK, [unit(0, 0, 0)])
-        self.load()
-        self.settle()
-        self.assertEqual(self.fake.screen_guis, 1)
-        self.fake.world = self.fake.new_world("world-2")             # the next mission, same UI world
-        self.frames(1, start=30.0)
-        self.frames(40, start=39.0)
-        self.assertEqual(len(self.screen_points()), 1)
-        self.assertEqual(self.fake.screen_guis, 1)
-        self.assertIsNone(self.fake.destroyed_gui)
-        self.lua.execute("local fake = ...; fake.ui = fake.new_world('ui-world')", self.fake)  # a new UI world
-        self.frames(40, start=50.0)
-        self.assertEqual(self.fake.screen_guis, 2)
-        self.assertIsNone(self.fake.destroyed_gui)                     # the old one went with its world
 
     def test_markers_use_the_camera_the_game_moved_this_frame(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
@@ -975,98 +911,20 @@ class ScreenTests(Case):
         self.assertIn("mission drawn=2 worn=0", self.status_now())
         self.assertNotIn("taken: ", self.log_text())
 
-    # Chef Shared Loader hands the mod its helpers as the chunk's argument.
-    FAKE_CHEF = """
-        local fake = ...
-        fake.texts = {}
-        fake.mission = true
-        return {
-          api = 3,
-          camera = function() return fake.chef_cam end,
-          in_mission = function() return fake.mission end,
-          screen = function() return 1920, 1200 end,
-          color = function(r, g, b, a) return {r = r, g = g, b = b, a = a} end,
-          text_width = function(s, px) return #s * px / 2 end,
-          text = function(x, y, s, px, c) fake.texts[#fake.texts + 1] = {x = x, y = y, s = s, px = px, c = c} end,
-          unit_alive = function(u) return true end,
-          mouse_down = function(name) return name == 'right' and fake.rmb == true end,
-          key_down = function(name) return name == 'e' and fake.e_key == true end,
-          unit_position = function(u, node)
-            if node == 7 and u.ix then return u.ix, u.iy, u.iz end   -- its 'interact' node
-            if node == 8 and u.mx then return u.mx, u.my, u.mz end   -- its 'gun_mount' node
-            if node and node > 1 then return u.x, u.y + node, u.z + (u.blast or 0) * node end
-            return u.x, u.y, u.z
-          end,
-          unit_rotation = function(u, node)
-            if node == 3 and u.turn then return math.sin(u.turn), math.cos(u.turn), 0, 0 end
-            return 0, 1, 0, 0
-          end,
-          unit_node = function(u, name)
-            if name == 'interact' and u.ix then return 7 end
-            if name == 'gun_mount' and u.mx then return 8 end
-            return nil
-          end,
-          call = function(name, ...)
-            if name == 'Unit.num_scene_graph_items' then return 3 end
-            if name == 'Unit.num_meshes' then local u = ...; return u.meshes end
-            if name == 'Unit.mesh' then local u, m = ...; return {unit = u, index = m} end
-            if name == 'Mesh.visibility' then
-              local mesh = ...
-              return mesh.index <= mesh.unit.meshes - (mesh.unit.hidden or 0)
-            end
-            if name == 'Unit.box' then
-              local u, visible = ...
-              if visible and u.blown then return 'POSE', stingray.Vector3(0, 0, 0) end
-              return 'POSE', stingray.Vector3(0.67, 0.67, 1.05)
-            end
-            return nil, 'not in the fake'
-          end,
-          bitmap = function(tex, x, y, w, h, c, layer)
-            fake.bitmaps = fake.bitmaps or {}
-            if fake.textures_loaded == true then
-              fake.bitmaps[#fake.bitmaps + 1] = {tex = tex, x = x, y = y, w = w, h = h, c = c, layer = layer}
-            end
-            return fake.textures_loaded == true
-          end,
-        }
-    """
-
-    def load_with_chef(self, shapes=False):
-        chef = self.lua.execute(self.FAKE_CHEF, self.fake)
-        if shapes:   # the loader's own shapes, recorded
-            self.lua.execute("""local chef, fake = ...
-                fake.shapes = {}
-                chef.triangle = function(x1, y1, x2, y2, x3, y3, c, layer)
-                  fake.shapes[#fake.shapes + 1] = {kind = 'tri', x = (x1 + x2 + x3) / 3, y = (y1 + y2 + y3) / 3, c = c, layer = layer}
-                end
-                chef.rect = function(x, y, w, h, c, layer)
-                  fake.shapes[#fake.shapes + 1] = {kind = 'rect', x = x + w / 2, y = y + h / 2, c = c, layer = layer}
-                end
-            """, chef, self.fake)
-        mod = self.lua.execute(self.source, chef)
-        self.assertEqual(mod.status, "running", self.log_text())
-        return mod
-
-    def test_with_chef_shapes_markers_are_drawn_by_the_loader_not_our_screen_gui(self):
-        self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
-                                                  "fov": math.radians(50)})
+    def test_markers_are_the_loaders_shapes_on_its_layer(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(MARK, [unit(0, 0, 0)])                         # a diamond, straight ahead
         self.set_units("content/fac_helldivers/hellpod/ammo_rack/ammo_box", [unit(4, 0, 0)])   # a pixel icon
-        self.load_with_chef(shapes=True)
+        self.load()
         self.settle()
-        self.fake.shapes = self.lua.table()
+        self.fake.rects = 0
         self.frames(1, start=40.0)
-        shapes = list(self.fake.shapes.values())
-        tris = [s for s in shapes if s.kind == 'tri']
-        rects = [s for s in shapes if s.kind == 'rect']
-        self.assertTrue(rects)                                        # the supply crate's pixels
-        self.assertEqual({s.layer for s in shapes}, {900})
-        diamond = [s for s in tris if abs(s.x - 960) < 12 and abs(s.y - 600) < 12]
+        tris = self.screen_tris()
+        self.assertGreater(self.fake.rects, 0)                        # the supply crate's pixels
+        self.assertEqual({t.layer for t in tris}, {900})
+        centre = lambda t: ((t.a._x + t.b._x + t.c._x) / 3, (t.a._z + t.b._z + t.c._z) / 3)
+        diamond = [t for t in tris if abs(centre(t)[0] - 960) < 12 and abs(centre(t)[1] - 600) < 12]
         self.assertEqual(len(diamond), 9)                             # outline and lower half, at the centre
-        self.assertEqual(self.fake.screen_guis, 0)                    # no screen GUI of our own
-        self.assertEqual(self.screen_tris(), [])
-        self.assertIn("drawing: Chef Shared Loader's shapes", self.log_text())
 
     def test_with_chef_the_cameras_real_field_of_view_is_used(self):
         self.fake.chef_cam = self.lua.table_from({"x": 0, "y": -10, "z": 0.6, "fx": 0, "fy": 1, "fz": 0,
@@ -1433,22 +1291,21 @@ class ScreenTests(Case):
         self.assertTrue(self.fake.options["pickup_dots.fade"].default)
         self.assertEqual(self.fake.options["pickup_dots.show_vehicles"].type, "toggle")
 
-    def test_a_passing_screen_failure_does_not_turn_the_screen_off(self):
+    def test_a_passing_drawing_failure_skips_only_that_frame(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(MARK, [unit(0, 0, 0)])
         self.load()
         self.settle()
         self.lua.execute("""local fake = ...
-            local triangle = stingray.Gui.triangle
+            local triangle = fake.chef.triangle
             fake.fail_left = 2
-            stingray.Gui.triangle = function(...)
+            fake.chef.triangle = function(...)
               if fake.fail_left > 0 then fake.fail_left = fake.fail_left - 1; error('native: a passing failure') end
               return triangle(...)
             end""", self.fake)
         self.frames(10, start=30.0)
-        self.assertEqual(len(self.screen_points()), 1)        # back on the screen
-        self.assertEqual(self.fake.created, 0)                 # never fell back to the 3D scene for good
-        self.assertNotIn("back to drawing in the 3D scene", self.log_text())
+        self.assertEqual(len(self.screen_points()), 1)        # drawn again
+        self.assertIn("drawing: failed (", self.log_text())
 
     def test_settings_are_in_english(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
@@ -1469,37 +1326,27 @@ class ScreenTests(Case):
         self.fake.cursor = True                   # Esc: the menu opens
         self.frames(5, start=30.0)
         self.assertEqual(self.screen_points(), [])
-        self.assertEqual(str(self.fake.destroyed_gui.world), "ui-world")   # the screen GUI itself is gone
-        self.assertEqual(self.fake.screen_guis, 1)
         self.fake.cursor = False
         self.frames(5, start=31.0)
         self.assertEqual(len(self.screen_points()), 1)
-        self.assertEqual(self.fake.screen_guis, 2)                          # made again
         log = self.log_text()
         self.assertIn("menus: cursor shown - markers hidden", log)
         self.assertIn("menus: cursor hidden", log)
 
-    def test_no_camera_yet_falls_back_to_the_3d_scene(self):
-        self.lua.execute("local fake = ...; fake.cam.pos = {0, 0, 0}", self.fake)  # pose not set yet
+    def test_no_camera_yet_draws_nothing(self):
+        self.fake.no_camera = True
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(MARK, [unit(0, 0, 0)])
         self.load()
         self.settle()
-        self.assertEqual(self.screen_points(), [])
-        self.assertEqual(self.dots(), 1)  # drawn in the 3D scene instead
-
+        self.assertEqual(self.screen_tris(), [])
+        self.assertEqual(self.dots(), 1)   # found, drawn once there is a camera
+        self.fake.no_camera = False
+        self.frames(1, start=30.0)
+        self.assertEqual(len(self.screen_points()), 1)
+        self.assertNotIn("failed", self.log_text())
 
 class LifecycleTests(Case):
-    def test_a_line_object_only_when_there_is_something_to_draw(self):
-        self.set_units(AVATAR, [unit(0)], loaded=False)
-        self.set_units(MARK, [unit(60)])  # out of range
-        self.load()
-        self.settle()
-        self.assertEqual(self.fake.created, 0)
-        self.set_units(MARK, [unit(5)])
-        self.frames(80, start=21.0)
-        self.assertEqual(self.fake.created, 1)
-
     def test_without_can_get_no_target_is_looked_up(self):
         self.lua.execute("stingray.Application.can_get = nil")
         self.set_units(AVATAR, [unit(0)], loaded=False)
@@ -1530,17 +1377,6 @@ class LifecycleTests(Case):
         self.fake.world = None
         self.frames(10, start=30.0)
         self.assertNotIn("failed", self.log_text())
-
-    def test_trace_names_each_native_call_after_a_world_change(self):
-        self.set_units(AVATAR, [unit(0)], loaded=False)
-        self.set_units(MARK, [unit(5)])
-        self.load()
-        self.settle()
-        trace = self.log_text("PickupDots.trace.log")
-        self.assertIn("--- world changed: world #1", trace)
-        self.assertIn("units_by_resource avatar", trace)
-        self.assertIn("create_line_object", trace)
-        self.assertLess(trace.index("can_get unit " + MARK), trace.index("units_by_resource " + MARK))
 
     def test_avatar_hex_matches_its_name(self):
         with open(build.SOURCE, encoding="utf-8") as f:
@@ -1575,15 +1411,18 @@ class LifecycleTests(Case):
             rows = self.lua.execute(f.read())
         return [dict(rows[i].items()) for i in range(1, len(rows) + 1)]
 
-    def test_api_inventory_is_logged(self):
-        self.load()
-        log = self.log_text()
-        self.assertIn("api World (", log)
-        self.assertIn("api Gui (", log)
+    def test_without_chef_shared_loader_it_stays_off_and_says_why(self):
+        mod = self.lua.execute(self.source)
+        self.assertEqual(mod.status, "no Chef Shared Loader")
+        self.lua.execute("local fake = ...; fake.chef.bitmap = nil", self.fake)
+        self.lua.execute("CodexPickupDots = nil")
+        mod = self.lua.execute(self.source, self.fake.chef)
+        self.assertEqual(mod.status, "Chef Shared Loader without bitmap (too old?)")
+        self.assertIn("FATAL: Chef Shared Loader without bitmap", self.log_text())
 
     def test_loads_once(self):
         first = self.load()
-        second = self.lua.execute(self.source)
+        second = self.lua.execute(self.source, self.fake.chef)
         self.assertTrue(self.lua.globals().rawequal(first, second))
 
 

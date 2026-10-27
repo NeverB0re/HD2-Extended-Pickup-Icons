@@ -81,6 +81,7 @@ in your mod manager (in Arsenal, by default, the bottom of the list).
 
 Good to know:
 - Valves and cranks stay marked after you turn them.
+- At most the 40 nearest markers are drawn at once.
 """
 
 

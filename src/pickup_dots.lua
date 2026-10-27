@@ -1,27 +1,27 @@
 -- HD2-Addon: mods/codex/pickup_dots
 -- Extended Pickup Icons Range (Pickup Dots): markers over samples, supplies, mission items and vehicles near you.
 -- Lua-only rebuild of Extended Pickup Icons for Chef Shared Loader (PUC Lua 5.1, no ffi).
--- It only reads unit positions and draws lines; it changes no game state.
+-- It only reads unit positions and draws on the screen; it changes no game state.
 --
 -- 0.1.0 crashed the game on entering the ship: an access violation inside a native call made
 -- from Lua, right after a world appeared. The likeliest cause is World.units_by_resource on a
 -- unit resource that is not loaded in that world (the ship has no mission items loaded). So:
 --   * a resource is looked up only if Application.can_get says it is loaded; without can_get,
 --     no target is looked up at all and the log says so;
---   * nothing is looked up until a world has settled and a helldiver is in it;
---   * the first native calls after each world change are written to a trace file, one line
---     before each call, so a crash names the call that caused it.
+--   * nothing is looked up until a world has settled and a helldiver is in it.
 
 local MOD_KEY = 'CodexPickupDots'
 if rawget(_G, MOD_KEY) then return rawget(_G, MOD_KEY) end
 
--- Chef Shared Loader (Nexus 17760) hands its helpers in (2.1.0): the game's own camera, whether this is a
--- mission, text in the game's font, units by kind. Without them (the tests): nil, and the mod does without.
+-- Chef Shared Loader (Nexus 17760) hands its helpers in: the game's own camera, guarded engine calls, units and
+-- their nodes, whether this is a mission, and drawing on the screen (shapes, text in the game's font, textures
+-- of the mod's patch). 2.4.0: the mod runs on them alone (CHEF_NEEDS).
 local CHEF = ...
-if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
-local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
+if type(CHEF) ~= 'table' then CHEF = nil end
+local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
+                    'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.4.0'
+local VERSION = '2.4.0-test.7'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -40,7 +40,7 @@ local LOOK = {                -- settings (2.1.0)
     smallest = 0.7,           -- size at the edge of a kind's range (full size up to FULL_SIZE_M)
     opacity = 1,              -- 0..1
     fade = true,              -- supplies fainter with distance, down to FADE_LEAST of opacity at the edge
-    distance = true,          -- the distance above a vehicle's marker, in the game's font (Chef Shared Loader)
+    distance = true,          -- the distance above a vehicle's or hellbomb's marker, in the game's font
 }
 -- The game's icons as textures of the mod's own patch (2.4.0; tools/bake_icons.py, packed by build.py): icon name ->
 -- its sizes, smallest first, each {size along the longer side (pixels), texture id, width, height}. Chef Shared
@@ -82,15 +82,10 @@ local ARM_MOVED = 0.6
 local READ_TOGETHER = {vehicles = true, arms = true, wrecks = true}
 local DELIVERED_NEAR = 3      -- a mission item or load this close to a drop-off is in it (an SSSD put in)
 local LOADED_NEAR = 1         -- an artillery shell this close to a ready rack (group 'loaders', not drawn) is in it
-local DIAMOND_PER_M = 0.008   -- half-height per metre of distance: about the same size on screen at any range
-local DIAMOND_MIN, DIAMOND_MAX = 0.05, 0.4   -- half-height limits, metres
-local DIAMOND_ASPECT = 1      -- half-width / half-height: a square on its corner, like the game's icon
-local EYE_HEIGHT = 1.6        -- diamonds face a point this high above the helldiver
 local VERTICAL_FOV = 50       -- degrees, used when the game's setting cannot be read
 local GAME_FOV_EVERY_S = 10   -- how often the game's settings file is read again
 local SCREEN_DIAMOND = 7.92   -- screen diamond half-height, pixels (0.11: 20% smaller; 2.1.0: 10% bigger)
 local SCREEN_LINE = 2         -- screen diamond outline thickness, pixels
-local SCREEN_LAYER = 1        -- screen GUI layer: low, so the game's menus draw over the markers
 local CHEF_LAYER = 900        -- Chef Shared Loader's layer for them (under the game's HUD and menus)
 
 -- The resupply crate's icon (no texture of the game's matches it), pixel for pixel at its size on screen, from a
@@ -111,7 +106,6 @@ local ICON_PIXELS = {
     },
 }
 
-local SCREEN_WORLD = 1        -- which world the screen GUI goes on: 0 the main one, n the n-th other one
 local CARRIED_RADIUS = 1.0    -- closer than this (horizontally) to a helldiver ...
 local CARRIED_LOW = -0.5      -- ... and no lower than this below its feet (prone helldivers and bodies too) ...
 local STILL_EPS = 0.05        -- metres from where a vehicle stopped: "not moved at all"
@@ -121,53 +115,24 @@ local PLAYERS_HOLD_S = 2      -- keep the last helldiver positions this long if 
 local KEYS_PER_FRAME = 12     -- resource lookups per frame
 local HOT_PER_FRAME = 10      -- resources with an item near you, read again every frame (at most this many)
 local HOT_MARGIN = 10         -- metres beyond a group's range that still counts as near
-local SCREEN_FAILURES = 30    -- screen drawing failures in a row before falling back to the 3D scene
 local MAX_DOTS = 40           -- the nearest dots only, at most this many in one frame (icons are many triangles)
 local STARTUP_GRACE_S = 10    -- wait after start before touching the world
 local WORLD_SETTLE_S = 8      -- wait after a world appears before looking anything up in it
 local STATUS_EVERY_S = 60     -- a summary line in the log this often
-local TRACE_CALLS = 100       -- native calls traced after each world change (0.16: 600 -> 100, each is a flushed write)
 local AVATAR = 'content/fac_helldivers/cha_avatar/avatar_helldiver'
 
-local current_fov             -- defined with the screen drawing
 local menu_open               -- defined before tick
 
 local TARGETS = "@TARGETS@"   -- filled in by build.py from targets.lua
 
 -- ----------------------------------------------------------------------- log --
-local logfile, tracefile
+local logfile
 do
-    -- Written fresh each launch, the last one kept as .previous (the loader's open_log only appends, and
-    -- 0.1-0.15 grew the log without end). The loader's open_log if the folder cannot be written directly.
-    -- Under Chef Shared Loader: straight in its folder (%APPDATA%\Arrowhead\Helldivers2), where a mod may write.
-    local okd, base = pcall(os.getenv, 'LOCALAPPDATA')
-    local chef_dir = CHEF and type(CHEF.log_directory) == 'string' and CHEF.log_directory or nil
-    if chef_dir then
-        local ok, file = pcall(io.open, chef_dir .. '\\PickupDots.log', 'w')
+    -- Written fresh each launch, in Chef Shared Loader's folder (%APPDATA%\Arrowhead\Helldivers2), where a mod may write.
+    local dir = CHEF and type(CHEF.log_directory) == 'string' and CHEF.log_directory or nil
+    if dir then
+        local ok, file = pcall(io.open, dir .. '\\PickupDots.log', 'w')
         if ok then logfile = file end
-        local ok2, file2 = pcall(io.open, chef_dir .. '\\PickupDots.trace.log', 'w')
-        if ok2 then tracefile = file2 end
-    elseif okd and type(base) == 'string' then
-        local dir = base .. '\\CowboyBingus\\Helldivers2\\Logs\\'
-        if type(os.remove) == 'function' and type(os.rename) == 'function' then
-            pcall(os.remove, dir .. 'PickupDots.previous.log')
-            pcall(os.rename, dir .. 'PickupDots.log', dir .. 'PickupDots.previous.log')
-        end
-        local ok, file = pcall(io.open, dir .. 'PickupDots.log', 'w')
-        if ok then logfile = file end
-        local ok2, file2 = pcall(io.open, dir .. 'PickupDots.trace.log', 'w')
-        if ok2 then tracefile = file2 end
-    end
-    local loader = rawget(_G, 'CowboyBingusModLoader')
-    if type(loader) == 'table' and type(loader.open_log) == 'function' then
-        if not logfile then
-            local ok, file = pcall(loader.open_log, 'PickupDots.log')
-            if ok then logfile = file end
-        end
-        if not tracefile then
-            local ok2, file2 = pcall(loader.open_log, 'PickupDots.trace.log')
-            if ok2 then tracefile = file2 end
-        end
     end
 end
 
@@ -181,65 +146,17 @@ end
 
 local function log(message) write_line(logfile, message) end
 
--- One line before a native call, flushed, for the first TRACE_CALLS calls after a world change.
-local traced = 0
-local function trace(what, detail)
-    if traced >= TRACE_CALLS then return end
-    traced = traced + 1
-    write_line(tracefile, detail ~= nil and (what .. tostring(detail)) or what)
-    if traced == TRACE_CALLS then write_line(tracefile, '(trace limit reached; nothing crashed so far)') end
-end
-
 -- ------------------------------------------------------------- engine access --
 local sr = rawget(_G, 'stingray')
 
--- Names only: walking the tables is plain Lua and calls nothing in the engine.
-local function log_api_inventory()
-    for _, lib in ipairs({'Application', 'World', 'Unit', 'LineObject', 'IdString64', 'Script', 'Gui', 'Matrix4x4', 'Camera',
-                          'Window', 'Mouse', 'Keyboard', 'Mesh'}) do
-        local t = sr[lib]
-        if type(t) == 'table' then
-            local names = {}
-            local ok = pcall(function()
-                for k, v in pairs(t) do
-                    if type(k) == 'string' and type(v) == 'function' then names[#names + 1] = k end
-                end
-            end)
-            table.sort(names)
-            log(string.format('api %s (%d): %s', lib, #names, ok and table.concat(names, ' ') or 'not enumerable'))
-        else
-            log('api ' .. lib .. ': ' .. type(t))
-        end
-    end
-end
-
 local function check_api()
-    if type(sr) ~= 'table' then
-        log('FATAL: _G.stingray is ' .. type(sr))
-        return false
-    end
-    local need = {
-        {'Application.main_world', sr.Application and sr.Application.main_world},
-        {'World.units_by_resource', sr.World and sr.World.units_by_resource},
-        {'World.create_line_object', sr.World and sr.World.create_line_object},
-        {'Unit.world_position', sr.Unit and sr.Unit.world_position},
-        {'Unit.alive', sr.Unit and sr.Unit.alive},
-        {'LineObject.reset', sr.LineObject and sr.LineObject.reset},
-        {'LineObject.add_line', sr.LineObject and sr.LineObject.add_line},
-        {'LineObject.dispatch', sr.LineObject and sr.LineObject.dispatch},
-        {'Vector3', sr.Vector3},
-        {'Color', sr.Color},
-    }
+    if CHEF == nil then return 'no Chef Shared Loader' end
+    if type(sr) ~= 'table' or not (sr.Application and sr.Application.main_world) then return 'no engine' end
     local missing = {}
-    for _, row in ipairs(need) do
-        local kind = type(row[2])
-        if kind ~= 'function' and kind ~= 'table' then missing[#missing + 1] = row[1] end
+    for _, name in ipairs(CHEF_NEEDS) do
+        if type(CHEF[name]) ~= 'function' then missing[#missing + 1] = name end
     end
-    if #missing > 0 then
-        log('FATAL: missing engine functions: ' .. table.concat(missing, ', '))
-        return false
-    end
-    return true
+    if #missing > 0 then return 'Chef Shared Loader without ' .. table.concat(missing, ', ') .. ' (too old?)' end
 end
 
 -- Worlds are compared with ==: the engine's World has __eq, and tostring gives '[World]' for every world
@@ -276,7 +193,6 @@ end
 -- Is this unit resource loaded? A nil answer means "do not look it up".
 local function loaded(key, label)
     if not can_get or key == nil then return nil end
-    trace('can_get unit ', label)
     local ok, yes = pcall(can_get, 'unit', key)
     if not ok then return nil end
     return yes == true
@@ -288,7 +204,6 @@ end
 -- passes, those resources are not looked up at all (0.1.1-0.4.0 behaviour).
 local AVATAR_HEX = '4d1c334d294dfa97'   -- murmur64 of AVATAR (checked by the tests)
 local BOGUS_HEX = '0123456789abcdef'
-local HEX_LOOKUPS = true    -- 0.9.0: mission items are mostly id-only; looked up once the self-test passes
 local id_form            -- 'IdString64' | 'text' | false (none works) | nil (not tested yet)
 
 local function id_key(hex, form)
@@ -310,7 +225,7 @@ local function detect_id_form()
         log(string.format('id self-test %s: avatar=%s made-up=%s', form, tostring(yes), tostring(no)))
         if yes == true and no == false then
             id_form = form
-            log('unnamed targets: id form ' .. form .. ' works' .. (HEX_LOOKUPS and ' - looked up by id' or ' (lookups off in this version)'))
+            log('unnamed targets: id form ' .. form .. ' works - looked up by id')
             return
         end
     end
@@ -318,41 +233,19 @@ local function detect_id_form()
     log('unnamed targets: no id form passed the self-test - they stay skipped')
 end
 
+-- Through Chef Shared Loader's guard: a call that ever ends the game is skipped from then on (per kind).
 local function units_of(world, key, label)
-    trace('units_by_resource ', label)
-    if chef_has('call_kind') then
-        -- through Chef Shared Loader's guard: a call that ever ends the game is skipped from then on (per kind)
-        local value, why = CHEF.call_kind('World.units_by_resource', label, world, key)
-        if value == nil then return {}, why end
-        return as_list(value)
-    end
-    local ok, value = pcall(sr.World.units_by_resource, world, key)
-    if not ok then return {}, value end
+    local value, why = CHEF.call_kind('World.units_by_resource', label, world, key)
+    if value == nil then return {}, why end
     return as_list(value)
 end
 
--- Position of a unit returned this very frame, as plain numbers (handles are never kept).
+-- Position of a unit returned this very frame, as plain numbers (handles are never kept). The loader refuses units
+-- that can't be asked (one built at run time, one from a world that's gone) instead of ending the game.
 local function position_of(unit)
-    if chef_has('unit_alive') and chef_has('unit_position') then
-        -- Chef Shared Loader's own: it refuses units that can't be asked (one built at run time, one from a
-        -- world that's gone) instead of ending the game
-        if not CHEF.unit_alive(unit) then return nil end
-        local x, y, z = CHEF.unit_position(unit)
-        if type(x) ~= 'number' or type(y) ~= 'number' or type(z) ~= 'number' then return nil end
-        for _, v in ipairs({x, y, z}) do
-            if v ~= v or math.abs(v) > 1e7 then return nil end
-        end
-        return x, y, z
-    end
-    trace('alive')
-    local alive_ok, alive = pcall(sr.Unit.alive, unit)
-    if not alive_ok or alive ~= true then return nil end
-    trace('world_position')
-    local ok, p = pcall(sr.Unit.world_position, unit, 1)
-    if not ok or p == nil then return nil end
-    local x, y, z
-    local read = pcall(function() x, y, z = sr.Vector3.x(p), sr.Vector3.y(p), sr.Vector3.z(p) end)
-    if not read or type(x) ~= 'number' or type(y) ~= 'number' or type(z) ~= 'number' then return nil end
+    if not CHEF.unit_alive(unit) then return nil end
+    local x, y, z = CHEF.unit_position(unit)
+    if type(x) ~= 'number' or type(y) ~= 'number' or type(z) ~= 'number' then return nil end
     for _, v in ipairs({x, y, z}) do
         if v ~= v or math.abs(v) > 1e7 then return nil end  -- NaN or absurd
     end
@@ -384,7 +277,7 @@ end
 -- The key to ask can_get and units_by_resource with, or nil to skip this resource.
 local function key_for(k)
     if k.name then return k.name, k.name end
-    if not HEX_LOOKUPS or not id_form then return nil end
+    if not id_form then return nil end
     -- units_by_resource takes an IdString64 (as the reference mods use it); can_get takes the tested form
     return id_key(k.hex, id_form), id_key(k.hex, 'IdString64')
 end
@@ -446,17 +339,18 @@ local function read_players(world, now)
     end
 end
 
--- Read one resource: where its units are now (plain numbers; handles are not kept).
+-- Read one resource: where its units are now (plain numbers; handles are not kept), whether it was looked up
+-- (loaded), and what went wrong looking.
 local function read_key(world, i)
     local points = {}
     local ask, lookup = key_for(keys[i])
     if loaded(ask, keys[i].label) and lookup ~= nil then
-        local units = units_of(world, lookup, keys[i].label)
+        local units, problem = units_of(world, lookup, keys[i].label)
         for _, unit in ipairs(units) do
             local x, y, z = position_of(unit)
             if x then points[#points + 1] = {x, y, z, unit = unit} end
         end
-        return points, true
+        return points, true, problem
     end
     return points, false
 end
@@ -483,18 +377,12 @@ local function sweep_step(world)
     local first = cursor
     local last = math.min(cursor + KEYS_PER_FRAME - 1, #keys)
     for i = cursor, last do
-        local points = {}
-        local ask, lookup = key_for(keys[i])
-        if loaded(ask, keys[i].label) and lookup ~= nil then
+        local points, looked, problem = read_key(world, i)
+        if looked then
             stats.looked_up = stats.looked_up + 1
-            local units, problem = units_of(world, lookup, keys[i].label)
             if problem ~= nil then
                 stats.key_errors = stats.key_errors + 1
                 if stats.key_errors <= 5 then log('lookup failed for ' .. keys[i].label .. ': ' .. tostring(problem)) end
-            end
-            for _, unit in ipairs(units) do
-                local x, y, z = position_of(unit)
-                if x then points[#points + 1] = {x, y, z, unit = unit} end
             end
             stats.units = stats.units + #points
         else
@@ -518,12 +406,7 @@ local function sweep_step(world)
     end
 end
 
--- -------------------------------------------------------------------- draw --
--- Diamonds are outlines of a square on its corner, like the game's own pickup icon. They are drawn on
--- the screen (the screen GUI section); only when that is not possible, with a line object in the 3D
--- scene, which an upscaler's performance mode clips to the top-left quarter. A line object is never
--- destroyed: its world may already be gone when we notice a change, and it goes away with its world.
-
+-- ----------------------------------------------------------------- markers --
 -- Distance from you (the helldiver nearest the camera; without a camera, the nearest helldiver), the
 -- helldiver it is measured from, and whether the unit is on any helldiver's body (worn or held). A body
 -- is still a helldiver here (0.16): its empty sample container stays hidden, and what it dropped lands
@@ -552,7 +435,7 @@ end
 
 -- Vehicles seen last frame, each tracked like a helldiver (track): since when it has stood still.
 local vehicles_seen = {}
-local wrecked = setmetatable({}, {__mode = 'k'})   -- per unit (as by_unit): a vehicle taken for destroyed (2.4.0)
+local wrecked = setmetatable({}, {__mode = 'k'})   -- per unit (as by_unit): a vehicle whose weapon went (2.4.0)
 
 local function follow_vehicle(p, now, seen_now)
     local t = track(vehicles_seen, p[1], p[2], p[3], now)
@@ -597,7 +480,7 @@ local taken = by_unit()       -- per unit: picked up (this world)
 -- empty (2.3.0: a hellbomb that blew up, alive and in place otherwise; not launch codes picked up: test.11).
 -- False when it can't be asked.
 local function no_visible_mesh(unit)
-    if unit == nil or not chef_has('call') then return false end
+    if unit == nil then return false end
     local _, extents = CHEF.call('Unit.box', unit, true)
     if extents == nil then return false end
     local ok, x, y, z = pcall(function() return sr.Vector3.x(extents), sr.Vector3.y(extents), sr.Vector3.z(extents) end)
@@ -606,7 +489,7 @@ end
 
 -- How many of a unit's meshes are visible (Mesh.visibility), or nil when it can't be asked.
 local function visible_meshes(unit)
-    if unit == nil or not chef_has('call') then return nil end
+    if unit == nil then return nil end
     local n = tonumber((CHEF.call('Unit.num_meshes', unit)))
     if n == nil then return nil end
     local count = 0
@@ -648,7 +531,7 @@ end
 local node_of = by_unit()
 
 local function node_position(p, name)
-    if name == nil or p.unit == nil or not (chef_has('unit_node') and chef_has('unit_position')) then return nil end
+    if name == nil or p.unit == nil then return nil end
     local ok, x, y, z = pcall(function()
         local n = node_of[p.unit]
         if n == nil then
@@ -694,7 +577,7 @@ local function collect_dots(now)
         end
     end
     -- on the ship: no mission markers (diamonds were seen under the hellpods after a mission, 2.0.1)
-    local on_ship = chef_has('in_mission') and not CHEF.in_mission()
+    local on_ship = not CHEF.in_mission()
     for i = 1, #keys do
         local group = keys[i].group
         local range = SHOW[setting_of(group)] ~= false and (RANGE[setting_of(group)] or 0) or 0
@@ -732,11 +615,12 @@ local function collect_dots(now)
                                 string.match(keys[i].label, '([^/]+)$') or keys[i].label, from, v.arm))
                         end
                     end
-                    local destroyed = near(wrecks, p, WRECK_NEAR) or v.off
                     -- kept by its unit: followed from frame to frame only while near, a wreck left and come back to
                     -- showed again (2.4.0-test.5), till it sank into the ground as it went (the markers under the
-                    -- ground a player told of)
-                    if destroyed and p.unit ~= nil then wrecked[p.unit] = true end
+                    -- ground a player told of). Not one by an exosuit wreck: a new exosuit may land beside the old
+                    -- one's wreck and walk off.
+                    if v.off and p.unit ~= nil then wrecked[p.unit] = true end
+                    local destroyed = v.off or near(wrecks, p, WRECK_NEAR)
                     if destroyed and not v.lost then
                         v.lost = true
                         log('vehicle: ' .. (string.match(keys[i].label, '([^/]+)$') or keys[i].label)
@@ -780,6 +664,20 @@ local function collect_dots(now)
             end
         end
     end
+    -- a wreck's unit gone (despawned): let go of it, should the engine hand the same unit to a new vehicle
+    if next(wrecked) ~= nil then
+        local there = {}
+        for i = 1, #keys do
+            if keys[i].group == 'vehicles' and found[i] then
+                for _, p in ipairs(found[i]) do
+                    if p.unit ~= nil then there[p.unit] = true end
+                end
+            end
+        end
+        for u in pairs(wrecked) do
+            if not there[u] then wrecked[u] = nil end
+        end
+    end
     last_counts = counts
     hot = new_hot
     vehicles_near = any_vehicle
@@ -791,31 +689,8 @@ local function collect_dots(now)
     return dots
 end
 
--- The four corners of a diamond above a dot, facing its helldiver's eyes: top, right, bottom, left.
-local function diamond(d)
-    local cx, cy, cz = d[1], d[2], d[3]  -- z is up in this engine; d[3] is already above the unit
-    local eye = d[5]
-    local vx, vy, vz = cx - eye[1], cy - eye[2], cz - (eye[3] + EYE_HEIGHT)
-    local len = math.sqrt(vx * vx + vy * vy + vz * vz)
-    if len < 1e-3 then vx, vy, vz, len = 1, 0, 0, 1 end
-    vx, vy, vz = vx / len, vy / len, vz / len
-    local ux, uy = vy, -vx                              -- across the view, level: v x up(0,0,1)
-    local ul = math.sqrt(ux * ux + uy * uy)
-    if ul < 1e-3 then ux, uy, ul = 1, 0, 1 end          -- looking straight up or down
-    ux, uy = ux / ul, uy / ul
-    local wx, wy, wz = uy * vz, -ux * vz, ux * vy - uy * vx  -- across the view, upward: u x v
-    local h = math.min(DIAMOND_MAX, math.max(DIAMOND_MIN, d[4] * DIAMOND_PER_M))
-    local w = h * DIAMOND_ASPECT
-    return {cx + h * wx, cy + h * wy, cz + h * wz},
-           {cx + w * ux, cy + w * uy, cz},
-           {cx - h * wx, cy - h * wy, cz - h * wz},
-           {cx - w * ux, cy - w * uy, cz}
-end
-
-local function v3(p) return sr.Vector3(p[1], p[2], p[3]) end
-
--- The game's own field of view: vertical_fov in its settings file (55 by default on this PC), read
--- again every GAME_FOV_EVERY_S so a change in the game's options follows. 0.6.0-0.7.1 assumed 50 and
+-- The game's own field of view, when the camera doesn't give it: vertical_fov in its settings file (55 by default on
+-- this PC), read again every GAME_FOV_EVERY_S so a change in the game's options follows. 0.6.0-0.7.1 assumed 50 and
 -- the diamonds drifted away from items toward the screen edges.
 local game_fov = {value = nil, read_at = nil, path = nil}
 
@@ -839,55 +714,16 @@ local function read_game_fov(now)
     return game_fov.value
 end
 
-current_fov = function()
-    return read_game_fov(os.clock()) or VERTICAL_FOV
-end
-
--- screen GUI ----------------------------------------------------------------
--- 0.5.0 showed that everything drawn in the 3D scene (lines, world GUI) is clipped to the top-left
--- quarter at a low render scale, while sitting at the right place. The HUD is not clipped: it is a
--- screen GUI, drawn after upscaling. So each item is projected to the screen here, with the camera
--- pose World.debug_camera_pose gives (it follows the game camera: 0.4.0 probe), and drawn as a small
--- diamond in a screen GUI on the UI world (the world that is not the main one, as DiverKit does).
--- The camera's field of view cannot be read (no camera object): it comes from the game's settings file.
-local screen = {off = false}   -- handle, ui (its world), immediate, ids
-local function forget_screen() screen.handle, screen.ui, screen.ids = nil, nil, nil end
-
--- Is this world still one of the game's worlds? (Compared with ==, as worlds are throughout.)
-local function world_alive(w)
-    if w == nil or type(sr.Application.worlds) ~= 'function' then return false end
-    local ok, worlds = pcall(sr.Application.worlds)
-    if not ok or type(worlds) ~= 'table' then return false end
-    for _, x in ipairs(worlds[1] ~= nil and worlds or as_list(worlds)) do
-        if same_world(x, w) then return true end
-    end
-    return false
-end
-
--- Let go of the screen GUI: destroyed if its world is still there (it lives as long as the UI world,
--- across missions; 0.15 left one behind at every world change), else just forgotten.
-local function release_screen()
-    if screen.handle ~= nil and world_alive(screen.ui) then
-        if not screen.immediate and screen.ids then
-            for _, id in ipairs(screen.ids) do pcall(sr.Gui.destroy_triangle, screen.handle, id) end
-        end
-        if type(sr.World.destroy_gui) == 'function' then
-            trace('destroy_gui')
-            pcall(sr.World.destroy_gui, screen.ui, screen.handle)
-        end
-    end
-    forget_screen()
-end
-
-local function xyz_of(v)
-    local x, y, z
-    local ok = pcall(function() x, y, z = sr.Vector3.x(v), sr.Vector3.y(v), sr.Vector3.z(v) end)
-    if ok and type(x) == 'number' and type(y) == 'number' and type(z) == 'number' then return {x, y, z} end
-end
+-- screen ----------------------------------------------------------------------
+-- Each marker is projected to the screen with the game's own camera and drawn with Chef Shared Loader's shapes and
+-- the mod's textures, on CHEF_LAYER. (Through 2.3.0 the mod made a screen GUI of its own, and drew in the 3D scene
+-- without one: with anti-aliasing off, or at a low render scale, those showed in the top-left quarter only. 2.4.0:
+-- the loader's only.)
+local screen = {}   -- what was logged once
 
 -- The game's own camera, through Chef Shared Loader (2.1.0): where it is, where it looks, and its real field
 -- of view (a scope or a speeding vehicle changes it; the settings file's does not). Level: no roll.
-local function camera_from_chef()
+local function camera_of()
     local ok, d = pcall(CHEF.camera)
     if not ok or type(d) ~= 'table' or type(d.x) ~= 'number' or type(d.fx) ~= 'number' then return nil end
     local fx, fy, fz = d.fx, d.fy, d.fz
@@ -899,84 +735,11 @@ local function camera_from_chef()
     if type(d.fov) == 'number' and d.fov > 0 then
         cam.fov = d.fov < 3.2 and math.deg(d.fov) or d.fov   -- the engine gives radians
     end
+    if not screen.camera_logged then
+        screen.camera_logged = true
+        log("camera: the game's own (Chef Shared Loader), field of view " .. tostring(cam.fov))
+    end
     return cam
-end
-
-local function camera_of(world)
-    if CHEF then
-        local cam = camera_from_chef()
-        if cam then
-            if not screen.chef_camera_logged then
-                screen.chef_camera_logged = true
-                log("camera: the game's own (Chef Shared Loader), field of view " .. tostring(cam.fov))
-            end
-            return cam
-        end
-    end
-    if not (type(sr.World.debug_camera_pose) == 'function' and sr.Matrix4x4) then return nil end
-    local M4 = sr.Matrix4x4
-    local ok, pose = pcall(sr.World.debug_camera_pose, world)
-    if not ok or pose == nil then return nil end
-    local cam = {}
-    for _, part in ipairs({'translation', 'right', 'forward', 'up'}) do
-        if type(M4[part]) ~= 'function' then return nil end
-        local okp, v = pcall(M4[part], pose)
-        cam[part] = okp and xyz_of(v) or nil
-        if cam[part] == nil then return nil end
-    end
-    local t = cam.translation
-    if t[1] == 0 and t[2] == 0 and t[3] == 0 then return nil end  -- not set yet (first frames of a world)
-    return cam
-end
-
--- The world to put the screen GUI on: another world than the main one if there is one (the UI world,
--- as DiverKit finds it), else the main world itself. Also returns a note on the worlds there are.
-local function ui_world(main)
-    if type(sr.Application.worlds) ~= 'function' then return main, 'Application.worlds missing' end
-    local ok, worlds = pcall(sr.Application.worlds)
-    if not ok or type(worlds) ~= 'table' then return main, 'Application.worlds failed' end
-    local list = worlds[1] ~= nil and worlds or as_list(worlds)
-    local count, others, other = 0, 0, nil
-    for _, w in ipairs(list) do
-        count = count + 1
-        if not same_world(w, main) then
-            others = others + 1
-            if others == SCREEN_WORLD then other = w end
-        end
-    end
-    return other or main, string.format('%d world(s), %d besides the main one, setting %d', count, others, SCREEN_WORLD)
-end
-
--- Why the screen could not be drawn on, once per world (0.6.0 fell back silently).
-local function screen_why(world_id, why)
-    if screen.why_logged == world_id then return end
-    screen.why_logged = world_id
-    log('drawing: screen GUI not used here (' .. why .. ') - drawing in the 3D scene')
-end
-
-local function screen_gui(ui)
-    if screen.handle ~= nil and same_world(screen.ui, ui) then return screen.handle end
-    release_screen()   -- another UI world: the old GUI goes with it, or is destroyed if its world stayed
-    if type(sr.World.create_screen_gui) ~= 'function' then
-        screen.off = true
-        log('drawing: no screen GUI in this game build')
-        return nil
-    end
-    local errors = {}
-    for _, flags in ipairs({{'immediate'}, {'scale', 1, 1}}) do
-        trace('create_screen_gui ', flags[1])
-        local ok, made = pcall(sr.World.create_screen_gui, ui, unpack(flags))
-        if ok and made ~= nil then
-            screen.handle, screen.ui, screen.immediate, screen.ids = made, ui, flags[1] == 'immediate', {}
-            log('drawing: ' .. (screen.immediate and 'immediate' or 'retained') .. ' screen GUI'
-                .. ', vertical field of view ' .. current_fov() .. ' degrees')
-            return made
-        end
-        errors[#errors + 1] = flags[1] .. ': ' .. tostring(made)
-    end
-    screen.off = true
-    log('drawing: create_screen_gui failed (' .. table.concat(errors, '; ') .. ')')
-    return nil
 end
 
 local function dot3(a, b) return a[1] * b[1] + a[2] * b[2] + a[3] * b[3] end
@@ -1038,219 +801,160 @@ local function edge(cam, d, width, height, ui)
     return math.floor(width / 2 + x * t + 0.5), math.floor(height / 2 + y * t + 0.5), {x, y}
 end
 
--- Returns true when the screen GUI handled this frame, false to draw in the 3D scene instead.
-local function screen_draw(world, world_id, dots)
-    if screen.off then return false end
-    if #dots == 0 and (screen.immediate or not screen.ids or #screen.ids == 0) then return true end
-    local cam = camera_of(world)
-    if cam == nil then
-        screen.cam_misses = (screen.cam_misses or 0) + 1
-        if screen.cam_misses > 600 then screen_why(world_id, 'no camera pose for 600 frames') end
-        return false
+-- This frame's: the screen in Gui.resolution's pixels (width, height; ours) and the loader's (cw, ch; its shapes,
+-- texts and textures go there), the colours made (by tint, then alpha 0..255), and the marker's.
+local width, height, cw, ch, kx, ky
+local inks, tint, ink, tex_ink, opacity
+
+local function ink_of(alpha)
+    alpha = math.floor(alpha)
+    local by = inks[tint or 'white']
+    if by == nil then
+        by = {}
+        inks[tint or 'white'] = by
     end
-    screen.cam_misses = 0
-    -- 2.4.0: through Chef Shared Loader's own shapes when it has them. With anti-aliasing off, what our own screen
-    -- GUI drew showed in the top-left quarter of the screen only (the textures and texts the loader drew did not):
-    -- the loader puts its drawing where the whole screen is reachable.
-    local by_chef = chef_has('rect') and chef_has('triangle') and chef_has('color') and chef_has('screen')
-    if screen.by_chef_logged ~= by_chef then
-        screen.by_chef_logged = by_chef
-        log('drawing: ' .. (by_chef and "Chef Shared Loader's shapes" or 'our own screen GUI'))
+    local c = by[alpha]
+    if c == nil then
+        local rgb = tint or {255, 255, 255}
+        c = CHEF.color(rgb[1], rgb[2], rgb[3], alpha)
+        by[alpha] = c
     end
-    local ui_w
-    if not by_chef then
-        local worlds_note
-        ui_w, worlds_note = ui_world(world)
-        if screen.worlds_logged ~= world_id then
-            screen.worlds_logged = world_id
-            log('drawing: ' .. worlds_note .. '; screen GUI goes on '
-                .. (same_world(ui_w, world) and 'the main world' or ('other world #' .. SCREEN_WORLD)))
+    return c
+end
+
+-- a filled triangle in the marker's colour, a rectangle in this one; in our pixels (origin bottom-left, y up)
+local function tri(x1, y1, x2, y2, x3, y3)
+    CHEF.triangle(x1 * kx, y1 * ky, x2 * kx, y2 * ky, x3 * kx, y3 * ky, ink, CHEF_LAYER)
+end
+local function rect(x0, y0, x1, y1, color)
+    CHEF.rect(x0 * kx, y0 * ky, (x1 - x0) * kx, (y1 - y0) * ky, color, CHEF_LAYER)
+end
+
+-- under a vehicle's icon, a wide V pointing down at it (like the 0.11-0.25 vehicle marker's lower V)
+local THICK = POINTER.line * math.sqrt(1 + POINTER.slope * POINTER.slope)   -- vertical, for the line at right angles
+local function band(x1, y1, x2, y2, t)   -- a line t thick upward from (x1, y1)-(x2, y2)
+    tri(x1, y1, x2, y2, x2, y2 + t)
+    tri(x1, y1, x2, y2 + t, x1, y1 + t)
+end
+local function pointer(sx, sy, size, half_h)   -- half_h: the icon's half height
+    local w, t = POINTER.half * size, THICK * size
+    local top = sy - half_h - POINTER.gap * size
+    local ay = top - w * POINTER.slope
+    band(sx - w, top, sx, ay, t)
+    band(sx, ay, sx + w, top, t)
+end
+
+-- beside an off-screen vehicle's icon, an arrow toward the vehicle
+local function arrow(sx, sy, size, dir, reach)   -- reach: how far the icon reaches from its middle
+    local from = reach + EDGE.gap * size
+    local bx, by = sx + dir[1] * from, sy + dir[2] * from
+    local w = EDGE.half * size
+    tri(bx - dir[2] * w, by + dir[1] * w, bx + dir[1] * EDGE.long * size, by + dir[2] * EDGE.long * size,
+        bx + dir[2] * w, by - dir[1] * w)
+end
+
+-- the distance above a marker, in the game's font (in the loader's pixels), bold: the loader's text has one
+-- weight, too thin at this size, so it goes down four times, a pixel apart
+local function distance_above(sx, top, d)
+    local c = GROUP_RGB[d[6]]
+    if not LOOK.distance or c == nil then return end
+    pcall(function()
+        local px = math.max(1, ch / 1080 * DISTANCE_PX)
+        local text = string.format('%dm', math.floor(d[4] + 0.5))
+        local color = CHEF.color(c[1], c[2], c[3], math.floor(255 * opacity))
+        local x = sx * kx - CHEF.text_width(text, px) / 2
+        local y = (top + 3) * ky
+        for _, o in ipairs(BOLD) do CHEF.text(x + o[1], y + o[2], text, px, color) end
+    end)
+end
+
+-- an icon from the mod's textures (ICON_TEX): the smallest baked size at least as big as it is drawn, so it is
+-- shrunk a little at most (no mips). Its half width and height, or nil when it can't be drawn.
+local function texture_icon(name, sx, sy, size)
+    local sizes = ICON_TEX[name]
+    if sizes == nil then return nil end
+    local long = ICON_SIZE[name] * size                 -- along its longer side, our pixels
+    local need = long * kx                               -- the loader's
+    local t = sizes[#sizes]
+    for _, s in ipairs(sizes) do
+        if s[1] >= need then t = s; break end
+    end
+    local w, h = t[3] * long / t[1], t[4] * long / t[1]
+    local okd, drawn = pcall(CHEF.bitmap, t[2], math.floor((sx - w / 2) * kx + 0.5), math.floor((sy - h / 2) * ky + 0.5),
+        w * kx, h * ky, tex_ink, CHEF_LAYER)
+    if okd and drawn then return w / 2, h / 2 end
+    if not screen.texture_note then
+        screen.texture_note = true
+        log('icons: the texture ' .. tostring(t[2]) .. ' could not be drawn (' .. tostring(drawn) .. ') - diamonds instead')
+    end
+    return nil
+end
+
+-- a diamond: an outline, the band between an outer and an inner one (one quad per side), its lower half filled;
+-- its half size
+local CORNERS = {{0, 1}, {1, 0}, {0, -1}, {-1, 0}}        -- top, right, bottom, left
+local OUTER, INNER = {}, {}                               -- their corners, x then y
+local function diamond_at(sx, sy, size)
+    local outer = SCREEN_DIAMOND * size
+    local inner = math.max(0, outer - math.max(1.5, SCREEN_LINE * size) * math.sqrt(2))  -- the band at right angles
+    for k, c in ipairs(CORNERS) do
+        OUTER[2 * k - 1], OUTER[2 * k] = sx + c[1] * outer, sy + c[2] * outer
+        INNER[2 * k - 1], INNER[2 * k] = sx + c[1] * inner, sy + c[2] * inner
+    end
+    local o, i = OUTER, INNER
+    for k = 1, 4 do
+        local a, n = 2 * k - 1, 2 * (k % 4) + 1
+        tri(o[a], o[a + 1], o[n], o[n + 1], i[n], i[n + 1])
+        tri(o[a], o[a + 1], i[n], i[n + 1], i[a], i[a + 1])
+    end
+    tri(o[3], o[4], o[5], o[6], o[7], o[8])   -- right, bottom, left: the lower half
+    return outer, outer
+end
+
+-- a pixel icon (the supply crate's) at this size: its half width and height
+local function pixel_icon(sizes, sx, sy, size)
+    local step = math.floor((1 - size) / (1 - SMALLEST) * (#sizes - 1) + 0.5) + 1
+    local list = sizes[math.max(1, math.min(#sizes, step))]
+    local k = scale_of(size)
+    for _, r in ipairs(list) do
+        rect(sx + r[1] * k, sy + r[2] * k, sx + r[3] * k, sy + r[4] * k, ink_of(255 * r[5] / 4 * opacity))
+    end
+    if list.half == nil then   -- how far it reaches from its middle, across and up, worked out once
+        local hw, hh = 0, 0
+        for _, r in ipairs(list) do
+            hw = math.max(hw, math.abs(r[1]), math.abs(r[3]))
+            hh = math.max(hh, math.abs(r[2]), math.abs(r[4]))
         end
+        list.half = {hw, hh}
     end
-    if not (sr.Gui and type(sr.Gui.resolution) == 'function' and (by_chef or type(sr.Gui.triangle) == 'function')) then
-        screen.off = true
-        log('drawing: Gui.resolution or Gui.triangle missing')
-        return false
+    return list.half[1] * k, list.half[2] * k
+end
+
+local function screen_draw(dots, cam)
+    if #dots == 0 or cam == nil then return end
+    local oks, w, h = pcall(CHEF.screen)
+    if not oks or type(w) ~= 'number' or type(h) ~= 'number' or w <= 0 or h <= 0 then return end
+    cw, ch = w, h
+    local okr, rw, rh = pcall(sr.Gui.resolution)
+    if okr and type(rw) == 'number' and type(rh) == 'number' and rw >= 1 and rh >= 1 then
+        width, height = rw, rh
+    else
+        width, height = cw, ch
     end
-    local okr, width, height = pcall(sr.Gui.resolution)
-    if not okr or type(width) ~= 'number' or type(height) ~= 'number' or width < 1 or height < 1 then
-        screen_why(world_id, 'Gui.resolution gave ' .. tostring(width) .. ' ' .. tostring(height))
-        return false
-    end
-    local g
-    if not by_chef then
-        g = screen_gui(ui_w)
-        if g == nil then return false end
-    end
+    kx, ky = cw / width, ch / height
+    inks = {}
     local ok, problem = pcall(function()
-        trace('screen triangles dots=', #dots)
-        if g ~= nil and not screen.immediate then
-            for _, id in ipairs(screen.ids) do pcall(sr.Gui.destroy_triangle, g, id) end
-            screen.ids = {}
-        end
-        -- the loader's screen size: its shapes, texts and textures go there, ours are in Gui.resolution's pixels
-        local cw, ch
-        if chef_has('screen') then
-            local oks, w, h = pcall(CHEF.screen)
-            if oks and type(w) == 'number' and type(h) == 'number' and w > 0 and h > 0 then cw, ch = w, h end
-        end
-        if by_chef and cw == nil then error('no screen size from the loader') end
-        local inks = {}             -- by tint, then alpha (0..255)
-        local tint = nil            -- this marker's colour: nil white, else {r, g, b}
-        local function ink_of(alpha)
-            alpha = math.floor(alpha)
-            local by = inks[tint or 'white']
-            if by == nil then
-                by = {}
-                inks[tint or 'white'] = by
-            end
-            local c = by[alpha]
-            if c == nil then
-                local rgb = tint or {255, 255, 255}
-                if by_chef then
-                    c = CHEF.color(rgb[1], rgb[2], rgb[3], alpha)
-                else
-                    c = sr.Color(alpha, rgb[1], rgb[2], rgb[3])  -- ARGB
-                end
-                by[alpha] = c
-            end
-            return c
-        end
-        local ink = ink_of(255)     -- this marker's: its opacity (LOOK)
-        local tex_ink = ink         -- its texture's
-        local opacity = 1
-        -- a filled triangle and rectangle, in Gui.resolution's pixels (origin bottom-left, y up), in this colour
-        local function put_tri(x1, y1, x2, y2, x3, y3, color)
-            if by_chef then
-                local kx, ky = cw / width, ch / height
-                CHEF.triangle(x1 * kx, y1 * ky, x2 * kx, y2 * ky, x3 * kx, y3 * ky, color, CHEF_LAYER)
-                return
-            end
-            -- screen GUI points are Vector3(x, 0, y)
-            local id = sr.Gui.triangle(g, sr.Vector3(x1, 0, y1), sr.Vector3(x2, 0, y2), sr.Vector3(x3, 0, y3), SCREEN_LAYER, color)
-            if not screen.immediate and id ~= nil then screen.ids[#screen.ids + 1] = id end
-        end
-        local function put_rect(x0, y0, x1, y1, color)
-            if by_chef then
-                local kx, ky = cw / width, ch / height
-                CHEF.rect(x0 * kx, y0 * ky, (x1 - x0) * kx, (y1 - y0) * ky, color, CHEF_LAYER)
-                return
-            end
-            put_tri(x0, y0, x1, y0, x1, y1, color)
-            put_tri(x0, y0, x1, y1, x0, y1, color)
-        end
-        local function tri(a, b, c) put_tri(a[1], a[2], b[1], b[2], c[1], c[2], ink) end
-        -- an icon: each polygon as a fan of triangles
-        local function pixels(list, sx, sy, k)   -- k: scale (below the smallest pixel size), else 1
-            for _, r in ipairs(list) do
-                put_rect(sx + r[1] * k, sy + r[2] * k, sx + r[3] * k, sy + r[4] * k, ink_of(255 * r[5] / 4 * opacity))
-            end
-        end
-        -- under a vehicle's icon, a wide V pointing down at it (like the 0.11-0.25 vehicle marker's lower V)
-        local thick = POINTER.line * math.sqrt(1 + POINTER.slope * POINTER.slope)   -- vertical, for the line at right angles
-        local function pointer(sx, sy, size, half_h)   -- half_h: the icon's half height
-            local w, t = POINTER.half * size, thick * size
-            local top = sy - half_h - POINTER.gap * size
-            local l, a, r = {sx - w, top}, {sx, top - w * POINTER.slope}, {sx + w, top}
-            for _, side in ipairs({{l, a}, {a, r}}) do
-                local p1, p2 = side[1], side[2]
-                tri(p1, p2, {p2[1], p2[2] + t})
-                tri(p1, {p2[1], p2[2] + t}, {p1[1], p1[2] + t})
-            end
-        end
-        -- beside an off-screen vehicle's icon, an arrow toward the vehicle
-        local function arrow(sx, sy, size, dir, reach)   -- reach: how far the icon reaches from its middle
-            local from = reach + EDGE.gap * size
-            local bx, by = sx + dir[1] * from, sy + dir[2] * from
-            local tip = {bx + dir[1] * EDGE.long * size, by + dir[2] * EDGE.long * size}
-            local w = EDGE.half * size
-            tri({bx - dir[2] * w, by + dir[1] * w}, tip, {bx + dir[2] * w, by - dir[1] * w})
-        end
-        -- an outline: the band between an outer and an inner diamond, one quad (two triangles) per side;
-        -- the lower half filled
-        local f = (height / 2) / math.tan(math.rad(cam.fov or current_fov()) / 2)   -- once a frame
-        -- the distance above a marker, in the game's font (Chef Shared Loader draws it, on its own screen size)
-        local texts = LOOK.distance and cw ~= nil and chef_has('text') and chef_has('color') and chef_has('text_width')
-        local function distance_above(sx, top, d)
-            local c = GROUP_RGB[d[6]]
-            if not texts or c == nil then return end
-            pcall(function()
-                local px = math.max(1, ch / 1080 * DISTANCE_PX)
-                local text = string.format('%dm', math.floor(d[4] + 0.5))
-                local color = CHEF.color(c[1], c[2], c[3], math.floor(255 * opacity))
-                local x = sx * cw / width - CHEF.text_width(text, px) / 2
-                -- bold: the loader's text has one weight, too thin at this size, so it goes down
-                -- four times, a pixel apart
-                local y = (top + 3) * ch / height
-                for _, o in ipairs(BOLD) do CHEF.text(x + o[1], y + o[2], text, px, color) end
-            end)
-        end
-        -- an icon from the mod's textures (ICON_TEX): the smallest baked size at least as big as it is drawn, so it
-        -- is shrunk a little at most (no mips). Its half width and height, or nil when it can't be drawn.
-        local function texture_icon(name, sx, sy, size)
-            local sizes = ICON_TEX[name]
-            if sizes == nil or cw == nil or not chef_has('bitmap') then return nil end
-            local long = ICON_SIZE[name] * size                 -- along its longer side, our pixels
-            local need = long * cw / width                       -- the loader's
-            local t = sizes[#sizes]
-            for _, s in ipairs(sizes) do
-                if s[1] >= need then t = s; break end
-            end
-            local w, h = t[3] * long / t[1], t[4] * long / t[1]
-            local okd, drawn = pcall(CHEF.bitmap, t[2], math.floor((sx - w / 2) * cw / width + 0.5),
-                math.floor((sy - h / 2) * ch / height + 0.5), w * cw / width, h * ch / height, tex_ink, CHEF_LAYER)
-            if okd and drawn then return w / 2, h / 2 end
-            if not screen.texture_note then
-                screen.texture_note = true
-                log('icons: the texture ' .. tostring(t[2]) .. ' could not be drawn (' .. tostring(drawn) .. ') - diamonds instead')
-            end
-            return nil
-        end
-        local CORNERS = {{0, 1}, {1, 0}, {0, -1}, {-1, 0}}        -- top, right, bottom, left
-        -- a diamond: an outline, the band between an outer and an inner one, its lower half filled; its half size
-        local function diamond_at(sx, sy, size)
-            local outer = SCREEN_DIAMOND * size
-            local inner = math.max(0, outer - math.max(1.5, SCREEN_LINE * size) * math.sqrt(2))  -- the band
-            -- at right angles; a small one is filled
-            local o, i = {}, {}
-            for k, c in ipairs(CORNERS) do
-                o[k] = {sx + c[1] * outer, sy + c[2] * outer}
-                i[k] = {sx + c[1] * inner, sy + c[2] * inner}
-            end
-            for k = 1, 4 do
-                local n = k % 4 + 1
-                tri(o[k], o[n], i[n])
-                tri(o[k], i[n], i[k])
-            end
-            tri(o[2], o[3], o[4])   -- right, bottom, left: the lower half
-            return outer, outer
-        end
-        -- a pixel icon (the supply crate's) at this size: its half width and height
-        local function pixel_icon(sizes, sx, sy, size)
-            local step = math.floor((1 - size) / (1 - SMALLEST) * (#sizes - 1) + 0.5) + 1
-            local list = sizes[math.max(1, math.min(#sizes, step))]
-            local k = scale_of(size)
-            pixels(list, sx, sy, k)
-            if list.half == nil then   -- how far it reaches from its middle, across and up, worked out once
-                local hw, hh = 0, 0
-                for _, r in ipairs(list) do
-                    hw = math.max(hw, math.abs(r[1]), math.abs(r[3]))
-                    hh = math.max(hh, math.abs(r[2]), math.abs(r[4]))
-                end
-                list.half = {hw, hh}
-            end
-            return list.half[1] * k, list.half[2] * k
-        end
+        local f = (height / 2) / math.tan(math.rad(cam.fov or read_game_fov(os.clock()) or VERTICAL_FOV) / 2)
         local ui = math.min(width / UI_W, height / UI_H)
         for _, d in ipairs(dots) do
             local sx, sy = project(cam, d, width, height, f)
             local dir   -- a vehicle off screen: the way to it
             if not sx and d[6] == 'vehicles' then sx, sy, dir = edge(cam, d, width, height, ui) end
-            local size = sx and size_of(d) * (dir and EDGE.size or 1) * ui
             if sx then
+                local size = size_of(d) * (dir and EDGE.size or 1) * ui
                 opacity = opacity_of(d)
-                -- a texture keeps its own colours (but a white one tinted, ICON_RGB); the shapes around it, the vehicles'
-                -- V and arrow, the group's colour
+                -- a texture tinted (ICON_RGB, else white); the shapes around it, the vehicles' V and arrow, the
+                -- group's colour
                 tint = d[7] and ICON_RGB[d[7]] or nil
                 tex_ink = ink_of(255 * opacity)
                 tint = tint or GROUP_RGB[d[6]]
@@ -1258,8 +962,6 @@ local function screen_draw(world, world_id, dots)
                 if d[6] == 'samples' or d[6] == 'supplies' then
                     sx, sy = math.floor(sx + ICON_OFFSET[1] * ui + 0.5), math.floor(sy + ICON_OFFSET[2] * ui + 0.5)
                 end
-            end
-            if sx then
                 local hw, hh
                 if d[7] and ICON_PIXELS[d[7]] then
                     hw, hh = pixel_icon(ICON_PIXELS[d[7]], sx, sy, size)
@@ -1276,114 +978,21 @@ local function screen_draw(world, world_id, dots)
             end
         end
     end)
-    if not ok then
-        -- a passing failure (a GUI gone with its world, say) is tried again; only a lasting one turns it off
+    if not ok then   -- this frame skipped; the next tries again
         screen.failures = (screen.failures or 0) + 1
-        if screen.failures <= 3 then log('drawing: screen GUI failed (' .. tostring(problem) .. ')') end
-        release_screen()
-        if screen.failures >= SCREEN_FAILURES then
-            screen.off = true
-            log('drawing: screen GUI failed ' .. SCREEN_FAILURES .. ' times in a row - back to drawing in the 3D scene')
-            return false
-        end
-        return true   -- this frame skipped; the next makes a new screen GUI
-    end
-    screen.failures = 0
-    return true
-end
-
--- line fallback -----------------------------------------------------------
-local line, line_world_id, line_shown
-
-local function forget_line()
-    line, line_world_id, line_shown = nil, nil, false
-end
-
-local function line_for(world, world_id)
-    if line ~= nil and line_world_id == world_id then return line end
-    trace('create_line_object')
-    local ok, created = pcall(sr.World.create_line_object, world, true)  -- true: drawn over walls
-    if not ok or created == nil then return nil end
-    line, line_world_id, line_shown = created, world_id, false
-    return line
-end
-
-local function lines_draw(world, world_id, dots)
-    if #dots == 0 and not line_shown then return end  -- nothing drawn and nothing to clear
-    local lo = line_for(world, world_id)
-    if lo == nil then return end
-    local ok, problem = pcall(function()
-        trace('line reset/add/dispatch dots=', #dots)
-        sr.LineObject.reset(lo)
-        if #dots == 0 then
-            -- clear with an invisible line rather than dispatching an empty object
-            local z = sr.Vector3(0, 0, 0)
-            sr.LineObject.add_line(lo, sr.Color(0, 0, 0, 0), z, z)
-        else
-            local white = sr.Color(255, 255, 255, 255)  -- ARGB
-            for _, d in ipairs(dots) do
-                local corners = {diamond(d)}
-                for k = 1, 4 do
-                    sr.LineObject.add_line(lo, white, v3(corners[k]), v3(corners[k % 4 + 1]))
-                end
-            end
-        end
-        sr.LineObject.dispatch(world, lo)
-    end)
-    if ok then
-        line_shown = #dots > 0
-    else
-        M.draw_errors = (M.draw_errors or 0) + 1
-        if M.draw_errors <= 5 then log('draw failed: ' .. tostring(problem)) end
+        if screen.failures <= 3 then log('drawing: failed (' .. tostring(problem) .. ')') end
     end
 end
 
-local function shown()
-    return line_shown or (screen.ids ~= nil and #screen.ids > 0)
-end
-
-local function forget_drawing()
-    forget_screen()
-    forget_line()
-end
-
--- A new main world: the line object went with the old one; the screen GUI stays (on the UI world), only
--- what it shows is cleared.
-local function new_main_world()
-    forget_line()
-    if screen.handle ~= nil and not screen.immediate and screen.ids then
-        for _, id in ipairs(screen.ids) do pcall(sr.Gui.destroy_triangle, screen.handle, id) end
-        screen.ids = {}
-    end
-end
-
-local menus_released = 0
-
-local function draw(world, world_id, now)
+local function draw(now, cam)
     local dots = collect_dots(now)
-    if menu_open() then
-        -- a menu is open: take the screen GUI away altogether, not just empty. Quitting goes through a
-        -- menu, and a screen GUI still there when the game shuts down crashed its renderer on quitting
-        -- (2.0.0 and before); removed here, frames before the quit, the engine finishes with it in time.
-        if screen.handle ~= nil then
-            release_screen()
-            menus_released = menus_released + 1
-            if menus_released <= 3 then log('menus: screen GUI removed while the menu is open') end
-        end
-        if line_shown then lines_draw(world, world_id, {}) end
-        return
-    end
-    if screen_draw(world, world_id, dots) then
-        -- drawn on the screen: clear anything the 3D scene still shows from before
-        if line_shown then lines_draw(world, world_id, {}) end
-    else
-        lines_draw(world, world_id, dots)
-    end
+    M.dots = dots   -- this frame's markers (the tests read them)
+    if menu_open() then return end   -- a menu is open: nothing drawn
+    screen_draw(dots, cam)
     if #dots > stats.dots_peak then stats.dots_peak = #dots end
 end
 
--- A menu is open (Esc, the map...) while the mouse cursor shows. The markers are drawn on a screen GUI
--- that the game's menus do not cover at any layer (0.11-0.16), so they are hidden instead. Asked of
+-- A menu is open (Esc, the map...) while the mouse cursor shows: the markers are hidden then. Asked of
 -- Window.show_cursor, if the engine has it; each change is logged (the first 20) to see that it works.
 local cursor_shown = {last = nil, changes = 0, off = false}
 
@@ -1411,21 +1020,19 @@ menu_open = function()
     return open
 end
 
--- You: the helldiver nearest the camera (third or first person alike); nil without a camera pose.
--- You: the helldiver nearest the camera. 2.1.0: and the same one from frame to frame, by its unit, unless
+-- You: the helldiver nearest the camera (third or first person alike); nil without a camera. 2.1.0: and the same one from frame to frame, by its unit, unless
 -- another is clearly nearer (under ME_SWITCH of your distance): a teammate passing the camera no longer
 -- takes your place for a moment; after a respawn the camera is on the new one, far from the body.
 local ME_SWITCH = 0.5
 local me_unit
 local me_changes = 0
 
-local function pick_me(world)
+local function pick_me(cam)
     if #players == 0 then return nil end
     if #players == 1 then
         me_unit = players[1].unit
         return players[1]
     end
-    local cam = camera_of(world)
     if cam == nil then return nil end
     local best, who, mine, mine_d
     for _, p in ipairs(players) do
@@ -1461,7 +1068,6 @@ local function tick()
     local world = main_world()
     if world == nil then
         if last_world ~= nil then last_world, cursor, found, players, me, hot = nil, 1, {}, {}, nil, {} end
-        new_main_world()
         return
     end
     if not same_world(world, last_world) then
@@ -1473,9 +1079,6 @@ local function tick()
         wrecked = by_unit()
         taken, blown, first_visible, me_unit = by_unit(), by_unit(), by_unit(), nil
         hot = {}
-        new_main_world()
-        traced = 0
-        write_line(tracefile, '--- world changed: ' .. world_id)
         log('world changed: ' .. world_id)
     end
     if now - world_seen_at < WORLD_SETTLE_S then return end
@@ -1483,13 +1086,13 @@ local function tick()
     local saved = temp_begin()
     local ok, problem = pcall(function()
         read_players(world, now)   -- every frame: a running helldiver's own items stay hidden
-        me = pick_me(world)
+        local cam = camera_of()   -- once a frame, after the game moved it
+        me = pick_me(cam)
         if #players > 0 and can_get then
             detect_id_form()
             sweep_step(world)
         end
-        -- draw every frame; with no helldiver this clears whatever was drawn last
-        if #players > 0 or shown() then draw(world, world_id, now) end
+        draw(now, cam)   -- every frame: the loader draws what it is given each frame only
     end)
     temp_end(saved)
     if not ok then
@@ -1608,11 +1211,13 @@ end
 -- ----------------------------------------------------------------- install --
 local function install()
     log('Pickup Dots ' .. VERSION .. ' loading')
-    if not check_api() then
-        M.status = 'missing engine functions'
+    local missing = check_api()
+    if missing then
+        log('FATAL: ' .. missing)
+        if logfile then pcall(function() logfile:close() end) end   -- off for good
+        M.status = missing
         return M
     end
-    log_api_inventory()
     log('Application.can_get: ' .. (can_get and 'present - only loaded resources are looked up'
         or 'MISSING - no target is looked up in this version (diagnostic only)'))
     build_keys()
@@ -1642,16 +1247,8 @@ local function install()
     local shutdown = rawget(_G, 'shutdown')
     if type(shutdown) == 'function' then
         rawset(_G, 'shutdown', function(...)
-            -- remove our screen GUI while its world still exists (before the game's shutdown releases worlds);
-            -- 0.9.0 left it, and the game crashed in its renderer once on quitting
-            if screen.handle ~= nil and screen.ui ~= nil and type(sr.World.destroy_gui) == 'function' then
-                local okd = pcall(sr.World.destroy_gui, screen.ui, screen.handle)
-                log('shutdown: screen GUI ' .. (okd and 'destroyed' or 'could not be destroyed'))
-            end
-            forget_drawing()
             log(string.format('shutdown: frames=%d sweeps=%d', stats.frames, stats.sweeps))
             if logfile then pcall(function() logfile:close() end) end
-            if tracefile then pcall(function() tracefile:close() end) end
             return shutdown(...)
         end)
     end

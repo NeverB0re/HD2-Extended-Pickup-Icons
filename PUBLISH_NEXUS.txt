@@ -55,8 +55,9 @@ Since the October 20 update, the game runs mods in a locked-down Lua with anti-c
 [*][b]Items put into a drop-off point, shells loaded into artillery[/b]: the item stays there once put in, so one right at a drop-off point or ready rack is taken for delivered and gets no marker. The drop-off point keeps its own, as some missions have you take things out of one again.
 [*][b]Up close[/b]: the mod cannot hide the game's own icons, so it hides its marker where the game shows one: samples within 9 m of you (Terminid eggs and Automaton super samples 20 m, sample containers 15 m), ammo and grenade boxes within 4 m. Stims have no icon of the game's and keep theirs.
 [*][b]Vehicles in use[/b]: the mod cannot tell who is in a vehicle. One a helldiver is in that is moving gets no marker; one that has stood still for a few seconds is taken for parked and shows again.
-[*][b]Destroyed vehicles[/b]: the mod cannot read a vehicle's health. A vehicle whose gun is gone or has come off is taken for destroyed, and stays so for the rest of the mission.
+[*][b]Destroyed vehicles[/b]: the mod cannot read a vehicle's health. A vehicle whose gun is gone or has come off is taken for destroyed, and stays so until its wreck is gone. An exosuit standing at an exosuit wreck gets no marker either.
 [*][b]Valves and cranks[/b] stay marked after you turn them: whether one is finished can't be told.
+[*][b]Many markers at once[/b]: only the 40 nearest are drawn.
 [/list]
 
 [line]
@@ -118,6 +119,7 @@ Since the October 20 update, the game runs mods in a locked-down Lua with anti-c
 [*][b]반납 지점에 넣은 아이템, 야포에 장전한 포탄[/b]: 넣은 뒤에도 물체가 그 자리에 남기 때문에, 반납 지점이나 포탄 거치대 바로 옆에 있으면 넣은 것으로 보고 마커를 띄우지 않습니다. 반납 지점에서 다시 꺼내 옮기는 임무가 있어서 반납 지점 자체의 마커는 남깁니다.
 [*][b]가까이에서[/b]: 모드는 게임 자체 아이콘을 숨길 수 없어서, 게임이 아이콘을 띄우는 거리에서는 마커를 숨깁니다. 샘플은 9m 이내(테르미니드 알과 오토마톤 슈퍼 샘플 20m, 샘플통 15m), 탄약·수류탄 상자는 4m 이내입니다. 스팀은 게임 아이콘이 없어서 마커가 남습니다.
 [*][b]사용 중인 차량[/b]: 누가 타고 있는지 알 수 없어서, 헬다이버가 탄 채 움직이는 차량에는 마커를 띄우지 않습니다. 몇 초 동안 멈춰 있으면 주차한 것으로 보고 다시 표시합니다.
-[*][b]파괴된 차량[/b]: 차량 체력을 읽을 수 없어서, 달린 총이 사라지거나 떨어져 나간 차량은 파괴된 것으로 보고, 그 임무 동안 계속 그렇게 기억합니다.
+[*][b]파괴된 차량[/b]: 차량 체력을 읽을 수 없어서, 달린 총이 사라지거나 떨어져 나간 차량은 파괴된 것으로 보고, 잔해가 사라질 때까지 그렇게 기억합니다. 엑소슈트 잔해 옆에 서 있는 엑소슈트도 마커를 띄우지 않습니다.
 [*][b]밸브와 크랭크[/b]: 완료 여부를 알 수 없어서 돌린 뒤에도 표시됩니다.
+[*][b]마커가 많을 때[/b]: 가장 가까운 40개만 그립니다.
 [/list]
