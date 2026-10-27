@@ -1331,6 +1331,27 @@ class ScreenTests(Case):
         self.assertIn("death: the mark at 0.0 -8.0 0.0 reached - gone", self.log_text())
         self.assertNotIn((0.0, -8.0, 1.2), self.points())
 
+    def test_a_body_flung_far_leaves_the_mark_where_your_sample_container_dropped(self):
+        self.lua.execute("stingray.IdString64 = { from_hex = function(hex) return { hex = hex } end }")
+        self.fake.loaded["hex:4d1c334d294dfa97"] = True                # the avatar, by id: the id self-test passes
+        box = "hex:a9936cbe561e8180"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(box, [unit(0.3, -8.2, 1.2)])                    # on your back
+        self.load()
+        self.settle()
+        self.frames(120, start=60.0)
+        you, carried = self.fake.units[AVATAR][1], self.fake.units[box][1]
+        carried.z = 0.2                                                # killed: it drops where you were ...
+        you.x = 20                                                     # ... and a blast flings the body 20 m
+        self.look_at(20, -8)
+        self.frames(120, start=62.0)
+        self.add_avatar(50, 0)                                         # reinforced
+        self.look_at(50, 0)
+        self.frames(240, start=70.0)
+        self.assertIn("death: you died at 0.3 -8.2 0.2 (your sample container; the body at 20.0 -8.0 0.0", self.log_text())
+        marks = [p for p in self.points() if abs(p[2] - 1.4) < 1e-6]
+        self.assertEqual(marks, [(0.3, -8.2, 1.4)])
+
     def test_a_new_death_moves_the_mark(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.load()

@@ -22,7 +22,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.5.0-test.2'
+local VERSION = '2.5.0-test.3'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -284,10 +284,10 @@ local function build_keys()
     local unnamed = 0
     for _, t in ipairs(TARGETS) do
         if t.name then
-            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount}
+            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount, box = t.box}
         elseif t.hex then
             unnamed = unnamed + 1
-            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount}
+            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount, box = t.box}
         end
     end
     log(string.format('%d target resources: %d named, %d by id only (looked up if the id self-test passes)',
@@ -508,7 +508,9 @@ local DEATH_CLEAR_M = 4       -- you this close (across the ground): the mark go
 local DEATH_HEIGHT = 1.2      -- the mark this high above the ground
 local deaths = {}             -- the mark, {x, y, z}: one at most
 local avatar_since = by_unit()   -- when each helldiver came into the world (this world)
-local own = nil               -- {unit, x, y, z}: the helldiver you are (last seen there)
+local own = nil               -- {unit, x, y, z, box}: the helldiver you are (last seen there), and the sample
+                              -- container on your back (a 'box' target): it drops where you die, with your gear,
+                              -- where your body may be flung far off by a blast
 local candidate = nil         -- {unit, since}: a new helldiver the camera took, not yet confirmed
 
 -- Has this unit no visible mesh left? Unit.box over the visible meshes (its second argument true) comes back
@@ -1103,6 +1105,35 @@ local function pick_me(cam)
     return who
 end
 
+-- The sample container on you: the nearest one within its reach (its 'worn'), or nil.
+local function nearest_box(p)
+    local best, best_d
+    for i = 1, #keys do
+        if keys[i].box and found[i] then
+            local reach = keys[i].worn or CARRIED_RADIUS
+            for _, q in ipairs(found[i]) do
+                local dx, dy, dz = q[1] - p[1], q[2] - p[2], q[3] - p[3]
+                local d = dx * dx + dy * dy
+                if d < reach * reach and dz > CARRIED_LOW and dz < CARRIED_HEIGHT and (best_d == nil or d < best_d) then
+                    best, best_d = q, d
+                end
+            end
+        end
+    end
+    return best
+end
+
+-- Where this sample container is now, or nil once it is gone.
+local function box_reading(unit)
+    for i = 1, #keys do
+        if keys[i].box and found[i] then
+            for _, q in ipairs(found[i]) do
+                if q.unit == unit then return q end
+            end
+        end
+    end
+end
+
 local function follow_own(now)
     for _, p in ipairs(players) do
         if p.unit ~= nil and avatar_since[p.unit] == nil then avatar_since[p.unit] = now end
@@ -1115,13 +1146,18 @@ local function follow_own(now)
     end
     if me.unit == own.unit then
         candidate = nil
+        local box = nearest_box(own)
+        if box ~= nil then own.box = box.unit end
     elseif candidate == nil or candidate.unit ~= me.unit then
         local since = avatar_since[me.unit]
         if since ~= nil and now - since < DEATH_NEW_S then candidate = {unit = me.unit, since = now} else candidate = nil end
     elseif now - candidate.since >= DEATH_CONFIRM_S then
-        deaths = {{own[1], own[2], own[3]}}   -- the last death's only
-        log(string.format('death: you died at %.1f %.1f %.1f (your next helldiver came at %.1f %.1f %.1f)',
-            own[1], own[2], own[3], me[1], me[2], me[3]))
+        local box = own.box and box_reading(own.box)
+        local at = box or own
+        deaths = {{at[1], at[2], at[3]}}   -- the last death's only
+        log(string.format('death: you died at %.1f %.1f %.1f (%s; your next helldiver came at %.1f %.1f %.1f)',
+            at[1], at[2], at[3], box and string.format('your sample container; the body at %.1f %.1f %.1f', own[1], own[2], own[3])
+            or (own.box and 'your body: your sample container is gone' or 'your body'), me[1], me[2], me[3]))
         own, candidate = {unit = me.unit, me[1], me[2], me[3]}, nil
     end
     for i = #deaths, 1, -1 do   -- come to: gone
