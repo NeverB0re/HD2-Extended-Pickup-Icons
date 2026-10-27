@@ -1304,7 +1304,7 @@ class ScreenTests(Case):
         """The camera 2 m behind (x, y), looking along +y."""
         self.lua.execute("local fake, x, y = ...; fake.cam.pos = {x, y - 2, 0.6}", self.fake, x, y)
 
-    def test_where_you_died_is_marked_till_you_pass_it(self):
+    def test_where_you_died_is_marked_till_you_get_there(self):
         self.set_units(AVATAR, [unit(0, -8, 0), unit(20, 0, 0)], loaded=False)   # you; a teammate
         self.load()
         self.settle()
@@ -1318,12 +1318,35 @@ class ScreenTests(Case):
         self.assertIn("death: you died at 0.0 -8.0 0.0", self.log_text())
         marks = [p for p in self.points() if abs(p[2] - 1.2) < 1e-6]
         self.assertEqual(marks, [(0.0, -8.0, 1.2)])                    # the body's place, while it lies there
-        self.assertIn((255, 210, 60), {(t.color.r, t.color.g, t.color.b) for t in self.screen_tris()})
-        you.x, you.y = 0.5, -7                                         # back there
-        self.look_at(0.5, -7)
+        self.fake.textures_loaded = True
+        (b,) = [b for b in self.bitmaps_now(start=79.0) if b.tex.startswith("skull_")]   # the death screen's skull, red
+        self.assertEqual((b.c.r, b.c.g, b.c.b), (235, 50, 40))
+        you.x, you.y = 0, -12.5                                        # 4.5 m off: still there
+        self.look_at(0, -12.5)
         self.frames(30, start=80.0)
-        self.assertIn("death: the mark at 0.0 -8.0 0.0 passed - gone", self.log_text())
+        self.assertIn((0.0, -8.0, 1.2), self.points())
+        you.y = -11.5                                                  # 3.5 m off: reached
+        self.look_at(0, -11.5)
+        self.frames(30, start=81.0)
+        self.assertIn("death: the mark at 0.0 -8.0 0.0 reached - gone", self.log_text())
         self.assertNotIn((0.0, -8.0, 1.2), self.points())
+
+    def test_a_new_death_moves_the_mark(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        second = self.add_avatar(50, 0)                                # died at 0 -8; reinforced at 50 0
+        self.look_at(50, 0)
+        self.frames(240, start=70.0)
+        second.x, second.y = 80, 10                                    # walked off, died there, never back at the first
+        self.look_at(80, 10)
+        self.frames(60, start=80.0)
+        self.add_avatar(120, 0)                                        # reinforced again
+        self.look_at(120, 0)
+        self.frames(240, start=90.0)
+        marks = [p for p in self.points() if abs(p[2] - 1.2) < 1e-6]
+        self.assertEqual(marks, [(80.0, 10.0, 1.2)])                   # the last death's only
 
     def test_a_teammate_reinforced_is_not_taken_for_your_death(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)

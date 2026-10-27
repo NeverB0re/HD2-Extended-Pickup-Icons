@@ -22,7 +22,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.5.0-test.1'
+local VERSION = '2.5.0-test.2'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -53,14 +53,14 @@ local ICON_TEX = "@ICONS@"
 -- (made to match the game's); the framed ones (the stratagem icons' red corners around them) a little bigger, the
 -- vehicles' 15% more again
 local ICON_SIZE = {ammo = 19, grenade = 22, stim = 27, egg = 20, tube = 20, common = 18, rare = 18, super = 18,
-                   package = 28, larva = 28, hellbomb = 28, tank = 34.5, car = 34.5, walker = 34.5}
+                   package = 28, larva = 28, hellbomb = 28, tank = 34.5, car = 34.5, walker = 34.5, skull = 28}
 local VEHICLE_RGB = {110, 205, 255}   -- vehicles: the sky blue of the HUD's support weapon icons
 local HELLBOMB_RGB = {255, 90, 70}    -- hellbombs lying about the map (2.3.0): red, they blow up when shot
 -- The icons (all white textures) drawn in a colour: the vehicles and what you carry on your back sky blue (2.3.0),
 -- the hellbomb red
+local DEATH_RGB = {235, 50, 40}       -- where you died (2.5.0): the skull of the game's death screen, red
 local ICON_RGB = {package = VEHICLE_RGB, larva = VEHICLE_RGB, tank = VEHICLE_RGB, car = VEHICLE_RGB, walker = VEHICLE_RGB,
-                  hellbomb = HELLBOMB_RGB}
-local DEATH_RGB = {255, 210, 60}      -- where you died (2.5.0): the yellow of the minimap's dropped gear
+                  hellbomb = HELLBOMB_RGB, skull = DEATH_RGB}
 local GROUP_RGB = {vehicles = VEHICLE_RGB, hellbombs = HELLBOMB_RGB, deaths = DEATH_RGB}   -- their shapes (V, arrow), and the distance
                                                                        -- above them (2.4.0: hellbombs too)
 local DISTANCE_PX = 1.6       -- the loader's text size at 1080 pixels of screen (8 drew far too big)
@@ -500,12 +500,13 @@ local taken = by_unit()       -- per unit: picked up (this world)
 -- out from the camera: after a death the camera goes to a teammate (or stays on the body), and once you are
 -- reinforced it goes to a helldiver that has only just come into the world. So: you are a helldiver the camera
 -- follows (me); when the camera settles (DEATH_CONFIRM_S) on one that appeared under DEATH_NEW_S before it took the
--- camera, the helldiver you were before died, where its body lies (or was last seen). The mark goes once you pass it.
+-- camera, the helldiver you were before died, where its body lies (or was last seen). One mark, the last death's (a
+-- new death moves it: you may leave your gear); it goes once you come within DEATH_CLEAR_M of it.
 local DEATH_NEW_S = 20        -- a reinforced helldiver: in the world this short a time before the camera took it
 local DEATH_CONFIRM_S = 3     -- the camera on it this long (not a teammate's new helldiver passing the camera)
-local DEATH_CLEAR_M = 3       -- you this close (across the ground): the mark goes
+local DEATH_CLEAR_M = 4       -- you this close (across the ground): the mark goes
 local DEATH_HEIGHT = 1.2      -- the mark this high above the ground
-local deaths = {}             -- {x, y, z} for each mark
+local deaths = {}             -- the mark, {x, y, z}: one at most
 local avatar_since = by_unit()   -- when each helldiver came into the world (this world)
 local own = nil               -- {unit, x, y, z}: the helldiver you are (last seen there)
 local candidate = nil         -- {unit, since}: a new helldiver the camera took, not yet confirmed
@@ -721,7 +722,7 @@ local function collect_dots(now)
         for _, m in ipairs(deaths) do
             local dx, dy, dz = m[1] - me[1], m[2] - me[2], m[3] - me[3]
             local d = math.sqrt(dx * dx + dy * dy + dz * dz)
-            if d <= range then dots[#dots + 1] = {m[1], m[2], m[3] + DEATH_HEIGHT, d, me, 'deaths'} end
+            if d <= range then dots[#dots + 1] = {m[1], m[2], m[3] + DEATH_HEIGHT, d, me, 'deaths', 'skull'} end
         end
     end
     if #dots > MAX_DOTS then
@@ -1118,17 +1119,17 @@ local function follow_own(now)
         local since = avatar_since[me.unit]
         if since ~= nil and now - since < DEATH_NEW_S then candidate = {unit = me.unit, since = now} else candidate = nil end
     elseif now - candidate.since >= DEATH_CONFIRM_S then
-        deaths[#deaths + 1] = {own[1], own[2], own[3]}
+        deaths = {{own[1], own[2], own[3]}}   -- the last death's only
         log(string.format('death: you died at %.1f %.1f %.1f (your next helldiver came at %.1f %.1f %.1f)',
             own[1], own[2], own[3], me[1], me[2], me[3]))
         own, candidate = {unit = me.unit, me[1], me[2], me[3]}, nil
     end
-    for i = #deaths, 1, -1 do   -- passed by: gone
+    for i = #deaths, 1, -1 do   -- come to: gone
         local m = deaths[i]
         local dx, dy = m[1] - own[1], m[2] - own[2]
         if me.unit == own.unit and dx * dx + dy * dy < DEATH_CLEAR_M * DEATH_CLEAR_M and math.abs(m[3] - own[3]) < 3 then
             table.remove(deaths, i)
-            log(string.format('death: the mark at %.1f %.1f %.1f passed - gone', m[1], m[2], m[3]))
+            log(string.format('death: the mark at %.1f %.1f %.1f reached - gone', m[1], m[2], m[3]))
         end
     end
 end
@@ -1228,7 +1229,7 @@ local TEXTS = {
     range_supplies = {'Supplies distance (m)', 'Marked within this many metres of you. 0 shows none.'},
     fade = {'Fade supplies far away', 'Supply markers get fainter the farther away they are.'},
     fade_samples = {'Fade samples far away', 'Sample markers get fainter the farther away they are.'},
-    show_deaths = {'Show where you died', 'Where your gear lies: gone once you pass it.'},
+    show_deaths = {'Show where you died', 'A skull where you last died (your gear): gone once you get there.'},
     range_deaths = {'Where you died distance (m)', 'Marked within this many metres of you. 0 shows none.'},
     show_mission = {'Show mission items (SSSDs, launch codes, shells)', 'Mission items you pick up or carry: SSSDs, data drives, launch codes, keycards, artillery shells, warheads.'},
     range_mission = {'Mission items distance (m)', 'Marked within this many metres of you. 0 shows none.'},
