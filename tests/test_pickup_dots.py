@@ -111,7 +111,9 @@ fake.chef = {
     return nil
   end,
   call_kind = function(name, kind, ...)
-    assert(name == 'World.units_by_resource', name)
+    fake.kinds = fake.kinds or {}
+    fake.kinds[name] = kind
+    if name ~= 'World.units_by_resource' then return fake.chef.call(name, ...) end
     local ok, value = pcall(stingray.World.units_by_resource, ...)
     if not ok then return nil, value end
     return value
@@ -394,6 +396,8 @@ class DrawingTests(Case):
         self.load()
         self.lua.globals().shutdown()
         text = self.log_text()
+        with open(os.path.join(self.folder.name, "PickupDots.previous.log")) as f:
+            self.assertEqual(f.read(), "last launch" + chr(10))   # kept, not wiped
         self.assertRegex(text, r"Pickup Dots \S+ loading")
         self.assertIn("shutdown: frames=0", text)
         self.assertNotIn("last launch", text)
@@ -1419,6 +1423,25 @@ class LifecycleTests(Case):
         mod = self.lua.execute(self.source, self.fake.chef)
         self.assertEqual(mod.status, "Chef Shared Loader without bitmap (too old?)")
         self.assertIn("FATAL: Chef Shared Loader without bitmap", self.log_text())
+
+    def test_it_stays_on_after_a_crash_and_the_mesh_calls_have_a_crash_key_per_unit_kind(self):
+        head = build.built_source()[:400]
+        self.assertIn("\n-- HD2-Keep-On-Crash: yes", head)             # Chef Shared Loader keeps it on, skipping only the call
+        codes = "content/objectives/obj_common/generic_intel/generic_intel"
+        bomb = ScreenTests.HELLBOMB
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        picked = unit(0, -6.5, 0)
+        picked.update(meshes=6)
+        self.set_units(codes, [picked])
+        self.set_units(bomb, [unit(0, 30, 0)])
+        self.load()
+        self.settle()
+        self.frames(5, start=40.0)
+        kinds = {k: v for k, v in self.fake.kinds.items()}
+        for call in ("Unit.box", "Unit.num_meshes", "Unit.mesh", "Mesh.visibility"):
+            self.assertIn(call, kinds)
+        self.assertEqual(kinds["Unit.box"], bomb)                      # its own key: a crash on one kind skips that kind
+        self.assertEqual(kinds["Mesh.visibility"], codes)
 
     def test_loads_once(self):
         first = self.load()

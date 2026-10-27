@@ -1,4 +1,5 @@
 -- HD2-Addon: mods/codex/pickup_dots
+-- HD2-Keep-On-Crash: yes
 -- Extended Pickup Icons Range (Pickup Dots): markers over samples, supplies, mission items and vehicles near you.
 -- Lua-only rebuild of Extended Pickup Icons for Chef Shared Loader (PUC Lua 5.1, no ffi).
 -- It only reads unit positions and draws on the screen; it changes no game state.
@@ -128,9 +129,25 @@ local TARGETS = "@TARGETS@"   -- filled in by build.py from targets.lua
 -- ----------------------------------------------------------------------- log --
 local logfile
 do
-    -- Written fresh each launch, in Chef Shared Loader's folder (%APPDATA%\Arrowhead\Helldivers2), where a mod may write.
+    -- Written fresh each launch, in Chef Shared Loader's folder (%APPDATA%\Arrowhead\Helldivers2), where a mod may write;
+    -- the last launch's kept beside it as PickupDots.previous.log (2.4.0: a launch that ended in a crash is the one
+    -- the next launch would otherwise wipe).
     local dir = CHEF and type(CHEF.log_directory) == 'string' and CHEF.log_directory or nil
     if dir then
+        local okr, old = pcall(function()
+            local f = io.open(dir .. '\\PickupDots.log', 'rb')
+            if not f then return nil end
+            local text = f:read('*a')
+            f:close()
+            return text
+        end)
+        if okr and type(old) == 'string' and #old > 0 then
+            pcall(function()
+                local f = io.open(dir .. '\\PickupDots.previous.log', 'wb')
+                f:write(old)
+                f:close()
+            end)
+        end
         local ok, file = pcall(io.open, dir .. '\\PickupDots.log', 'w')
         if ok then logfile = file end
     end
@@ -348,7 +365,7 @@ local function read_key(world, i)
         local units, problem = units_of(world, lookup, keys[i].label)
         for _, unit in ipairs(units) do
             local x, y, z = position_of(unit)
-            if x then points[#points + 1] = {x, y, z, unit = unit} end
+            if x then points[#points + 1] = {x, y, z, unit = unit, kind = keys[i].label} end
         end
         return points, true, problem
     end
@@ -479,24 +496,24 @@ local taken = by_unit()       -- per unit: picked up (this world)
 -- Has this unit no visible mesh left? Unit.box over the visible meshes (its second argument true) comes back
 -- empty (2.3.0: a hellbomb that blew up, alive and in place otherwise; not launch codes picked up: test.11).
 -- False when it can't be asked.
-local function no_visible_mesh(unit)
+local function no_visible_mesh(unit, kind)
     if unit == nil then return false end
-    local _, extents = CHEF.call('Unit.box', unit, true)
+    local _, extents = CHEF.call_kind('Unit.box', kind, unit, true)
     if extents == nil then return false end
     local ok, x, y, z = pcall(function() return sr.Vector3.x(extents), sr.Vector3.y(extents), sr.Vector3.z(extents) end)
     return ok and type(x) == 'number' and x == 0 and y == 0 and z == 0
 end
 
 -- How many of a unit's meshes are visible (Mesh.visibility), or nil when it can't be asked.
-local function visible_meshes(unit)
+local function visible_meshes(unit, kind)
     if unit == nil then return nil end
-    local n = tonumber((CHEF.call('Unit.num_meshes', unit)))
+    local n = tonumber((CHEF.call_kind('Unit.num_meshes', kind, unit)))
     if n == nil then return nil end
     local count = 0
     for m = 1, n do
-        local mesh = CHEF.call('Unit.mesh', unit, m)
+        local mesh = CHEF.call_kind('Unit.mesh', kind, unit, m)
         if mesh == nil then return nil end
-        local shown = CHEF.call('Mesh.visibility', mesh)
+        local shown = CHEF.call_kind('Mesh.visibility', kind, mesh)
         if shown == nil then return nil end
         if shown == true then count = count + 1 end
     end
@@ -512,7 +529,7 @@ local first_visible = by_unit()   -- per unit: how many meshes it showed when fi
 local function check_taken(p)
     if p.unit == nil then return false end
     if taken[p.unit] then return true end
-    local shown = visible_meshes(p.unit)
+    local shown = visible_meshes(p.unit, p.kind)
     if shown ~= nil then
         first_visible[p.unit] = first_visible[p.unit] or shown
         if shown < first_visible[p.unit] then
@@ -551,7 +568,7 @@ local blown = by_unit()
 local function blown_up(p)
     if p.unit == nil then return false end
     if blown[p.unit] then return true end
-    if no_visible_mesh(p.unit) then
+    if no_visible_mesh(p.unit, p.kind) then
         blown[p.unit] = true
         log(string.format('hellbomb: the one at %.1f %.1f %.1f blew up (no visible mesh left)', p[1], p[2], p[3]))
         return true
