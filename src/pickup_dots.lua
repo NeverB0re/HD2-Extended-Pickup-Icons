@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.4.0-test.4'
+local VERSION = '2.4.0-test.5'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -49,12 +49,13 @@ local ICON_TEX = "@ICONS@"
 -- How big each is drawn at full size on a 1080-line screen, along its longer side (pixels): as the 2.3.0 pixel icons
 -- (made to match the game's); the framed ones (the stratagem icons' red corners around them) a little bigger
 local ICON_SIZE = {ammo = 19, grenade = 22, stim = 27, egg = 20, tube = 20, common = 18, rare = 18, super = 18,
-                   package = 28, larva = 28, hellbomb = 28, vehicle = 30}
+                   package = 28, larva = 28, hellbomb = 28, tank = 30, car = 30, walker = 30}
 local VEHICLE_RGB = {110, 205, 255}   -- vehicles: the sky blue of the HUD's support weapon icons
 local HELLBOMB_RGB = {255, 90, 70}    -- hellbombs lying about the map (2.3.0): red, they blow up when shot
 -- The icons (all white textures) drawn in a colour: the vehicles and what you carry on your back sky blue (2.3.0),
 -- the hellbomb red
-local ICON_RGB = {package = VEHICLE_RGB, larva = VEHICLE_RGB, vehicle = VEHICLE_RGB, hellbomb = HELLBOMB_RGB}
+local ICON_RGB = {package = VEHICLE_RGB, larva = VEHICLE_RGB, tank = VEHICLE_RGB, car = VEHICLE_RGB, walker = VEHICLE_RGB,
+                  hellbomb = HELLBOMB_RGB}
 local GROUP_RGB = {vehicles = VEHICLE_RGB, hellbombs = HELLBOMB_RGB}   -- their shapes (V, arrow), and the distance
                                                                        -- above them (2.4.0: hellbombs too)
 local DISTANCE_PX = 1.6       -- the loader's text size at 1080 pixels of screen (8 drew far too big)

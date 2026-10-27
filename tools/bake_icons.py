@@ -30,7 +30,9 @@ ICONS = {
     "package": ("package.png", "alpha", True),
     "larva": ("larva.png", "green", True),
     "hellbomb": ("hellbomb.png", "green", True),
-    "vehicle": ("vehicle_bastion_tank.png", "body", True),   # one for every vehicle: the tank's (they look alike)
+    "tank": ("vehicle_bastion_tank.png", "body", True),      # the tank's, for both tanks
+    "car": ("vehicle_frv_hmg.png", "body", True),            # the FRV's, for every FRV
+    "walker": ("vehicle_combatwalker.png", "body", True),    # the exosuit's, for every exosuit
 }
 FRAME = "hellbomb.png"   # its red corners (256 x 256 frame, corners at 24..231)
 PICTURE = (150, 160)     # the picture fitted into this, centred in the frame (the hellbomb's is 144 x 160)
