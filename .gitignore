@@ -4,3 +4,6 @@ __pycache__/
 *.pyc
 test-builds/
 *_preview.png
+tools/cover/icons/
+tools/cover/cover.html
+nexus_cover.png
