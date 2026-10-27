@@ -394,7 +394,7 @@ class DrawingTests(Case):
         self.load()
         self.lua.globals().shutdown()
         text = self.log_text()
-        self.assertRegex(text, r"Pickup Dots S+ loading")
+        self.assertRegex(text, r"Pickup Dots \S+ loading")
         self.assertIn("shutdown: frames=0", text)
         self.assertNotIn("last launch", text)
 
