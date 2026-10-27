@@ -21,7 +21,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.4.0-test.7'
+local VERSION = '2.4.0-test.8'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
