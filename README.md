@@ -17,6 +17,7 @@ Player-facing description and install steps: [PUBLISH_NEXUS.txt](PUBLISH_NEXUS.t
 | `build.py` | Builds `dist/Extended Pickup Icons Range v<VERSION>.zip` (Arsenal-importable). |
 | `tests/test_pickup_dots.py` | Runs the mod against a fake engine (needs `lupa`). |
 | `tools/bake_icons.py` | Bakes `tools/icons/game/*.png` (game icons, extracted with filediver) into the mod's own textures; `build.py` packs them into the patch. |
+| `tools/draw_skull.py` | Draws the death mark's skull (from the game's death screen) into `tools/icons/game/skull.png`. |
 | `tools/raster_icons.py` | Turns `tools/icons/supply.png` into the `ICON_PIXELS` table (the supply crate's pixel icon). |
 | `release/` | The released ZIP. |
 

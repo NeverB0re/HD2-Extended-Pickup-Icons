@@ -1358,6 +1358,42 @@ class ScreenTests(Case):
         marks = [p for p in self.points() if abs(p[2] - 1.4) < 1e-6]
         self.assertEqual(marks, [(0.3, -8.2, 1.4)])
 
+    def box_setup(self):
+        self.lua.execute("stingray.IdString64 = { from_hex = function(hex) return { hex = hex } end }")
+        self.fake.loaded["hex:4d1c334d294dfa97"] = True                # the avatar, by id: the id self-test passes
+        return "hex:a9936cbe561e8180"
+
+    def test_a_sample_container_you_dropped_and_walked_off_from_is_not_where_you_died(self):
+        box = self.box_setup()
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(box, [unit(0.3, -8.2, 1.2)])                    # on your back
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        you, dropped = self.fake.units[AVATAR][1], self.fake.units[box][1]
+        dropped.z = 0.2                                                # dropped on purpose ...
+        for k in range(600):                                           # ... and 30 m on, for 10 s
+            you.y = -8 + 30 * k / 599
+            self.look_at(0, you.y)
+            self.frames(1, start=61.0 + k / 60)
+        self.frames(120, start=72.0)                                   # killed there
+        self.reinforce(50, 0, start=80.0)
+        self.assertIn("death: you died at 0.0 22.0 0.0 (your body: your sample container is not by it", self.log_text())
+
+    def test_a_teammates_sample_container_you_stood_by_is_not_where_you_died(self):
+        box = self.box_setup()
+        self.set_units(AVATAR, [unit(0, -8, 0), unit(1.5, -8, 0)], loaded=False)   # you, by a teammate
+        self.set_units(box, [unit(1.7, -8.3, 1.2)])                    # on the teammate's back, within 2.5 m of you
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        mate, theirs = self.fake.units[AVATAR][2], self.fake.units[box][1]
+        self.frames(120, start=61.0)                                   # you are killed; they run on
+        mate.x, theirs.x = 30, 30.2
+        self.frames(60, start=64.0)
+        self.reinforce(50, 0, start=70.0)
+        self.assertIn("death: you died at 0.0 -8.0 0.0 (your body", self.log_text())
+
     def test_a_new_death_moves_the_mark(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.load()

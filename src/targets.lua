@@ -12,9 +12,9 @@
 -- groups: samples, supplies, mission (objective items), carry (SEAF shells, carried ammo, warheads),
 -- dropoffs (where an SSSD or data goes in), controls (valves, cranks, switches), hellbombs, vehicles.
 return {
-  {group='samples', hex='a9936cbe561e8180', icon='tube', worn=2.5, near=15, box=true},  -- the sample container: worn 2.5 m off;
-  -- box: dropped where you die, with your gear (2.5.0: the death mark goes there)
-  -- its helldiver too (boarding animations swing it away)
+  {group='samples', hex='a9936cbe561e8180', icon='tube', worn=2.5, near=15, box=true},  -- the sample container: worn 2.5 m off
+  -- its helldiver too (boarding animations swing it away); box: dropped where you die, with your gear (2.5.0: the
+  -- death mark goes there)
   {group='mission', name='content/objectives/obj_illuminate/il_sarcophagus/il_sarcophagus'},  -- 0.23: its real path
   {group='samples', name='content/env_super_earth/samples/research_tech_sample_01', icon='common'},
   {group='samples', name='content/env_shared/assets/samples/bio_sample_01/bio_sample_01', icon='common'},

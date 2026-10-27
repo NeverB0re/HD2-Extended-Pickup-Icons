@@ -22,7 +22,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.5.0-test.5'
+local VERSION = '2.5.0'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -56,13 +56,13 @@ local ICON_SIZE = {ammo = 19, grenade = 22, stim = 27, egg = 20, tube = 20, comm
                    package = 28, larva = 28, hellbomb = 28, tank = 34.5, car = 34.5, walker = 34.5, skull = 28}
 local VEHICLE_RGB = {110, 205, 255}   -- vehicles: the sky blue of the HUD's support weapon icons
 local HELLBOMB_RGB = {255, 90, 70}    -- hellbombs lying about the map (2.3.0): red, they blow up when shot
--- The icons (all white textures) drawn in a colour: the vehicles and what you carry on your back sky blue (2.3.0),
--- the hellbomb red
 local DEATH_RGB = {235, 50, 40}       -- where you died (2.5.0): the skull of the game's death screen, red
+-- The icons (all white textures) drawn in a colour: the vehicles and what you carry on your back sky blue (2.3.0),
+-- the hellbomb and the skull red
 local ICON_RGB = {package = VEHICLE_RGB, larva = VEHICLE_RGB, tank = VEHICLE_RGB, car = VEHICLE_RGB, walker = VEHICLE_RGB,
                   hellbomb = HELLBOMB_RGB, skull = DEATH_RGB}
-local GROUP_RGB = {vehicles = VEHICLE_RGB, hellbombs = HELLBOMB_RGB, deaths = DEATH_RGB}   -- their shapes (V, arrow), and the distance
-                                                                       -- above them (2.4.0: hellbombs too)
+-- their shapes (V, arrow), and the distance above them (2.4.0: hellbombs too; 2.5.0: where you died)
+local GROUP_RGB = {vehicles = VEHICLE_RGB, hellbombs = HELLBOMB_RGB, deaths = DEATH_RGB}
 local DISTANCE_PX = 1.6       -- the loader's text size at 1080 pixels of screen (8 drew far too big)
 local BOLD = {{0, 0}, {1, 0}, {0, 1}, {1, 1}}   -- the distance drawn at each, in the loader's screen pixels
 local DOT_HEIGHT = 0.6        -- metres above the unit's origin
@@ -274,6 +274,7 @@ end
 
 -- --------------------------------------------------------------- the sweep --
 local keys = {}          -- { group, label, name or hex }
+local box_keys = {}      -- the indices of the sample container's ('box' targets: the death mark, 2.5.0)
 local found = {}         -- per key index: list of {x, y, z} from the last time it was read
 local players = {}       -- list of {x, y, z}: every helldiver avatar (teammates and bodies too)
 local me                 -- the one of them nearest the camera: you (or whoever the camera follows)
@@ -289,6 +290,9 @@ local function build_keys()
             unnamed = unnamed + 1
             keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount, box = t.box}
         end
+    end
+    for i, k in ipairs(keys) do
+        if k.box then box_keys[#box_keys + 1] = i end
     end
     log(string.format('%d target resources: %d named, %d by id only (looked up if the id self-test passes)',
         #keys, #keys - unnamed, unnamed))
@@ -519,10 +523,13 @@ local deaths = {}             -- the mark, {x, y, z}: one at most
 local cleared = nil           -- {mark, by}: the last mark come to, and by which helldiver taken for you
 local avatar_since = by_unit()   -- when each helldiver came into the world (this world)
 local avatar_z0 = by_unit()      -- and how high it was then
-local own = nil               -- {unit, x, y, z, box, anchor, moved}: the helldiver you are (last seen there), where
-                              -- and when it last moved (DEATH_STILL_M), and the sample
-                              -- container on your back (a 'box' target): it drops where you die, with your gear,
-                              -- where your body may be flung far off by a blast
+local own = nil               -- {unit, x, y, z, anchor, moved, box, box_at}: the helldiver you are (last seen
+                              -- there), where and when it last moved (DEATH_STILL_M), and the sample container last
+                              -- on your back (a 'box' target) and when: it drops where you die, with your gear, where
+                              -- a blast may fling your body far off. Taken only when it was on you as you died (up
+                              -- to DEATH_BOX_S before the body came to rest: not one you dropped and walked off from)
+                              -- and is on nobody now (not a teammate's you stood by).
+local DEATH_BOX_S = 5
 local candidate = nil         -- {unit, since}: a new helldiver the camera took, not yet confirmed
 
 -- Has this unit no visible mesh left? Unit.box over the visible meshes (its second argument true) comes back
@@ -1012,7 +1019,7 @@ local function screen_draw(dots, cam)
         local ui = math.min(width / UI_W, height / UI_H)
         for _, d in ipairs(dots) do
             local sx, sy = project(cam, d, width, height, f)
-            local dir   -- a vehicle off screen: the way to it
+            local dir   -- a vehicle (or where you died) off screen: the way to it
             if not sx and EDGE_GROUPS[d[6]] then sx, sy, dir = edge(cam, d, width, height, ui) end
             if sx then
                 local size = size_of(d) * (dir and EDGE.size or 1) * ui
@@ -1117,30 +1124,34 @@ local function pick_me(cam)
     return who
 end
 
--- The sample container on you: the nearest one within its reach (its 'worn'), or nil.
+-- Is q on helldiver p (within the container's reach)? The squared distance across the ground, or nil.
+local function on_body(q, p, reach)
+    local dx, dy, dz = q[1] - p[1], q[2] - p[2], q[3] - p[3]
+    local d = dx * dx + dy * dy
+    if d < reach * reach and dz > CARRIED_LOW and dz < CARRIED_HEIGHT then return d end
+end
+
+-- The sample container on helldiver p: the nearest one within its reach (its 'worn'), or nil.
 local function nearest_box(p)
     local best, best_d
-    for i = 1, #keys do
-        if keys[i].box and found[i] then
-            local reach = keys[i].worn or CARRIED_RADIUS
-            for _, q in ipairs(found[i]) do
-                local dx, dy, dz = q[1] - p[1], q[2] - p[2], q[3] - p[3]
-                local d = dx * dx + dy * dy
-                if d < reach * reach and dz > CARRIED_LOW and dz < CARRIED_HEIGHT and (best_d == nil or d < best_d) then
-                    best, best_d = q, d
-                end
-            end
+    for _, i in ipairs(box_keys) do
+        for _, q in ipairs(found[i] or {}) do
+            local d = on_body(q, p, keys[i].worn or CARRIED_RADIUS)
+            if d and (best_d == nil or d < best_d) then best, best_d = q, d end
         end
     end
     return best
 end
 
--- Where this sample container is now, or nil once it is gone.
-local function box_reading(unit)
-    for i = 1, #keys do
-        if keys[i].box and found[i] then
-            for _, q in ipairs(found[i]) do
-                if q.unit == unit then return q end
+-- Where this sample container is now: nil once it is gone, or while a helldiver other than `body` has it on.
+local function box_lying(unit, body)
+    for _, i in ipairs(box_keys) do
+        for _, q in ipairs(found[i] or {}) do
+            if q.unit == unit then
+                for _, p in ipairs(players) do
+                    if p.unit ~= body and on_body(q, p, keys[i].worn or CARRIED_RADIUS) then return nil end
+                end
+                return q
             end
         end
     end
@@ -1168,7 +1179,7 @@ local function follow_own(now)
     if me.unit == own.unit then
         candidate = nil
         local box = nearest_box(own)
-        if box ~= nil then own.box = box.unit end
+        if box ~= nil then own.box, own.box_at = box.unit, now end
     elseif candidate == nil or candidate.unit ~= me.unit then
         local since = avatar_since[me.unit]
         if since ~= nil and now - since < DEATH_NEW_S then candidate = {unit = me.unit, since = now} else candidate = nil end
@@ -1184,12 +1195,12 @@ local function follow_own(now)
         end
         own, candidate = own_as(me, now), nil
     elseif now - candidate.since >= DEATH_CONFIRM_S and (avatar_z0[me.unit] or me[3]) - me[3] > DEATH_DROP_M then
-        local box = own.box and box_reading(own.box)
+        local box = own.box and own.moved - own.box_at <= DEATH_BOX_S and box_lying(own.box, own.unit)
         local at = box or own
         deaths = {{at[1], at[2], at[3]}}   -- the last death's only
         log(string.format('death: you died at %.1f %.1f %.1f (%s; your next helldiver came at %.1f %.1f %.1f)',
             at[1], at[2], at[3], box and string.format('your sample container; the body at %.1f %.1f %.1f', own[1], own[2], own[3])
-            or (own.box and 'your body: your sample container is gone' or 'your body'), me[1], me[2], me[3]))
+            or (own.box and 'your body: your sample container is not by it' or 'your body'), me[1], me[2], me[3]))
         own, candidate, cleared = own_as(me, now), nil, nil
     end
     for i = #deaths, 1, -1 do   -- come to: gone
