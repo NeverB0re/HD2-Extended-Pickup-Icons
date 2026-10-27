@@ -1,7 +1,7 @@
 -- 0.23.0: names not in the game's files (filediver listing, 2026-10-24) taken out.
 -- Generated from Extended Pickup Icons 3.0 (pickup_icon_range_test): the units it extended, without
 -- equipment and weapons (0.9.0). key: the unit resource name when known, otherwise its 64-bit id as hex.
--- icon: drawn as this shape (samples, supplies); the rest as diamonds (vehicles: chevrons).
+-- icon: drawn as this icon (the mod's textures, the supply crate's pixels); the rest as diamonds.
 -- Rare samples are Crystallized E-710, Legendarium and Black Saffron; the super sample is Super Uranium.
 -- node: marked above this node of the unit (Chef Shared Loader); height: above the root without it.
 -- mount: a vehicle's node its weapon (group 'arms') is mounted at, as it is read from (2.3.0: one come off).

@@ -1,4 +1,4 @@
-"""Game icon images -> screen-pixel rectangles (Lua), so the mod draws them pixel for pixel at their size.
+"""The supply crate's icon image -> screen-pixel rectangles (Lua), so the mod draws them pixel for pixel at their size.
 
 Each image's shape (a channel, 0..1) is cropped, scaled to `height` screen pixels, and each cell given its
 coverage in quarters (drawn that see-through, like the game's scaled icon). Cells of the same coverage are
@@ -13,23 +13,9 @@ sys.path.insert(0, HERE)
 from sheet import load, png
 
 ICON = lambda name: os.path.join(HERE, "icons", name + ".png")   # the game's images (filediver)
-RED_ONLY = lambda c: max(0.0, min(1.0, (c[0] - 70) / 150)) if c[1] < 120 else 0.0
-GREEN_ONLY = lambda c: max(0.0, min(1.0, (c[1] - 70) / 150)) if c[0] < 120 else 0.0
 ICONS = [  # name, file, coverage of a pixel (0..1), screen height in pixels
-    ("ammo", ICON("ammo"), lambda c: max(0.0, min(1.0, (c[0] - 70) / 150)), 19),
-    ("grenade", ICON("grenade"), lambda c: max(0.0, min(1.0, (c[0] - 70) / 150)), 22),
-    ("stim", ICON("stim"), lambda c: max(0.0, min(1.0, (c[0] - 70) / 150)), 9),
+    # the resupply crate's (no texture of the game's matches it; the others are textures since 2.4.0, bake_icons.py)
     ("supply", ICON("supply"), lambda c: max(0.0, min(1.0, (sum(c) / 3 - 40) / 120)), 18),
-    ("package", ICON("package"), lambda c: max(0.0, min(1.0, (c[0] - 70) / 150)), 22),
-    ("larva", ICON("larva"), lambda c: max(0.0, min(1.0, (c[1] - 60) / 150)), 24),
-    ("egg", ICON("egg"), lambda c: max(0.0, min(1.0, (c[0] - 70) / 150)), 20),
-    ("tube", ICON("tube"), lambda c: max(0.0, min(1.0, (sum(c) / 3 - 60) / 140)), 20),
-    # vehicles: the stratagem icons' red channel is the vehicle (green marks its weapons)
-    ("tank", ICON("tank"), RED_ONLY, 16),
-    ("walker", ICON("walker"), RED_ONLY, 28),
-    ("car", ICON("car"), RED_ONLY, 20),
-    # the hellbomb: the hellbomb backpack's stratagem icon, its green part (red is the backpack)
-    ("hellbomb", ICON("hellbomb"), GREEN_ONLY, 22),
 ]
 
 

@@ -16,7 +16,8 @@ Player-facing description and install steps: [PUBLISH_NEXUS.txt](PUBLISH_NEXUS.t
 | `src/icon.png` | Mod manager icon. |
 | `build.py` | Builds `dist/Extended Pickup Icons Range v<VERSION>.zip` (Arsenal-importable). |
 | `tests/test_pickup_dots.py` | Runs the mod against a fake engine (needs `lupa`). |
-| `tools/raster_icons.py` | Turns `tools/icons/*.png` (game textures, extracted with filediver) into the `ICON_PIXELS` table. |
+| `tools/bake_icons.py` | Bakes `tools/icons/game/*.png` (game icons, extracted with filediver) into the mod's own textures; `build.py` packs them into the patch. |
+| `tools/raster_icons.py` | Turns `tools/icons/supply.png` into the `ICON_PIXELS` table (the supply crate's pixel icon). |
 | `release/` | The released ZIP. |
 
 ## Working on it
@@ -28,8 +29,10 @@ python -m venv .venv
 .venv/Scripts/python build.py
 ```
 
-To change an icon, edit or replace its PNG in `tools/icons/`, run `python tools/raster_icons.py`
-and paste the printed tables into `ICON_PIXELS` in `src/pickup_dots.lua`.
+To change an icon, replace its PNG in `tools/icons/game/` (its entry in `ICONS` in `tools/bake_icons.py`
+says how it is cut out) and rebuild; `python tools/bake_icons.py` writes a preview of every icon and size.
+The supply crate is still a pixel icon: edit `tools/icons/supply.png`, run `python tools/raster_icons.py`
+and paste the printed table into `ICON_PIXELS` in `src/pickup_dots.lua`.
 
 Unit names come from filediver's resource listing (https://github.com/xypwn/filediver).
 Sample rarity: rare samples are Crystallized E-710, Legendarium and Black Saffron; the super sample
