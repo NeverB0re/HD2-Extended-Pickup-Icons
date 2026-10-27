@@ -1300,6 +1300,16 @@ class ScreenTests(Case):
         avatars[len(avatars) + 1] = self.lua.table_from(unit(x, y, z))
         return avatars[len(avatars)]
 
+    def reinforce(self, x, y, start):
+        """A helldiver dropped in a hellpod at (x, y): 490 m up, the camera following it down, 1 s later on the ground."""
+        new = self.add_avatar(x, y, 490)
+        self.lua.execute("local fake, x, y = ...; fake.cam.pos = {x, y - 2, 490.6}", self.fake, x, y)
+        self.frames(30, start=start)
+        new.z = 0
+        self.look_at(x, y)
+        self.frames(240, start=start + 1)
+        return new
+
     def look_at(self, x, y):
         """The camera 2 m behind (x, y), looking along +y."""
         self.lua.execute("local fake, x, y = ...; fake.cam.pos = {x, y - 2, 0.6}", self.fake, x, y)
@@ -1312,9 +1322,7 @@ class ScreenTests(Case):
         self.look_at(20, 0)                                            # you died: the camera on the teammate
         self.frames(300, start=61.0)
         self.assertNotIn("death: ", self.log_text())                   # a teammate there all along: not you
-        you = self.add_avatar(50, 0)                                   # reinforced: a new helldiver, the camera on it
-        self.look_at(50, 0)
-        self.frames(240, start=70.0)
+        you = self.reinforce(50, 0, start=70.0)                        # reinforced: a new helldiver, the camera on it
         self.assertIn("death: you died at 0.0 -8.0 0.0", self.log_text())
         marks = [p for p in self.points() if abs(p[2] - 1.2) < 1e-6]
         self.assertEqual(marks, [(0.0, -8.0, 1.2)])                    # the body's place, while it lies there
@@ -1345,9 +1353,7 @@ class ScreenTests(Case):
         you.x = 20                                                     # ... and a blast flings the body 20 m
         self.look_at(20, -8)
         self.frames(120, start=62.0)
-        self.add_avatar(50, 0)                                         # reinforced
-        self.look_at(50, 0)
-        self.frames(240, start=70.0)
+        self.reinforce(50, 0, start=70.0)                              # reinforced
         self.assertIn("death: you died at 0.3 -8.2 0.2 (your sample container; the body at 20.0 -8.0 0.0", self.log_text())
         marks = [p for p in self.points() if abs(p[2] - 1.4) < 1e-6]
         self.assertEqual(marks, [(0.3, -8.2, 1.4)])
@@ -1357,17 +1363,24 @@ class ScreenTests(Case):
         self.load()
         self.settle()
         self.frames(60, start=60.0)
-        second = self.add_avatar(50, 0)                                # died at 0 -8; reinforced at 50 0
-        self.look_at(50, 0)
-        self.frames(240, start=70.0)
+        second = self.reinforce(50, 0, start=70.0)                     # died at 0 -8; reinforced at 50 0
         second.x, second.y = 80, 10                                    # walked off, died there, never back at the first
         self.look_at(80, 10)
         self.frames(60, start=80.0)
-        self.add_avatar(120, 0)                                        # reinforced again
-        self.look_at(120, 0)
-        self.frames(240, start=90.0)
+        self.reinforce(120, 0, start=90.0)                             # reinforced again
         marks = [p for p in self.points() if abs(p[2] - 1.2) < 1e-6]
         self.assertEqual(marks, [(80.0, 10.0, 1.2)])                   # the last death's only
+
+    def test_leaving_a_mission_the_ships_helldiver_is_not_taken_for_your_death(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.load()
+        self.settle()
+        self.frames(60, start=60.0)
+        self.add_avatar(0, 2.5, 20)                                    # 20 m up, and stays there (test.3 log)
+        self.lua.execute("local fake = ...; fake.cam.pos = {0, 0.5, 20.6}", self.fake)   # the camera on it
+        self.frames(300, start=70.0)
+        self.assertIn("you: the helldiver at 0.0 2.5 20.0", self.log_text())
+        self.assertNotIn("death: ", self.log_text())
 
     def test_a_teammate_reinforced_is_not_taken_for_your_death(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)

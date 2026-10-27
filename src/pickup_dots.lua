@@ -22,7 +22,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.5.0-test.3'
+local VERSION = '2.5.0-test.4'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -504,10 +504,14 @@ local taken = by_unit()       -- per unit: picked up (this world)
 -- new death moves it: you may leave your gear); it goes once you come within DEATH_CLEAR_M of it.
 local DEATH_NEW_S = 20        -- a reinforced helldiver: in the world this short a time before the camera took it
 local DEATH_CONFIRM_S = 3     -- the camera on it this long (not a teammate's new helldiver passing the camera)
+local DEATH_DROP_M = 100      -- and it came down this far since it appeared: dropped in a hellpod (test.3 log: they
+                              -- appear about 490 m up). Leaving a mission, the ship's helldiver appeared 20 m up and
+                              -- stayed there, taken for one reinforced.
 local DEATH_CLEAR_M = 4       -- you this close (across the ground): the mark goes
 local DEATH_HEIGHT = 1.2      -- the mark this high above the ground
 local deaths = {}             -- the mark, {x, y, z}: one at most
 local avatar_since = by_unit()   -- when each helldiver came into the world (this world)
+local avatar_z0 = by_unit()      -- and how high it was then
 local own = nil               -- {unit, x, y, z, box}: the helldiver you are (last seen there), and the sample
                               -- container on your back (a 'box' target): it drops where you die, with your gear,
                               -- where your body may be flung far off by a blast
@@ -1136,7 +1140,7 @@ end
 
 local function follow_own(now)
     for _, p in ipairs(players) do
-        if p.unit ~= nil and avatar_since[p.unit] == nil then avatar_since[p.unit] = now end
+        if p.unit ~= nil and avatar_since[p.unit] == nil then avatar_since[p.unit], avatar_z0[p.unit] = now, p[3] end
         if own ~= nil and p.unit == own.unit then own[1], own[2], own[3] = p[1], p[2], p[3] end
     end
     if me == nil or me.unit == nil then return end
@@ -1151,7 +1155,7 @@ local function follow_own(now)
     elseif candidate == nil or candidate.unit ~= me.unit then
         local since = avatar_since[me.unit]
         if since ~= nil and now - since < DEATH_NEW_S then candidate = {unit = me.unit, since = now} else candidate = nil end
-    elseif now - candidate.since >= DEATH_CONFIRM_S then
+    elseif now - candidate.since >= DEATH_CONFIRM_S and (avatar_z0[me.unit] or me[3]) - me[3] > DEATH_DROP_M then
         local box = own.box and box_reading(own.box)
         local at = box or own
         deaths = {{at[1], at[2], at[3]}}   -- the last death's only
@@ -1195,7 +1199,7 @@ local function tick()
         vehicles_seen = {}
         wrecked = by_unit()
         taken, blown, first_visible, me_unit = by_unit(), by_unit(), by_unit(), nil
-        deaths, avatar_since, own, candidate = {}, by_unit(), nil, nil
+        deaths, avatar_since, avatar_z0, own, candidate = {}, by_unit(), by_unit(), nil, nil
         hot = {}
         log('world changed: ' .. world_id)
     end
