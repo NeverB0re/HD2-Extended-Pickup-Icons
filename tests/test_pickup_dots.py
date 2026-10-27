@@ -377,7 +377,7 @@ class DrawingTests(Case):
                 self.assertEqual(f.read(), "last launch" + chr(10))
             with open(os.path.join(folder, "PickupDots.log")) as f:
                 text = f.read()
-            self.assertIn("Pickup Dots 2.4.0-test.5 loading", text)
+            self.assertIn("Pickup Dots 2.4.0-test.6 loading", text)
             self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -647,6 +647,36 @@ class ScreenTests(Case):
             self.frames(1, start=40.0 + k / 60)
         self.assertIn("frv lost its weapons", self.log_text())
         self.assertEqual(self.screen_tris(), [])
+
+    def test_an_exosuit_swinging_its_arm_is_not_taken_for_destroyed(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(self.MECH, [unit(0, 20, 0)])
+        self.set_units(self.MECH_ARM, [unit(1, 20, 3)])                # on its arm
+        self.load()
+        self.settle()
+        self.frames(120, start=40.0)                                   # standing: where the arm is, kept
+        arm = self.fake.units[self.MECH_ARM][1]
+        arm.x, arm.z = 4, 0.5                                          # swung low: 0.9 m farther from its root
+        self.frames(120, start=50.0)
+        self.assertNotIn("came off", self.log_text())
+        self.assertIn("vehicles drawn=1", self.status_now())
+
+    def test_a_wreck_left_and_come_back_to_stays_unmarked(self):
+        gun = "content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(self.VEHICLE, [unit(0, 20, 0)])
+        self.set_units(gun, [unit(0, 20, 1.5)])
+        self.load()
+        self.settle()
+        self.fake.units[gun] = self.lua.table()                        # destroyed
+        self.frames(60, start=40.0)
+        self.assertIn("frv lost its weapons", self.log_text())
+        me = self.fake.units[AVATAR][1]
+        me.y = 300                                                     # gone far off: no longer followed ...
+        self.frames(60, start=50.0)
+        me.y = -8                                                      # ... and back
+        self.frames(60, start=60.0)
+        self.assertIn("vehicles drawn=0", self.status_now())
 
     def test_vehicles_side_by_side_each_get_a_marker(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)

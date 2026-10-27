@@ -21,7 +21,7 @@ local CHEF = ...
 if type(CHEF) ~= 'table' or type(CHEF.camera) ~= 'function' then CHEF = nil end
 local function chef_has(name) return CHEF ~= nil and type(CHEF[name]) == 'function' end
 
-local VERSION = '2.4.0-test.5'
+local VERSION = '2.4.0-test.6'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -551,6 +551,7 @@ end
 
 -- Vehicles seen last frame, each tracked like a helldiver (track): since when it has stood still.
 local vehicles_seen = {}
+local wrecked = setmetatable({}, {__mode = 'k'})   -- per unit (as by_unit): a vehicle taken for destroyed (2.4.0)
 
 local function follow_vehicle(p, now, seen_now)
     local t = track(vehicles_seen, p[1], p[2], p[3], now)
@@ -714,11 +715,14 @@ local function collect_dots(now)
                     local mx, my, mz = node_position(p, keys[i].mount)
                     local from = nearest_from(arms, p, ARMS_NEAR, mx and {mx, my, mz} or p)
                     local armed_now = from ~= nil
+                    if p.unit ~= nil and wrecked[p.unit] then v.off = true end   -- destroyed before (this world)
                     if armed_now and not v.off then v.armed, v.lost = true, nil end
                     if v.armed and not armed_now and not v.off then
                         v.off = true   -- its weapon gone: destroyed, for good
                     end
-                    if armed_now and not v.off then
+                    -- (only on a vehicle with a mount: an exosuit's weapons are its arms, which move as it walks and
+                    -- aims; 2.4.0-test.5 took one just called in for destroyed)
+                    if armed_now and not v.off and keys[i].mount then
                         if v.arm == nil then
                             v.arm = from
                         elseif math.abs(from - v.arm) > ARM_MOVED then
@@ -728,6 +732,10 @@ local function collect_dots(now)
                         end
                     end
                     local destroyed = near(wrecks, p, WRECK_NEAR) or v.off
+                    -- kept by its unit: followed from frame to frame only while near, a wreck left and come back to
+                    -- showed again (2.4.0-test.5), till it sank into the ground as it went (the markers under the
+                    -- ground a player told of)
+                    if destroyed and p.unit ~= nil then wrecked[p.unit] = true end
                     if destroyed and not v.lost then
                         v.lost = true
                         log('vehicle: ' .. (string.match(keys[i].label, '([^/]+)$') or keys[i].label)
@@ -1461,6 +1469,7 @@ local function tick()
         world_id = 'world #' .. world_seq
         last_world, world_seen_at, cursor, found, players, players_read_at, me = world, now, 1, {}, {}, nil, nil
         vehicles_seen = {}
+        wrecked = by_unit()
         taken, blown, first_visible, me_unit = by_unit(), by_unit(), by_unit(), nil
         hot = {}
         new_main_world()
