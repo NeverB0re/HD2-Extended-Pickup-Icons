@@ -61,9 +61,10 @@ What gets a marker (default distance):
 - Vehicles (100 m): exosuits, FRVs and tanks, in sky blue; out of view, at the screen's edge
   with an arrow.
 
-Vehicle markers show their distance. Markers sit where the game shows its own icon, get
-smaller farther away (supply markers fainter too), follow the game's camera (scopes too),
-and hide while a menu is open; on your ship mission markers are off. Items someone is
+Vehicle and hellbomb markers show their distance. Markers sit where the game shows its own
+icon, get smaller farther away (supply markers fainter too), are sized to your screen
+resolution, follow the game's camera (scopes too), and hide while a menu is open; on your
+ship mission markers are off. Items someone is
 carrying, picked-up launch codes and keycards, hellbombs that blew up, destroyed vehicles
 and the vehicle you or a teammate are driving get no marker. Items close enough
 for the game to show its own icon get none either: samples within 9 m (Terminid eggs and
@@ -72,7 +73,7 @@ Automaton super samples 20 m, sample containers 15 m) and ammo and grenade boxes
 
 Settings: press F9 in the game (Chef Shared Loader's options menu) and pick Extended
 Pickup Icons Range: turn each kind on or off and set its distance, fade supplies far away,
-show or hide vehicles' distance, keep markers on up close, and change their size far away
+show or hide the distance above vehicles and hellbombs, keep markers on up close, and change their size far away
 and opacity.
 
 Requires Chef Shared Loader 1.2.0 or newer (Nexus mod 17760). Give it the highest priority
