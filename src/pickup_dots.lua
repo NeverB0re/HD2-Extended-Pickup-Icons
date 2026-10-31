@@ -22,7 +22,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.5.0'
+local VERSION = '2.5.1-test.1'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -260,10 +260,18 @@ local function units_of(world, key, label)
     return as_list(value)
 end
 
--- Position of a unit returned this very frame, as plain numbers (handles are never kept). The loader refuses units
--- that can't be asked (one built at run time, one from a world that's gone) instead of ending the game.
+-- Cached sweep entries can outlive a unit. A unit being alive here means the engine object still exists,
+-- not that the helldiver/vehicle has health. Keep the loader's world checks and crash keys in use.
+local function unit_alive(unit)
+    if unit == nil then return false end
+    local ok, alive = pcall(CHEF.unit_alive, unit)
+    return ok and alive == true
+end
+
+-- Position of a unit just returned by a lookup, copied to plain numbers. The unit handle is also kept for
+-- node/mesh reads later, so those reads must check it again: the next sweep may be several frames away.
 local function position_of(unit)
-    if not CHEF.unit_alive(unit) then return nil end
+    if not unit_alive(unit) then return nil end
     local x, y, z = CHEF.unit_position(unit)
     if type(x) ~= 'number' or type(y) ~= 'number' or type(z) ~= 'number' then return nil end
     for _, v in ipairs({x, y, z}) do
@@ -536,7 +544,7 @@ local candidate = nil         -- {unit, since}: a new helldiver the camera took,
 -- empty (2.3.0: a hellbomb that blew up, alive and in place otherwise; not launch codes picked up: test.11).
 -- False when it can't be asked.
 local function no_visible_mesh(unit, kind)
-    if unit == nil then return false end
+    if not unit_alive(unit) then return false end
     local _, extents = CHEF.call_kind('Unit.box', kind, unit, true)
     if extents == nil then return false end
     local ok, x, y, z = pcall(function() return sr.Vector3.x(extents), sr.Vector3.y(extents), sr.Vector3.z(extents) end)
@@ -545,13 +553,15 @@ end
 
 -- How many of a unit's meshes are visible (Mesh.visibility), or nil when it can't be asked.
 local function visible_meshes(unit, kind)
-    if unit == nil then return nil end
+    if not unit_alive(unit) then return nil end
     local n = tonumber((CHEF.call_kind('Unit.num_meshes', kind, unit)))
     if n == nil then return nil end
     local count = 0
     for m = 1, n do
+        if not unit_alive(unit) then return nil end
         local mesh = CHEF.call_kind('Unit.mesh', kind, unit, m)
         if mesh == nil then return nil end
+        if not unit_alive(unit) then return nil end
         local shown = CHEF.call_kind('Mesh.visibility', kind, mesh)
         if shown == nil then return nil end
         if shown == true then count = count + 1 end
@@ -588,6 +598,7 @@ local node_of = by_unit()
 
 local function node_position(p, name)
     if name == nil or p.unit == nil then return nil end
+    if not unit_alive(p.unit) then node_of[p.unit] = nil; return nil end
     local ok, x, y, z = pcall(function()
         local n = node_of[p.unit]
         if n == nil then
@@ -595,6 +606,7 @@ local function node_position(p, name)
             node_of[p.unit] = n
         end
         if n == false then return nil end
+        if not unit_alive(p.unit) then node_of[p.unit] = nil; return nil end
         return CHEF.unit_position(p.unit, n)
     end)
     if ok and type(x) == 'number' and type(y) == 'number' and type(z) == 'number' then return x, y, z end
@@ -648,6 +660,11 @@ local function collect_dots(now)
                 if d ~= nil and d <= range + HOT_MARGIN then near_any = true end
                 if d == nil or d > range then
                     c.far = c.far + 1
+                elseif not unit_alive(p.unit) then
+                    -- A sweep cached this position before despawn. Never pass its handle to node/mesh calls,
+                    -- or draw the stale point while waiting for its next lookup.
+                    node_of[p.unit] = nil
+                    c.worn = c.worn + 1
                 elseif group == 'vehicles' then
                     -- destroyed, you in or at it, or someone else in a moving one: no marker
                     local v = follow_vehicle(p, now, seen_now)
@@ -1229,6 +1246,7 @@ local function tick()
     local world = main_world()
     if world == nil then
         if last_world ~= nil then last_world, cursor, found, players, me, hot = nil, 1, {}, {}, nil, {} end
+        node_of = by_unit()
         return
     end
     if not same_world(world, last_world) then
@@ -1238,6 +1256,7 @@ local function tick()
         last_world, world_seen_at, cursor, found, players, players_read_at, me = world, now, 1, {}, {}, nil, nil
         vehicles_seen = {}
         wrecked = by_unit()
+        node_of = by_unit()   -- node indices belong to this world's units, never to reused handles
         taken, blown, first_visible, me_unit = by_unit(), by_unit(), by_unit(), nil
         deaths, cleared, avatar_since, avatar_z0, own, candidate = {}, nil, by_unit(), by_unit(), nil, nil
         hot = {}

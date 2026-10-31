@@ -582,6 +582,89 @@ class ScreenTests(Case):
         self.assertIn("frv lost its weapons", self.log_text())
         self.assertTrue(all(t.a._x > 960 for t in self.screen_tris()))   # only the tank is left
 
+    def test_a_cached_frv_that_despawned_is_not_asked_for_its_mount_or_drawn(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(self.VEHICLE, [unit(0, 150, 0)])        # outside the hot refresh range
+        self.lua.execute("""
+            local fake = ...
+            local node = fake.chef.unit_node
+            fake.dead_node_reads = 0
+            fake.chef.unit_node = function(u, name)
+                if u.alive == false then fake.dead_node_reads = fake.dead_node_reads + 1; return nil end
+                return node(u, name)
+            end
+        """, self.fake)
+        self.load()
+        self.settle(count=36)                               # FRV's next sweep is not this frame
+        self.fake.units[self.VEHICLE][1].alive = False
+        self.fake.units[AVATAR][1].y = 100                   # enter its cached marker's range
+        self.look_at(0, 100)
+        self.frames(1, start=60.0)
+        self.assertEqual(self.fake.dead_node_reads, 0)
+        self.assertEqual(self.points(), [])
+
+    def test_a_unit_that_dies_during_a_mesh_read_is_not_asked_for_more_meshes(self):
+        codes = "content/objectives/obj_common/generic_intel/generic_intel"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(codes, [unit(0, 25, 0)])
+        self.lua.execute("""
+            local fake = ...
+            local call = fake.chef.call
+            fake.dead_mesh_reads = 0
+            fake.chef.call = function(name, ...)
+                local u = ...
+                if name == 'Unit.num_meshes' then u.alive = false; return 6 end
+                if name == 'Unit.mesh' and u.alive == false then
+                    fake.dead_mesh_reads = fake.dead_mesh_reads + 1
+                    return nil
+                end
+                return call(name, ...)
+            end
+        """, self.fake)
+        self.load()
+        self.settle()
+        self.assertEqual(self.fake.dead_mesh_reads, 0)
+
+    def test_a_world_change_forgets_cached_node_indices(self):
+        plant = "content/env_shared_forest/assets/samples/plant_sample_01"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(plant, [unit(0, 25, 0)])
+        self.lua.execute("""
+            local fake = ...
+            fake.node_reads = 0
+            fake.chef.unit_node = function(u, name)
+                fake.node_reads = fake.node_reads + 1
+                return 7
+            end
+        """, self.fake)
+        self.load()
+        self.settle()
+        before = self.fake.node_reads
+        self.assertGreater(before, 0)
+        self.lua.execute("local fake = ...; fake.world = {}", self.fake)
+        self.frames(1, start=40.0)
+        self.frames(40, start=50.0)                          # engine reused a handle in another world
+        self.assertGreater(self.fake.node_reads, before)
+
+    def test_a_unit_that_dies_in_node_lookup_is_not_asked_for_its_node_position(self):
+        plant = "content/env_shared_forest/assets/samples/plant_sample_01"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(plant, [unit(0, 25, 0)])
+        self.lua.execute("""
+            local fake = ...
+            local position = fake.chef.unit_position
+            fake.dead_position_reads = 0
+            fake.chef.unit_node = function(u, name) u.alive = false; return 7 end
+            fake.chef.unit_position = function(u, node)
+                if u.alive == false then fake.dead_position_reads = fake.dead_position_reads + 1; return nil end
+                return position(u, node)
+            end
+        """, self.fake)
+        self.load()
+        self.settle()
+        self.assertEqual(self.fake.dead_position_reads, 0)
+        self.assertEqual(self.mod.status, "running")
+
     def test_a_vehicle_falling_from_orbit_is_not_taken_for_destroyed(self):
         gun = "content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg"
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
