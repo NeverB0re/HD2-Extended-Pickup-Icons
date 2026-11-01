@@ -2,7 +2,7 @@
 -- HD2-Keep-On-Crash: yes
 -- Extended Pickup Icons Range (Pickup Dots): markers over samples, supplies, mission items and vehicles near you.
 -- Lua-only rebuild of Extended Pickup Icons for Chef Shared Loader (PUC Lua 5.1, no ffi).
--- It only reads unit positions and draws on the screen; it changes no game state.
+-- It reads units and guarded network state and draws on the screen; it changes no game state.
 --
 -- 0.1.0 crashed the game on entering the ship: an access violation inside a native call made
 -- from Lua, right after a world appeared. The likeliest cause is World.units_by_resource on a
@@ -22,7 +22,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.5.1-test.2'
+local VERSION = '2.5.1-test.3'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -165,6 +165,9 @@ local function write_line(file, message)
 end
 
 local function log(message) write_line(logfile, message) end
+
+local LOCAL_PLAYER = "@LOCAL_PLAYER@"   -- filled by build.py; observations are numeric, never engine handles
+local local_player = LOCAL_PLAYER(CHEF, log)
 
 -- ------------------------------------------------------------- engine access --
 local sr = rawget(_G, 'stingray')
@@ -1258,6 +1261,7 @@ local function forget_units()
     taken, blown, first_visible, me_unit = by_unit(), by_unit(), by_unit(), nil
     avatar_since, avatar_z0, own, candidate = by_unit(), by_unit(), nil, nil
     last_counts = {}
+    local_player.reset()
     M.dots = {}   -- don't expose the previous world's markers while waiting
 end
 
@@ -1292,7 +1296,24 @@ local function tick()
         read_players(world, now)   -- every frame: a running helldiver's own items stay hidden
         local cam = camera_of()   -- once a frame, after the game moved it
         me = pick_me(cam)
-        follow_own(now)
+        if local_player.mode == 'network' then
+            local observed = local_player.update(now, CHEF.in_mission())
+            M.identity = local_player.status
+            if observed and observed.death then
+                deaths, cleared = {observed.death}, nil
+                log(string.format('death: local health confirmed at %.1f %.1f %.1f',
+                    observed.death[1], observed.death[2], observed.death[3]))
+            elseif observed and observed.alive and observed.position and #deaths > 0 then
+                local p, m = observed.position, deaths[1]
+                local dx, dy = p[1] - m[1], p[2] - m[2]
+                if dx * dx + dy * dy < DEATH_CLEAR_M * DEATH_CLEAR_M and math.abs(p[3] - m[3]) < 3 then
+                    deaths = {}
+                    log('death: local player reached the mark - gone')
+                end
+            end
+        else
+            follow_own(now)   -- older/unknown game builds retain their existing behavior
+        end
         if #players > 0 and can_get then
             detect_id_form()
             sweep_step(world)

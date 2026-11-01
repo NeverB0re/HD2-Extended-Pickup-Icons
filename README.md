@@ -13,6 +13,7 @@ Player-facing description and install steps: [PUBLISH_NEXUS.txt](PUBLISH_NEXUS.t
 | --- | --- |
 | `src/pickup_dots.lua` | The mod (PUC Lua 5.1, runs inside Chef Shared Loader). `VERSION` is set here. |
 | `src/targets.lua` | Which game units get a marker: group, icon and distances per unit. |
+| `src/local_player.lua` | Build/schema-checked local player and death observations, inlined into the main Lua by `build.py`. |
 | `src/icon.png` | Mod manager icon. |
 | `build.py` | Builds `dist/Extended Pickup Icons Range v<VERSION>.zip` (Arsenal-importable). |
 | `tests/test_pickup_dots.py` | Runs the mod against a fake engine (needs `lupa`). |
@@ -38,3 +39,11 @@ and paste the printed table into `ICON_PIXELS` in `src/pickup_dots.lua`.
 Unit names come from filediver's resource listing (https://github.com/xypwn/filediver).
 Sample rarity: rare samples are Crystallized E-710, Legendarium and Black Saffron; the super sample
 is Super Uranium.
+
+## Current local test builds
+
+See [docs/staged-improvements.md](docs/staged-improvements.md). `2.5.1-test.2` isolates the Chef world-ID
+change; `2.5.1-test.3` also uses guarded local-player health/position observations on the two supported game
+builds. These are offline-tested packages, not gameplay-verified releases. Existing icons, ranges, settings,
+vehicle destruction detection and camera-relative general-marker behavior are preserved. `release/` and the
+published Nexus description still describe the earlier public version.

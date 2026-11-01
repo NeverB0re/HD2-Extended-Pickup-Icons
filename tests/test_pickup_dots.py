@@ -1835,6 +1835,318 @@ class ChefWorldTests(Case):
         self.assertEqual(self.dots(), 0)
 
 
+class NetworkIdentityTests(Case):
+    def setUp(self):
+        super().setUp()
+        self.set_units(AVATAR, [unit(0, -8, 0), unit(80, 0, 0)], loaded=False)
+        self.lua.execute(r"""
+            local fake = ...
+            fake.net = {
+                build = 'stingray:46805437a3d445f9df7662b60086ac8ae3c65b5c95da6',
+                session = {}, peer = 'local', owned = {1}, reads = {}, counts = {},
+                schema = {un6y1d = {fields = {{id = 0x0f27c68e}}},
+                          vvhx8ga = {fields = {{id = 'cb0453ea'}, {id = '8bbeb160'}}}},
+                objects = {
+                    [1] = {kind = 'un6y1d', owner = 'local', u4d1h9a = 2},
+                    [2] = {kind = 'vvhx8ga', owner = 'local', health = 125, x = 0, y = -8, z = 0},
+                    [3] = {kind = 'un6y1d', owner = 'remote', u4d1h9a = 4},
+                    [4] = {kind = 'vvhx8ga', owner = 'remote', health = 125, x = 80, y = 0, z = 0},
+                },
+            }
+            local previous = fake.chef.call
+            fake.chef.call = function(name, ...)
+                local n, a = fake.net, {...}
+                n.counts[name] = (n.counts[name] or 0) + 1
+                if name == 'Application.build_identifier' then return n.build end
+                if name == 'Network.object_info' then return n.schema[a[1]] end
+                if name == 'Network.game_session' then return n.session end
+                if name == 'Network.peer_id' then return n.peer end
+                if name == 'GameSession.objects_owned_by' then return n.owned end
+                local o = n.objects[a[2]]
+                if name == 'GameSession.game_object_exists' then return o ~= nil end
+                if name == 'GameSession.game_object_is_type' then return o ~= nil and o.kind == a[3] end
+                if name == 'GameSession.game_object_owner' then return o and o.owner end
+                if name == 'GameSession.game_object_field' then
+                    if not o then error('field of a gone object') end
+                    n.reads[#n.reads + 1] = {id = a[2], field = a[3]}
+                    if a[3] == 'position' then return stingray.Vector3(o.x, o.y, o.z) end
+                    return o[a[3]]
+                end
+                return previous(name, ...)
+            end
+        """, self.fake)
+
+    def start_network(self):
+        self.load()
+        self.settle()
+        self.assertEqual(self.mod.identity, 'local player confirmed')
+
+    def marks(self):
+        return [(d[1], d[2], d[3]) for d in self.mod.dots.values() if d[6] == 'deaths']
+
+    def death(self):
+        self.fake.net.objects[2].health = 0
+        self.frames(1, start=21)
+
+    def test_local_death_freezes_the_last_living_position_before_a_body_sinks(self):
+        self.start_network()
+        body = self.fake.net.objects[2]
+        body.health, body.x, body.z = 0, 30, -20
+        self.frames(1, start=21)
+        self.assertEqual(self.marks(), [(0, -8, 1.2)])
+        body.z = -100
+        self.frames(120, start=22)
+        self.assertEqual(self.marks(), [(0, -8, 1.2)])
+        self.assertEqual(self.log_text().count('death: local health confirmed'), 1)
+
+    def test_teammate_death_reinforcement_and_departure_do_not_create_a_mark(self):
+        self.start_network()
+        self.lua.execute("""
+            local fake = ...
+            fake.cam.pos = {80, -2, 0.6}
+            fake.net.objects[4].health = 0
+        """, self.fake)
+        self.frames(60, start=21)
+        self.lua.execute("""
+            local fake = ...
+            fake.net.objects[3].u4d1h9a = 5
+            fake.net.objects[5] = {kind='vvhx8ga', owner='remote', health=125, x=80, y=0, z=490}
+        """, self.fake)
+        self.frames(60, start=23)
+        self.fake.net.objects[5].z = 0
+        self.frames(60, start=25)
+        self.fake.net.objects[3], self.fake.net.objects[4], self.fake.net.objects[5] = None, None, None
+        self.frames(120, start=27)
+        self.assertEqual(self.marks(), [])
+
+    def test_a_teammate_at_your_mark_cannot_clear_it_but_you_can(self):
+        self.start_network()
+        self.death()
+        self.lua.execute("""
+            local fake = ...
+            fake.net.objects[1].u4d1h9a = 5
+            fake.net.objects[5] = {kind='vvhx8ga', owner='local', health=125, x=50, y=0, z=490}
+            fake.net.objects[4].x, fake.net.objects[4].y = 0, -8
+            fake.cam.pos = {0, -10, 0.6}
+        """, self.fake)
+        self.frames(60, start=23)
+        self.assertEqual(self.marks(), [(0, -8, 1.2)])
+        self.fake.net.objects[5].x, self.fake.net.objects[5].y = 0, -8
+        self.frames(1, start=25)
+        self.assertEqual(len(self.marks()), 1)                 # your hellpod is still high above it
+        self.fake.net.objects[5].z = 0
+        self.frames(1, start=26)
+        self.assertEqual(self.marks(), [])
+
+    def test_a_missing_health_read_is_not_zero_and_breaks_the_transition(self):
+        self.start_network()
+        self.fake.net.objects[2].health = None
+        self.frames(1, start=21)
+        self.fake.net.objects[2].health = 0
+        self.frames(1, start=21.1)
+        self.assertEqual(self.marks(), [])
+
+    def test_a_long_gap_cannot_confirm_a_death_from_old_health(self):
+        self.start_network()
+        self.fake.net.objects[2].health = 0
+        self.frames(1, start=60)
+        self.assertEqual(self.marks(), [])
+
+    def test_seeing_a_dead_avatar_for_the_first_time_does_not_create_a_mark(self):
+        self.fake.net.objects[2].health = 0
+        self.start_network()
+        self.assertEqual(self.marks(), [])
+
+    def test_a_new_avatar_does_not_inherit_the_previous_avatars_health(self):
+        self.start_network()
+        self.lua.execute("""
+            local fake = ...
+            fake.net.objects[1].u4d1h9a = 5
+            fake.net.objects[5] = {kind='vvhx8ga', owner='local', health=0, x=60, y=0, z=-20}
+        """, self.fake)
+        self.frames(1, start=21)
+        self.assertEqual(self.marks(), [])
+
+    def test_missing_schema_blocks_field_reads_without_stopping_other_markers(self):
+        self.fake.net.schema.vvhx8ga.fields = self.lua.table()
+        self.set_units(SAMPLE, [unit(0, 25, 0)])
+        self.load()
+        self.settle()
+        self.assertIn('schema unavailable', self.mod.identity)
+        self.assertEqual(len(self.fake.net.reads), 0)
+        self.assertEqual(self.dots(), 1)
+
+    def test_recycled_avatar_object_is_checked_before_reading_its_fields(self):
+        self.start_network()
+        before = len(self.fake.net.reads)
+        self.fake.net.objects[2].kind = 'weapon'
+        self.frames(1, start=21)
+        reads = list(self.fake.net.reads.values())[before:]
+        self.assertTrue(all(r.id != 2 for r in reads))
+        self.assertEqual(self.marks(), [])
+
+    def test_multiple_local_player_objects_are_ambiguous_not_first_match_wins(self):
+        self.fake.net.owned = self.lua.table(1, 3)
+        self.fake.net.objects[3].owner = 'local'
+        self.load()
+        self.settle()
+        self.assertIn('ambiguous', self.mod.identity)
+        self.assertEqual(len(self.fake.net.reads), 0)
+
+    def test_a_remote_player_in_the_owned_list_is_not_selected(self):
+        self.fake.net.owned = self.lua.table(3)
+        self.load()
+        self.settle()
+        self.assertIn('not found', self.mod.identity)
+        self.assertEqual(len(self.fake.net.reads), 0)
+
+    def test_avatar_disappearance_is_not_itself_a_death(self):
+        self.start_network()
+        self.fake.net.objects[2] = None
+        self.frames(120, start=21)
+        self.assertEqual(self.marks(), [])
+
+    def test_duplicate_ids_do_not_make_one_player_ambiguous(self):
+        self.fake.net.owned = self.lua.table(1, 1, 1)
+        self.start_network()
+
+    def test_a_new_session_drops_previous_health_history(self):
+        self.start_network()
+        self.fake.net.session = self.lua.table()
+        self.fake.net.objects[2].health = 0
+        self.frames(1, start=21)
+        self.assertEqual(self.marks(), [])
+
+    def test_mission_exit_is_not_a_death(self):
+        self.start_network()
+        self.fake.mission = False
+        self.fake.net.objects[2].health = 0
+        self.frames(60, start=21)
+        self.assertEqual(self.marks(), [])
+
+    def test_local_player_discovery_is_bounded_and_a_valid_player_is_cached(self):
+        self.lua.execute("""
+            local fake = ...
+            for id = 10, 109 do
+                fake.net.objects[id] = {kind='not_player', owner='local'}
+                fake.net.owned[#fake.net.owned+1] = id
+            end
+        """, self.fake)
+        self.load()
+        self.frames(1, start=11)
+        self.frames(1, start=20)
+        self.assertLessEqual(self.fake.net.counts['GameSession.game_object_is_type'], 32)
+        self.frames(10, start=20.1)
+        self.assertEqual(self.mod.identity, 'local player confirmed')
+        scans = self.fake.net.counts['GameSession.objects_owned_by']
+        self.frames(60, start=21)
+        self.assertEqual(self.fake.net.counts['GameSession.objects_owned_by'], scans)
+
+    def test_an_explicit_empty_avatar_reference_can_confirm_old_local_health(self):
+        self.start_network()
+        self.fake.net.objects[2].health = 0
+        self.fake.net.objects[1].u4d1h9a = 32767
+        self.frames(1, start=21)
+        self.assertEqual(self.marks(), [(0, -8, 1.2)])
+        self.frames(30, start=21.1)
+        self.assertEqual(self.log_text().count('death: local health confirmed'), 1)
+
+    def test_a_missing_avatar_reference_cannot_confirm_old_local_health(self):
+        self.start_network()
+        self.fake.net.objects[2].health = 0
+        self.fake.net.objects[1].u4d1h9a = None
+        self.frames(1, start=21)
+        self.assertEqual(self.marks(), [])
+
+    def test_reinforcement_can_confirm_old_health_without_adopting_another_player(self):
+        self.start_network()
+        self.lua.execute("""
+            local fake = ...
+            fake.net.objects[2].health = 0
+            fake.net.objects[1].u4d1h9a = 5
+            fake.net.objects[5] = {kind='vvhx8ga', owner='local', health=125, x=50, y=0, z=490}
+        """, self.fake)
+        self.frames(1, start=21)
+        self.assertEqual(self.marks(), [(0, -8, 1.2)])
+
+    def test_a_second_confirmed_death_replaces_the_first(self):
+        self.start_network()
+        self.death()
+        self.lua.execute("""
+            local fake = ...
+            fake.net.objects[1].u4d1h9a = 5
+            fake.net.objects[5] = {kind='vvhx8ga', owner='local', health=125, x=50, y=0, z=0}
+        """, self.fake)
+        self.frames(1, start=23)
+        self.fake.net.objects[5].health = 0
+        self.frames(1, start=23.1)
+        self.assertEqual(self.marks(), [(50, 0, 1.2)])
+
+    def test_a_missing_session_does_not_create_a_mark(self):
+        self.start_network()
+        self.fake.net.session = None
+        self.fake.net.objects[2].health = 0
+        self.frames(60, start=21)
+        self.assertEqual(self.marks(), [])
+
+    def test_an_unknown_build_retains_legacy_without_trying_network_fields(self):
+        self.fake.net.build = 'stingray:future-build'
+        self.load()
+        self.settle()
+        self.assertIsNone(self.fake.net.counts['Network.object_info'])
+        self.assertEqual(len(self.fake.net.reads), 0)
+        self.assertIn('legacy: no supported network schema', self.log_text())
+
+    def test_the_older_supported_build_uses_the_same_validated_schema(self):
+        self.fake.net.build = 'stingray:46659 e176252a3ac4eb5436b25e7cef665a8c71afa243'
+        self.start_network()
+
+    def test_a_refused_native_read_does_not_disable_the_mod_or_create_a_death(self):
+        self.start_network()
+        self.lua.execute("""
+            local fake = ...
+            local previous = fake.chef.call
+            fake.chef.call = function(name, ...)
+                if name == 'GameSession.game_object_field' then error('refused in this fixture') end
+                return previous(name, ...)
+            end
+        """, self.fake)
+        self.frames(60, start=21)
+        self.assertEqual(self.mod.status, 'running')
+        self.assertEqual(self.marks(), [])
+
+    def test_a_player_whose_ownership_changed_is_not_read_as_local(self):
+        self.start_network()
+        before = len(self.fake.net.reads)
+        self.fake.net.objects[1].owner = 'remote'
+        self.fake.net.objects[2].health = 0
+        self.frames(1, start=21)
+        self.assertEqual(len(self.fake.net.reads), before)
+        self.assertEqual(self.marks(), [])
+
+    def test_chef_world_wait_preserves_a_numeric_mark_but_a_new_world_clears_it(self):
+        self.lua.execute("""
+            local fake = ...
+            fake.world_id = 1
+            fake.chef.world = function() return fake.world end
+            fake.chef.world_id = function() return fake.world_id end
+        """, self.fake)
+        self.start_network()
+        self.death()
+        self.assertEqual(self.marks(), [(0, -8, 1.2)])
+        self.fake.world = None
+        self.frames(1, start=22)
+        self.assertEqual(self.marks(), [])                       # no stale output while waiting
+        self.lua.execute("local fake = ...; fake.world = fake.new_world('same engine world')", self.fake)
+        self.frames(1, start=23)
+        self.frames(40, start=32)
+        self.assertEqual(self.marks(), [(0, -8, 1.2)])
+        self.fake.world_id = 2
+        self.frames(1, start=40)
+        self.frames(40, start=49)
+        self.assertEqual(self.marks(), [])
+
+
 class ArchiveTests(unittest.TestCase):
     def test_boot_mod_loader_finds_the_mod(self):
         """Read the archive the way boot_mod_loader.lua's declared_in() does."""

@@ -20,6 +20,7 @@ import zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCE = os.path.join(HERE, "src", "pickup_dots.lua")
 TARGETS = os.path.join(HERE, "src", "targets.lua")
+LOCAL_PLAYER = os.path.join(HERE, "src", "local_player.lua")
 ICON = os.path.join(HERE, "src", "icon.png")   # the Nexus mod's icon
 DIST = os.path.join(HERE, "dist")
 NAME = "Extended Pickup Icons Range"
@@ -84,8 +85,10 @@ in your mod manager (in Arsenal, by default, the bottom of the list).
 Good to know:
 - Valves and cranks stay marked after you turn them.
 - At most the 40 nearest markers are drawn at once.
-- Where you died is worked out from the camera (it takes your helldiver dropped in by a
-  hellpod); only your last death is marked.
+- On supported game builds, where you died is fixed at your last living position when
+  your own health reaches zero. It does not follow a corpse or a spectated teammate.
+  Unknown builds keep the earlier camera-based method. Only your last death is marked.
+  Missing or ambiguous network data can delay or miss a mark; it is not treated as death.
 """
 
 
@@ -209,6 +212,11 @@ def built_source():
     if not source.startswith("-- HD2-Addon: " + RESOURCE + "\n"):
         raise SystemExit("the first line must declare " + RESOURCE)
     source = source.replace('"@TARGETS@"', "(function()\n" + targets + "end)()")
+    with open(LOCAL_PLAYER, encoding="utf-8") as f:
+        local_player = f.read()
+    if source.count('"@LOCAL_PLAYER@"') != 1:
+        raise SystemExit("pickup_dots.lua has no single local-player slot")
+    source = source.replace('"@LOCAL_PLAYER@"', "(function()\n" + local_player + "\nend)()")
     if source.count('"@ICONS@"') != 1:
         raise SystemExit("pickup_dots.lua has no single \"@ICONS@\" slot")
     source = source.replace('"@ICONS@"', ICON_TABLE)
