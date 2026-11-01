@@ -62,7 +62,8 @@ Loader and called-in Hellbomb feasibility: [investigation](docs/loader-and-hellb
 No loader port is enabled. `2.5.1-test.12` adds the fixed mission Hellbomb to the existing red Hellbomb
 markers and shared settings. It removes deleted units and reversibly hides models whose previously
 visible geometry disappears; portable backpacks and ship props are excluded. All 189 offline tests pass.
-The new mission-bomb lifecycle has not been verified in gameplay.
+The owner confirmed mission-bomb display/removal and vehicle destruction/despawn marker behavior
+in gameplay on 2026-11-01. A teammate-independent Hellbomb countdown is under investigation; it is not enabled.
 Existing icons, ranges, settings,
 vehicle destruction detection and camera-relative general-marker behavior are preserved. `release/` and the
 published Nexus description still describe the earlier public version.

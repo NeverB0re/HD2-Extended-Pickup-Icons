@@ -292,3 +292,38 @@ This implements the requested conservative removal design, not a verified native
 If the bomb explodes but leaves its unit alive with visible remnant geometry, these two signals may not
 identify that state. Current game data does not establish that path. Gameplay validation remains unrun;
 no additional experiment is required of the owner before receiving this test build.
+
+## Owner gameplay confirmation and countdown investigation — 2026-11-01
+
+The owner confirms vehicle markers disappear after destruction and do not reappear underground after
+despawn, and the new mission Hellbomb marker appears correctly and disappears after destruction. Record
+those scenarios as gameplay-confirmed. This is not proof of eliminating every random native crash or
+all multiplayer death-marker edge cases. The inspected current local log identifies test.12 and a clean
+shutdown; it does not itself contain the specific Hellbomb destruction event, so do not manufacture a
+log-derived destruction timestamp.
+
+New request: assess per-Hellbomb activation/countdown display, equally when activated by the local player
+or a teammate. No keyboard/input/proximity heuristic is acceptable as authoritative activation. A player
+may approach or join after another player arms the bomb, so first observation cannot restart a full fuse.
+Prefer a verified replicated remaining duration or detonation deadline. If only an armed transition can
+be observed, a locally estimated timer requires a verified duration/transition and must handle initially
+armed objects as unknown rather than freshly armed. Early explosion/removal must cancel any display.
+
+Offline evidence:
+
+- The fixed bomb's animation graph has top_retracted -> top_extend via raise_top; top_extend uses
+  hellbomb_activate and emits top_done. That is an activation-related visual candidate, not proof of the
+  exact gameplay fuse start. Live animation-state reads remain excluded after the prior native crash.
+- In the current extracted schema, candidate name hashes active=b19ad128, is_armed=b0e87fae and
+  timer=6bdd349b occur in 188, 71 and 2 types respectively. Timer occurs in 4d57c925 and 94408f1d;
+  94408f1d also has position/active. No type has been tied to either Hellbomb unit and timer value
+  semantics are unverified. Do not read guessed game-object fields or enable a countdown from these names.
+- Fresh official Chef MODDING documentation has no built-in Hellbomb armed/shot event. Its event bus alone
+  cannot create the missing game signal. https://github.com/Th3chef/Chef-Shared-Loader/blob/main/docs/MODDING.md
+- Published gameplay descriptions of damaged map bombs distinguish a delayed light-damage trigger from
+  immediate detonation by strong damage. Do not assume one fixed fuse for every damaged bomb. Exact live
+  numeric fuse durations have not been established from the installed game's gameplay data in this audit.
+  https://helldivers.wiki.gg/wiki/Damaged_Hellbomb
+
+Conclusion: the renderer can display a per-unit countdown, but reliable teammate-independent activation
+and remaining-time observation are not yet established. No countdown or additional engine read is enabled.
