@@ -83,3 +83,26 @@ compiles on Lua 5.1; its addon id and all 135 texture ids use the new namespace.
 and stream data, mod-manager icon and manifest/GUID are byte-identical to test.3. Local-player logic and the
 target table are unchanged. The settings-prefix local stays inside `register_settings` to respect Lua 5.1's
 200-local limit in the main chunk.
+
+## Stage 3 — 2.5.1-test.5: separate membership discovery from position refresh
+
+The complete resource sweep is unchanged (12 of 86 keys per frame; one pass in eight frames). Nearby
+non-vehicle resource groups refresh the positions of their known units between sweeps instead of calling
+`World.units_by_resource` again. New members are discovered within that full-sweep bound. A member of an
+already-hot resource can therefore appear later than the former every-frame hot discovery, by up to seven
+frames; no range, icon, category or setting is removed. Known moving units still update every frame, and
+gone units are dropped on the next refresh. Loaded-resource checks and the crash guards remain in force.
+
+Vehicles, weapons and wrecks retain their same-frame membership discovery: the disappearance of a gun must
+still hide a rolling wreck immediately. Native position reads have not been throttled. The flying-item
+fixture now moves one stable unit handle; replacement handles are covered separately as discovery.
+
+All 151 tests pass. `tools/compare_discovery_reads.py` compares 240 frames with baseline `483270b`:
+
+| Fixture | Resource/avatar enumerations before → after | Position reads before → after | Markers before → after |
+| --- | --- | --- | --- |
+| 10 nearby item resources | 2640 → 540 | 2640 → 2640 | 10 → 10 |
+| 10 far item resources | 540 → 540 | 540 → 540 | 0 → 0 |
+| Nearby items plus FRV/gun | 3120 → 1020 | 3120 → 3120 | 11 → 11 |
+
+These are deterministic fake-engine call counts, not measured gameplay time or FPS improvements.

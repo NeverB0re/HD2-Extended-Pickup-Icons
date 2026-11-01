@@ -22,7 +22,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.5.1-test.4'
+local VERSION = '2.5.1-test.5'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -392,18 +392,36 @@ local function read_key(world, i)
     return points, false
 end
 
--- Resources with an item near you in the last frame: read again every frame, so an item thrown by an
--- explosion moves smoothly instead of jumping about four times a second.
+-- Membership discovery stays on the complete sweep. Between sweeps, refresh the known nearby units'
+-- positions without enumerating their resource again. A moving item still updates every frame; a new
+-- unit is discovered within the existing full-sweep bound. Vehicles/arms/wrecks keep same-frame discovery.
 local hot = {}           -- list of key indices, made by collect_dots
 local vehicles_near = false   -- a vehicle near you in the last frame: READ_TOGETHER read every frame (2.4.0)
 local hot_reads = 0      -- for the status line
 
 local function refresh_hot(world, first, last)
+    local function refresh_positions(i)
+        local ask = key_for(keys[i])
+        if not loaded(ask, keys[i].label) then found[i] = {}; return end
+        local points = found[i] or {}
+        local write = 1
+        for read = 1, #points do
+            local p = points[read]
+            local x, y, z = position_of(p.unit)
+            if x then
+                p[1], p[2], p[3] = x, y, z
+                points[write] = p
+                write = write + 1
+            end
+        end
+        for j = #points, write, -1 do points[j] = nil end
+        found[i] = points
+    end
     local done = 0
     for _, i in ipairs(hot) do
         if done >= HOT_PER_FRAME then break end
         if i < first or i > last then  -- (the sweep has just read the ones in its own batch)
-            found[i] = read_key(world, i)
+            refresh_positions(i)
             done = done + 1
         end
     end

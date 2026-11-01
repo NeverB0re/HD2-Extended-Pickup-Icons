@@ -445,12 +445,66 @@ class DrawingTests(Case):
         self.set_units(MARK, [unit(8)])
         self.load()
         self.settle()
+        flying = self.fake.units[MARK][1]
         for k in range(1, 6):            # thrown by an explosion: a new place every frame
-            self.set_units(MARK, [unit(8 + k * 0.5, 0, k * 0.3)])
+            # Movement keeps the engine unit's identity. Creating a replacement unit tests discovery instead.
+            flying.x, flying.z = 8 + k * 0.5, k * 0.3
             self.frames(1, start=21.0 + k / 60)
             cx, cy, cz = self.centre()
             self.assertAlmostEqual(cx, 8 + k * 0.5, places=6)
             self.assertAlmostEqual(cz, k * 0.3 + 0.6, places=6)
+
+    def test_hot_units_move_each_frame_without_reenumerating_their_resource(self):
+        self.set_units(AVATAR, [unit(0)], loaded=False)
+        self.set_units(MARK, [unit(8)])
+        self.load()
+        self.settle()
+        before = self.fake.lookups[MARK]
+        target = self.fake.units[MARK][1]
+        for k in range(32):
+            target.x = 8 + k * 0.1
+            self.frames(1, start=21 + k / 60)
+            self.assertAlmostEqual(self.centre()[0], target.x)
+        self.assertLessEqual(self.fake.lookups[MARK] - before, 4)
+
+    def test_a_new_unit_of_a_hot_resource_is_discovered_within_a_full_sweep(self):
+        self.set_units(AVATAR, [unit(0)], loaded=False)
+        self.set_units(MARK, [unit(8)])
+        self.load()
+        self.settle()
+        self.lua.execute("""
+            local fake, name = ...
+            fake.units[name][2] = {x=12, y=0, z=0, alive=true}
+        """, self.fake, MARK)
+        self.frames(8, start=21)
+        self.assertEqual(self.dots(), 2)
+
+    def test_a_cached_hot_unit_that_despawns_is_removed_on_the_next_frame(self):
+        self.set_units(AVATAR, [unit(0)], loaded=False)
+        self.set_units(MARK, [unit(8)])
+        self.load()
+        self.settle()
+        self.fake.units[MARK][1].alive = False
+        self.frames(1, start=21)
+        self.assertEqual(self.dots(), 0)
+
+    def test_hot_cache_cannot_read_positions_after_its_resource_unloads(self):
+        self.set_units(AVATAR, [unit(0)], loaded=False)
+        self.set_units(MARK, [unit(8)])
+        self.load()
+        self.settle()
+        self.fake.loaded[MARK] = False
+        self.lua.execute("""
+            local fake, name = ...
+            local position = fake.chef.unit_position
+            fake.chef.unit_position = function(u, node)
+                if u == fake.units[name][1] then error('unloaded target must not be read') end
+                return position(u, node)
+            end
+        """, self.fake, MARK)
+        self.frames(1, start=21)
+        self.assertEqual(self.dots(), 0)
+        self.assertNotIn('tick failed', self.log_text())
 
     def test_far_items_are_not_read_every_frame(self):
         self.set_units(AVATAR, [unit(0)], loaded=False)
