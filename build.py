@@ -58,7 +58,8 @@ What gets a marker (default distance):
 - Mission items (50 m): SSSDs, data drives, black boxes, larva containers (in sky blue),
   launch codes, keycards, video cameras, artillery shells, warheads and other things you carry.
 - Mission objectives (50 m): drop-off points, cargo containers, valves and cranks.
-- Hellbombs (100 m): the hellbombs lying about the map that blow up when shot, in red.
+- Hellbombs (100 m): map-placed bombs and fixed mission Hellbomb call-ins, in red.
+  Uses the same Hellbomb toggle and range. Portable backpack bombs are not included.
 - Vehicles (100 m): exosuits, FRVs and tanks, in sky blue; out of view, at the screen's edge
   with an arrow.
 - Where you died (500 m): a red skull where your gear lies (your sample container, else your

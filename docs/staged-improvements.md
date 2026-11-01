@@ -266,3 +266,29 @@ gameplay-confirmed sample-container death fix. New node timing/geometry guards s
 The owner has deferred color changes and multiplayer validation (await user feedback), excluded separate
 map-open ranges, and requested read-only loader compatibility/called-in Hellbomb investigation. No loader
 port, game deployment or additional target is enabled by this test build.
+
+## Fixed mission Hellbomb — 2.5.1-test.12
+
+At the owner's request, add `content/fac_helldivers/hellpod/hellbomb/hellbomb` to the existing Hellbomb
+group. It uses the same red icon, height, size, distance text, visibility toggle and range (100 m default).
+The group label now includes mission call-ins; persisted setting keys and all 20 settings are unchanged.
+Neither `hellbomb_prop` nor the portable `bomb_backpack` is a target. The new mission-only target is
+suppressed on the ship without changing map-bomb behavior. There are 87 target resources, still within
+the existing eight-frame full discovery sweep.
+
+Two removal conditions apply: an engine-deleted unit is removed through the existing guarded unit access,
+and a previously nonempty visible-mesh box becoming empty suppresses the marker through the reversible
+visibility guard (at most two box checks/s for an in-range unit). Positive geometry restores it; refused
+reads retain the last confirmed state. Initial deployment invisibility does not permanently remove a bomb.
+No fuse timer or animation/network field is guessed. Existing map-placed defunct bombs retain their
+previous verified terminal all-mesh-hidden behavior.
+
+All 189 offline tests pass. Nine new cases cover matching icon/tint/range and shared settings, engine
+deletion with cached membership, complete geometry loss and recovery, initially hidden deployment,
+refused reads after hiding, new units at an old hidden location, ship behavior, and prop/backpack exclusion.
+The new marker did not exist in the previous module (seven new tests fail there at their marker assertions).
+
+This implements the requested conservative removal design, not a verified native destruction mapping.
+If the bomb explodes but leaves its unit alive with visible remnant geometry, these two signals may not
+identify that state. Current game data does not establish that path. Gameplay validation remains unrun;
+no additional experiment is required of the owner before receiving this test build.

@@ -59,7 +59,10 @@ positive visible baseline. `2.5.1-test.11` also delays vehicle mount reads until
 weapon-loss/detachment detection during motion. All 180 offline tests pass; these new guards need
 gameplay verification. Still-visible sinking objects are not classified by height or movement alone.
 Loader and called-in Hellbomb feasibility: [investigation](docs/loader-and-hellbomb-audit-2026-11-01.md).
-No loader port or new target is enabled in this stability package.
+No loader port is enabled. `2.5.1-test.12` adds the fixed mission Hellbomb to the existing red Hellbomb
+markers and shared settings. It removes deleted units and reversibly hides models whose previously
+visible geometry disappears; portable backpacks and ship props are excluded. All 189 offline tests pass.
+The new mission-bomb lifecycle has not been verified in gameplay.
 Existing icons, ranges, settings,
 vehicle destruction detection and camera-relative general-marker behavior are preserved. `release/` and the
 published Nexus description still describe the earlier public version.

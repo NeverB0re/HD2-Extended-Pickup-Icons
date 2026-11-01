@@ -268,7 +268,7 @@ class DrawingTests(Case):
         self.assertGreater(self.fake.updates, 0)
         self.assertEqual(set(self.fake.lookups.keys()), {AVATAR, MARK})
         self.assertIn("can_get: present", log)
-        self.assertIn("86 target resources: 80 named, 6 by id only (looked up if the id self-test passes)", log)
+        self.assertIn("87 target resources: 81 named, 6 by id only (looked up if the id self-test passes)", log)
         self.frames(1, start=200.0)                   # the next status line, after a full sweep
         log = self.log_text()
         self.assertIn("found: il_sarcophagus=2", log)
@@ -622,6 +622,105 @@ class DespawnTests(Case):
         self.frames(1, start=24)
         self.frames(40, start=33)
         self.assertEqual(self.dots(), 1)  # same fake handle in a new world has no previous visible baseline
+
+
+class MissionHellbombTests(Case):
+    BOMB = 'content/fac_helldivers/hellpod/hellbomb/hellbomb'
+    DEFUNCT = 'content/fac_helldivers/hellpod/hellbomb_defunct/hellbomb_defunct'
+
+    def prepare(self, hidden=False):
+        self.set_units(AVATAR, [unit(0, -8)], loaded=False)
+        self.set_units(self.BOMB, [dict(unit(0, 25), blown=hidden)])
+        self.load()
+        self.settle()
+        self.assertEqual(self.dots(), 1)
+        return self.fake.units[self.BOMB][1]
+
+    def test_mission_bomb_uses_the_existing_icon_color_and_100m_range(self):
+        self.set_units(AVATAR, [unit(0, -8)], loaded=False)
+        self.set_units(self.BOMB, [unit(-5, 25), unit(0, 150)])
+        self.set_units(self.DEFUNCT, [unit(5, 25)])
+        self.fake.textures_loaded = True
+        self.load()
+        self.settle()
+        self.assertEqual(self.dots(), 2)
+        self.assertTrue(all(d[6] == 'hellbombs' and d[7] == 'hellbomb' for d in self.mod.dots.values()))
+        icons = list(self.fake.bitmaps.values())[-2:]
+        self.assertEqual(len(icons), 2)
+        self.assertTrue(all(b.tex.startswith('hellbomb_') for b in icons))
+        self.assertTrue(all((b.c.r, b.c.g, b.c.b) == (255, 90, 70) for b in icons))
+        self.assertEqual(len(list(self.fake.options.keys())), 20)  # same show/range controls, no extra switch
+
+    def test_deleted_mission_bomb_loses_its_marker_with_cached_membership(self):
+        body = self.prepare()
+        body.alive = False
+        self.frames(1, start=22)
+        self.assertEqual(self.dots(), 0)
+
+    def test_visible_bomb_that_loses_all_geometry_is_hidden_until_it_returns(self):
+        body = self.prepare()
+        body.blown, body.z = True, -20
+        self.frames(40, start=22)
+        self.assertEqual(self.dots(), 0)
+        body.blown, body.z = False, 0
+        self.frames(40, start=24)
+        self.assertEqual(self.dots(), 1)
+
+    def test_initial_deployment_visibility_is_not_terminal_destruction(self):
+        body = self.prepare(hidden=True)
+        body.blown = False
+        self.frames(40, start=22)
+        self.assertEqual(self.dots(), 1)
+        body.blown = True
+        self.frames(40, start=24)
+        self.assertEqual(self.dots(), 0)
+
+    def test_refused_box_read_does_not_revive_hidden_bomb(self):
+        body = self.prepare()
+        body.blown = True
+        self.frames(40, start=22)
+        self.lua.execute('local f=...; local call=f.chef.call; f.chef.call=function(n, ...) if n=="Unit.box" then return nil,"refused" end return call(n, ...) end', self.fake)
+        self.frames(40, start=24)
+        self.assertEqual(self.dots(), 0)
+
+    def test_ship_prop_and_portable_backpack_are_not_targets(self):
+        self.set_units(AVATAR, [unit(0, -8)], loaded=False)
+        for key in ('content/fac_helldivers/hellpod/hellbomb/hellbomb_prop',
+                    'content/fac_helldivers/equipment/backpacks/bomb_backpack/bomb_backpack'):
+            self.set_units(key, [unit(0, 25)])
+        self.load()
+        self.settle()
+        self.assertEqual(self.dots(), 0)
+
+    def test_new_bomb_at_old_hidden_bomb_position_keeps_its_marker(self):
+        body = self.prepare()
+        body.blown = True
+        self.frames(40, start=22)
+        self.assertEqual(self.dots(), 0)
+        self.set_units(self.BOMB, [unit(0, 25)])
+        self.frames(40, start=24)
+        self.assertEqual(self.dots(), 1)
+
+    def test_mission_bomb_is_hidden_on_ship_without_changing_map_bombs(self):
+        self.set_units(AVATAR, [unit(0, -8)], loaded=False)
+        self.set_units(self.BOMB, [unit(-5, 25)])
+        self.set_units(self.DEFUNCT, [unit(5, 25)])
+        self.load()
+        self.settle()
+        self.assertEqual(self.dots(), 2)
+        self.fake.mission = False
+        self.frames(1, start=22)
+        self.assertEqual(self.dots(), 1)
+        self.assertEqual(self.points()[0][0], 5)
+
+    def test_existing_hellbomb_toggle_hides_both_types(self):
+        self.lua.execute('ModOptionsMenu.get=function(id) if id=="pickup_dots.show_hellbombs" then return false end end')
+        self.set_units(AVATAR, [unit(0, -8)], loaded=False)
+        self.set_units(self.BOMB, [unit(-5, 25)])
+        self.set_units(self.DEFUNCT, [unit(5, 25)])
+        self.load()
+        self.settle()
+        self.assertEqual(self.dots(), 0)
 
 
 class VehicleNodeTimingTests(Case):

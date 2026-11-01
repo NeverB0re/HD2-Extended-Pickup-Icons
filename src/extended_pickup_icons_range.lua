@@ -22,7 +22,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.5.1-test.11'
+local VERSION = '2.5.1-test.12'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -55,7 +55,7 @@ local ICON_TEX = "@ICONS@"
 local ICON_SIZE = {ammo = 19, grenade = 22, stim = 27, egg = 20, tube = 20, common = 18, rare = 18, super = 18,
                    package = 28, larva = 28, hellbomb = 28, tank = 34.5, car = 34.5, walker = 34.5, skull = 28}
 local VEHICLE_RGB = {110, 205, 255}   -- vehicles: the sky blue of the HUD's support weapon icons
-local HELLBOMB_RGB = {255, 90, 70}    -- hellbombs lying about the map (2.3.0): red, they blow up when shot
+local HELLBOMB_RGB = {255, 90, 70}    -- map-placed and fixed mission Hellbombs share the red marker
 local DEATH_RGB = {235, 50, 40}       -- where you died (2.5.0): the skull of the game's death screen, red
 -- The icons (all white textures) drawn in a colour: the vehicles and what you carry on your back sky blue (2.3.0),
 -- the hellbomb and the skull red
@@ -298,10 +298,12 @@ local function build_keys()
     local unnamed = 0
     for _, t in ipairs(TARGETS) do
         if t.name then
-            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount, box = t.box}
+            keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount, box = t.box,
+                reversible_visibility = t.reversible_visibility, mission_only = t.mission_only}
         elseif t.hex then
             unnamed = unnamed + 1
-            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount, box = t.box}
+            keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount, box = t.box,
+                reversible_visibility = t.reversible_visibility, mission_only = t.mission_only}
         end
     end
     for i, k in ipairs(keys) do
@@ -650,9 +652,9 @@ end
 -- In particular, don't infer despawn from absolute height, falling motion, or a failed native read.
 local blown = by_unit()
 
-local function blown_up(p, now, group)
+local function blown_up(p, now, group, reversible)
     if p.unit == nil then return false end
-    if group == 'hellbombs' then
+    if group == 'hellbombs' and not reversible then
         if blown[p.unit] == true then return true end
         if no_visible_mesh(p.unit, p.kind) then
             blown[p.unit] = true
@@ -663,7 +665,7 @@ local function blown_up(p, now, group)
     end
     -- Controls/drop-offs may be invisible interaction units; codes have their existing mesh-state rule.
     if (group ~= 'samples' and group ~= 'supplies' and group ~= 'mission' and group ~= 'carry'
-        and group ~= 'vehicles') then return false end
+        and group ~= 'vehicles' and not reversible) then return false end
     local state = blown[p.unit]
     if state == nil then state = {at = now, seen = false, hidden = false}; blown[p.unit] = state end
     if now >= state.at then
@@ -700,7 +702,7 @@ local function collect_dots(now)
     for i = 1, #keys do
         local group = keys[i].group
         local range = SHOW[setting_of(group)] ~= false and (RANGE[setting_of(group)] or 0) or 0
-        if on_ship and SHIP_HIDDEN[group] then range = 0 end
+        if on_ship and (SHIP_HIDDEN[group] or keys[i].mission_only) then range = 0 end
         local points = found[i]
         if points and range > 0 then
             local c = counts[group] or {drawn = 0, worn = 0, far = 0}
@@ -717,7 +719,7 @@ local function collect_dots(now)
                     node_of[p.unit] = nil
                     blown[p.unit] = nil
                     c.worn = c.worn + 1
-                elseif not keys[i].taken and blown_up(p, now, group) then
+                elseif not keys[i].taken and blown_up(p, now, group, keys[i].reversible_visibility) then
                     c.worn = c.worn + 1
                 elseif group == 'vehicles' then
                     -- destroyed, you in or at it, or someone else in a moving one: no marker
@@ -1436,7 +1438,7 @@ local TEXTS = {
     range_mission = {'Mission items distance (m)', 'Marked within this many metres of you. 0 shows none.'},
     show_objectives = {'Show mission objectives (drop-off points, valves, cranks)', 'Drop-off points, cargo containers, valves and cranks.'},
     range_objectives = {'Mission objectives distance (m)', 'Marked within this many metres of you. 0 shows none.'},
-    show_hellbombs = {'Show hellbombs (the ones that blow up when shot)', 'Hellbombs lying about the map, which blow up when shot.'},
+    show_hellbombs = {'Show hellbombs (map and mission call-ins)', 'Map-placed Hellbombs and fixed mission Hellbombs called in from the ship.'},
     range_hellbombs = {'Hellbombs distance (m)', 'Marked within this many metres of you. 0 shows none.'},
     show_vehicles = {'Show vehicles (exosuits, FRVs, tanks)', 'Exosuits, FRVs and tanks.'},
     range_vehicles = {'Vehicles distance (m)', 'Marked within this many metres of you. 0 shows none.'},
