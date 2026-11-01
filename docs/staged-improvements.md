@@ -128,3 +128,15 @@ be checked in the affected vehicle. Logs now identify which position source was 
 All 156 tests pass. The boarding-point case fails on the prior module and passes after the change. Tests
 also cover spectator isolation, transient map gaps, gone units and stale snapshot rejection. This does not
 establish that the affected live vehicle exposes a usable mapping; a live vehicle test remains necessary.
+
+## Vehicle history — 2.5.1-test.7 (integrated test)
+
+Vehicle motion/weapon history is matched by its actual unit identity. The old nearest-position match could
+exchange different weapon-mount offsets when vehicles crossed, or give a fresh vehicle the destroyed state
+of a nearby wreck. Both cases failed before this fix and pass after it. Existing parked/moving behavior,
+weapon-loss checks, same-frame discovery and per-unit wreck memory remain in place.
+
+All 158 tests pass. The integrated build includes naming, world management, network death observations,
+discovery/refresh separation and the vehicle-death coordinate fix. See `object-state-audit.md` for why direct
+network vehicle/carryable-state replacement is not enabled: specific type bindings and value meanings remain
+unverified, so the existing features are preserved. No extra speculative native field reads were added.

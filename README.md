@@ -45,8 +45,10 @@ is Super Uranium.
 See [docs/staged-improvements.md](docs/staged-improvements.md). `2.5.1-test.2` isolates the Chef world-ID
 change; `2.5.1-test.3` also uses guarded local-player health/position observations on the two supported game
 builds. In a local gameplay session, its network identity and two death detections were confirmed in the log;
-the player reported correct death and general markers. `2.5.1-test.4` aligns internal names with the mod title;
-it still needs a post-rename launch check. Existing icons, ranges, settings,
+the player reported correct death and general markers. The renamed test.4 addon/logs were also seen running.
+`2.5.1-test.7` integrates discovery optimization, vehicle identity tracking and a fix for vehicle-death position
+using the mapped local avatar's world coordinates when available. It needs live vehicle verification.
+Existing icons, ranges, settings,
 vehicle destruction detection and camera-relative general-marker behavior are preserved. `release/` and the
 published Nexus description still describe the earlier public version.
 
@@ -54,3 +56,6 @@ Current loader resource: `mods/codex/extended_pickup_icons_range`. Current logs:
 `ExtendedPickupIconsRange.log` and `ExtendedPickupIconsRange.previous.log`, in Chef's log folder.
 The first renamed launch carries the old log into the new previous-log file without altering the original.
 Only the persisted `pickup_dots.*` setting keys remain for compatibility with existing saved options.
+
+Network vehicle/carryable-state replacement remains gated; see [the state audit](docs/object-state-audit.md).
+The existing vehicle and mission-item decisions continue to operate for these unverified states.

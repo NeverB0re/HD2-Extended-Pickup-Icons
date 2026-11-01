@@ -820,6 +820,38 @@ class ScreenTests(Case):
         self.settle()
         self.assertIn("vehicles drawn=2", self.status_now())
 
+    def test_crossing_vehicles_keep_their_own_weapon_mount_history(self):
+        gun = "content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(self.VEHICLE, [unit(-1, 20), unit(1, 20)])
+        self.set_units(gun, [unit(-1, 20, 1.5), unit(1, 20, 1.5)])
+        a, b = self.fake.units[self.VEHICLE][1], self.fake.units[self.VEHICLE][2]
+        a.mx, a.my, a.mz = -1, 20, 0.5                        # weapon 1 m above its mount
+        b.mx, b.my, b.mz = 1, 20, -0.5                       # weapon 2 m above its mount
+        self.load()
+        self.settle()
+        self.assertEqual(self.dots(), 2)
+        a.x, a.mx, b.x, b.mx = 1, 1, -1, -1                  # cross between reads; identities stay the same
+        self.fake.units[gun][1].x, self.fake.units[gun][2].x = 1, -1
+        self.frames(1, start=21)
+        self.assertEqual(self.dots(), 2)
+        self.assertNotIn('its weapon came off', self.log_text())
+
+    def test_a_new_vehicle_near_a_destroyed_one_does_not_inherit_its_destroyed_state(self):
+        gun = "content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(self.VEHICLE, [unit(0, 20)])
+        self.set_units(gun, [unit(0, 20, 1.5)])
+        self.load()
+        self.settle()
+        self.fake.units[gun] = self.lua.table()
+        self.frames(1, start=21)
+        self.assertEqual(self.dots(), 0)
+        self.set_units(self.VEHICLE, [unit(0.5, 20)])           # distinct unit at nearly the same place
+        self.set_units(gun, [unit(0.5, 20, 1.5)])
+        self.frames(1, start=21.1)
+        self.assertEqual(self.dots(), 1)
+
     def test_the_sample_container_counts_as_worn_further_off_than_other_items(self):
         self.lua.execute("stingray.IdString64 = { from_hex = function(hex) return { hex = hex } end }")
         self.fake.loaded["hex:4d1c334d294dfa97"] = True

@@ -22,7 +22,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.5.1-test.6'
+local VERSION = '2.5.1-test.7'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -337,16 +337,21 @@ local players_read_at
 -- (0.28-0.31 asked vehicles their animation state; that crashed the game soon after an exosuit was
 -- destroyed, its state machine gone: no animation call is made any more.)
 
--- Since when a vehicle has stayed where it stopped. It is matched to the nearest of last frame's within
--- TRACK_STEP; it is still while it stays within STILL_EPS of its anchor (where it stopped). Read every
+-- Since when a vehicle has stayed where it stopped. Match its actual unit, so crossing or newly spawned
+-- vehicles cannot inherit another one's weapon/destruction history. Distance matching is only for an entry
+-- without unit identity. It is still while it stays within STILL_EPS of its anchor (where it stopped). Read every
 -- frame, a slow vehicle moves less than STILL_EPS from one frame to the next, so the last frame's
 -- position is not the measure.
-local function track(previous, x, y, z, now)
+local function track(previous, x, y, z, now, unit)
     local best, best_d = nil, TRACK_STEP * TRACK_STEP
     for _, q in ipairs(previous) do
-        local dx, dy, dz = q[1] - x, q[2] - y, q[3] - z
-        local d = dx * dx + dy * dy + dz * dz
-        if d < best_d then best, best_d = q, d end
+        if unit ~= nil then
+            if q.unit == unit then best = q; break end
+        else
+            local dx, dy, dz = q[1] - x, q[2] - y, q[3] - z
+            local d = dx * dx + dy * dy + dz * dz
+            if d < best_d then best, best_d = q, d end
+        end
     end
     local armed = best ~= nil and best.armed or nil   -- it had weapons on it (kept while it is followed)
     local arm = best ~= nil and best.arm or nil       -- how far from its mount its weapon sat (2.3.0)
@@ -354,10 +359,10 @@ local function track(previous, x, y, z, now)
     if best ~= nil and best.anchor ~= nil then
         local a = best.anchor
         if math.abs(a[1] - x) < STILL_EPS and math.abs(a[2] - y) < STILL_EPS and math.abs(a[3] - z) < STILL_EPS then
-            return {x, y, z, still_since = best.still_since, anchor = a, armed = armed, lost = best.lost, arm = arm, off = off}
+            return {x, y, z, unit = unit, still_since = best.still_since, anchor = a, armed = armed, lost = best.lost, arm = arm, off = off}
         end
     end
-    return {x, y, z, still_since = now, anchor = {x, y, z}, armed = armed, lost = best ~= nil and best.lost or nil,
+    return {x, y, z, unit = unit, still_since = now, anchor = {x, y, z}, armed = armed, lost = best ~= nil and best.lost or nil,
             arm = arm, off = off}
 end
 
@@ -493,7 +498,7 @@ local vehicles_seen = {}
 local wrecked = setmetatable({}, {__mode = 'k'})   -- per unit (as by_unit): a vehicle whose weapon went (2.4.0)
 
 local function follow_vehicle(p, now, seen_now)
-    local t = track(vehicles_seen, p[1], p[2], p[3], now)
+    local t = track(vehicles_seen, p[1], p[2], p[3], now, p.unit)
     seen_now[#seen_now + 1] = t
     return t
 end
