@@ -230,6 +230,11 @@ def built_source():
     if source.count('"@HELLBOMB_WARNING@"') != 1:
         raise SystemExit("extended_pickup_icons_range.lua has no single Hellbomb warning slot")
     source = source.replace('"@HELLBOMB_WARNING@"', "(function()\n" + warning + "\nend)()")
+    with open(os.path.join(HERE, "src", "settings.lua"), encoding="utf-8") as f:
+        settings = f.read()
+    if source.count('"@SETTINGS@"') != 1:
+        raise SystemExit("extended_pickup_icons_range.lua has no single settings slot")
+    source = source.replace('"@SETTINGS@"', "(function()\n" + settings + "\nend)()")
     if source.count('"@ICONS@"') != 1:
         raise SystemExit("extended_pickup_icons_range.lua has no single \"@ICONS@\" slot")
     source = source.replace('"@ICONS@"', ICON_TABLE)

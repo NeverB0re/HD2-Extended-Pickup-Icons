@@ -167,6 +167,7 @@ local function log(message) write_line(logfile, message) end
 local LOCAL_PLAYER = "@LOCAL_PLAYER@"   -- filled by build.py; observations are numeric, never engine handles
 local local_player = LOCAL_PLAYER(CHEF, log)
 local hellbomb_warning = ("@HELLBOMB_WARNING@")(CHEF, log)
+local settings = ("@SETTINGS@")(CHEF, log, RANGE, SHOW, LOOK, TARGETS)
 
 -- ------------------------------------------------------------- engine access --
 local sr = rawget(_G, 'stingray')
@@ -297,11 +298,11 @@ local function build_keys()
     for _, t in ipairs(TARGETS) do
         if t.name then
             keys[#keys + 1] = {group = t.group, name = t.name, label = t.name, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount, box = t.box,
-                reversible_visibility = t.reversible_visibility, mission_only = t.mission_only}
+                reversible_visibility = t.reversible_visibility, mission_only = t.mission_only, config = settings.target_config(t)}
         elseif t.hex then
             unnamed = unnamed + 1
             keys[#keys + 1] = {group = t.group, hex = t.hex, label = t.hex, icon = t.icon, worn = t.worn, near = t.near, taken = t.taken, height = t.height, node = t.node, mount = t.mount, box = t.box,
-                reversible_visibility = t.reversible_visibility, mission_only = t.mission_only}
+                reversible_visibility = t.reversible_visibility, mission_only = t.mission_only, config = settings.target_config(t)}
         end
     end
     for i, k in ipairs(keys) do
@@ -683,7 +684,8 @@ local function collect_dots(now)
     local on_ship = not CHEF.in_mission()
     for i = 1, #keys do
         local group = keys[i].group
-        local range = SHOW[setting_of(group)] ~= false and (RANGE[setting_of(group)] or 0) or 0
+        local range = keys[i].config and keys[i].config.range or
+            (SHOW[setting_of(group)] ~= false and (RANGE[setting_of(group)] or 0) or 0)
         if on_ship and (SHIP_HIDDEN[group] or keys[i].mission_only) then range = 0 end
         local points = found[i]
         if points and range > 0 then
@@ -753,7 +755,7 @@ local function collect_dots(now)
 
                     else
 
-                        dots[#dots + 1] = {p[1], p[2], p[3] + (keys[i].height or GROUP_HEIGHT.vehicles), d, who, group, keys[i].icon}
+                        dots[#dots + 1] = {p[1], p[2], p[3] + (keys[i].height or GROUP_HEIGHT.vehicles), d, who, group, keys[i].icon, range = range}
                     end
                 elseif LOOK.hide_near and (keys[i].near or NEAR_ME[group]) and me ~= nil and who == me
                     and d < (keys[i].near or NEAR_ME[group]) - NEAR_OVERLAP then
@@ -769,14 +771,14 @@ local function collect_dots(now)
 
                 else
 
-                    local warning = group == 'hellbombs' and
+                    local warning = group == 'hellbombs' and LOOK.hellbomb_warning ~= false and
                         hellbomb_warning.observe(p, now, blown[p.unit] and blown[p.unit].seen) or nil
                     local nx, ny, nz = node_position(p, keys[i].node)
                     if nx then   -- above the node as other markers are above their unit
-                        dots[#dots + 1] = {nx, ny, nz + (ABOVE_NODE[group] or DOT_HEIGHT), d, who, group, keys[i].icon, warning = warning}
+                        dots[#dots + 1] = {nx, ny, nz + (ABOVE_NODE[group] or DOT_HEIGHT), d, who, group, keys[i].icon, warning = warning, range = range}
                     else
                         dots[#dots + 1] = {p[1], p[2], p[3] + (keys[i].height or GROUP_HEIGHT[group] or DOT_HEIGHT), d, who,
-                                           group, keys[i].icon, warning = warning}
+                                           group, keys[i].icon, warning = warning, range = range}
                     end
                 end
             end
@@ -884,7 +886,7 @@ local EDGE_GROUPS = {vehicles = true, deaths = true}
 local EDGE = {margin = 40, size = 0.7, gap = 4, long = 9, half = 6}   -- pixels at full size (margin: from the edge)
 -- 0 up to FULL_SIZE_M away, 1 at the edge of its kind's range
 local function far_share(d)
-    local range = RANGE[setting_of(d[6])] or 0
+    local range = d.range or RANGE[setting_of(d[6])] or 0
     if range <= FULL_SIZE_M then return 0 end
     return math.max(0, math.min(1, (d[4] - FULL_SIZE_M) / (range - FULL_SIZE_M)))
 end
@@ -1431,6 +1433,7 @@ local TEXTS = {
 }
 
 local function register_settings()
+    if settings.install() then return end
     -- Persisted since 2.x: retain the key so a naming-only update preserves saved distances/toggles.
     local settings_prefix = 'pickup_dots.'
     local host = rawget(_G, 'ModOptionsMenu')
@@ -1496,9 +1499,9 @@ local function install()
     if type(CHEF.title) == 'function' then pcall(CHEF.title, 'Extended Pickup Icons Range') end
     log('Application.can_get: ' .. (can_get and 'present - only loaded resources are looked up'
         or 'MISSING - target lookup disabled for safety'))
+    register_settings()
     build_keys()
     log('worlds: ' .. (chef_worlds and 'Chef world_id' or 'legacy world comparison (no Chef world API)'))
-    register_settings()
     started_at = os.clock()
     local previous = rawget(_G, 'update')
     if type(previous) ~= 'function' then
