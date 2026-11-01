@@ -392,3 +392,42 @@ the integrated early-deletion case confirms logging after hot discovery removes 
 guarded activation, late-observation handling, teammate-independent logic and all prior features remain.
 The revised duration still needs comparison with an undisturbed natural explosion; new timing logs allow
 that comparison without asking the owner to use a stopwatch or upload another player's files.
+
+## Deferred until final release: finer, folded settings
+
+Owner instruction: implement this when preparing the final version, not in the current experimental builds.
+Make the first mod-options screen quiet: collapsible category headings, with individual type toggles and
+distances inside. Consolidate scattered related settings instead of merely adding more top-level rows.
+
+Planned organization:
+
+- Samples: common, rare, super, sample containers and eggs; individual show/range controls. Keep sample
+  fading in this group. Further resource variants only where they create a useful player-facing choice.
+- Supplies: ammo, grenades, stims and supply crates; individual show/range controls, supply fading here.
+- Mission: group current mission-item and objective settings under one heading, with subheadings for
+  carried/data items, artillery loads and objective interactions. Individual supported type toggles/ranges.
+- Vehicles: exosuits, FRVs and tanks; separate supported type/family visibility and ranges.
+- Hellbombs: separate fixed mission call-ins and damaged map bombs, each with show/range. Put applicable
+  warning/countdown display settings here. Do not add portable-backpack support merely to fill this menu.
+- Death marker: its existing show/range and any applicable marker-specific display settings together.
+- Common appearance: size, opacity and vanilla-icon handoff. Keep cross-category controls here only when
+  their effect really is shared, and label any shared distance-text control with its affected categories.
+
+Implementation constraints:
+
+- Latest official Chef documentation supports heading folds from 1.4.0 via option_headings/option_folds.
+  This is folding within the same options screen, not arbitrary nested pages; subheadings are not
+  independently foldable. Detect actual capabilities and retain an accessible flat fallback if absent.
+  https://github.com/Th3chef/Chef-Shared-Loader/blob/main/docs/MODDING.md#the-options-menu-and-key-bindings
+- Preserve all current features and existing saved values. Initially inherit each old category's enabled
+  state and range into its new type settings, then preserve independently saved choices on later launches.
+  A group-level off must not erase child choices. Make any bulk overwrite explicit if provided.
+- Existing settings use ModOptionsMenu compatibility registration; verify heading propagation and option
+  count limits before choosing native Chef registration/bridging. Do not create one fake top-level mod per
+  category to imitate submenus. Preserve the mod identity and persisted legacy setting keys/migration.
+- Derive ranges/visibility from precomputed per-target configuration when settings change; avoid adding
+  engine reads or per-frame settings polling. Keep discovery/range limits and immediate setting updates.
+- Required checks at implementation: saved-value migration, independent per-type switches/ranges,
+  folded menu rendering/navigation, old-capability fallback, and unchanged unrelated target behavior.
+
+This is a recorded final-release work item only. No runtime/settings/package changes are made by this note.
