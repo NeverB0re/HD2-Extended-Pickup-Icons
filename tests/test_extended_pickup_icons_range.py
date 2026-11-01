@@ -723,6 +723,88 @@ class MissionHellbombTests(Case):
         self.assertEqual(self.dots(), 0)
 
 
+class HellbombWarningIntegrationTests(Case):
+    BOMB = MissionHellbombTests.BOMB
+
+    def prepare(self, top=1, distance=True):
+        self.set_units(AVATAR, [unit(0, -8)], loaded=False)
+        self.set_units(self.BOMB, [dict(unit(0, 25), top=top)])
+        self.fake.textures_loaded = True
+        self.lua.execute('''local f=...; local call=f.chef.call; f.animation_reads=0
+            f.chef.call=function(n,...)
+                local u=...
+                if n=='Application.build_identifier' then return 'stingray:46805437a3d445f9df7662b60086ac8ae3c65b5c95da6' end
+                if n=='Unit.has_animation_state_machine' then return u.top~=nil end
+                if n=='Unit.animation_get_state' then f.animation_reads=f.animation_reads+1; return 2,u.top,1 end
+                return call(n,...)
+            end
+        ''', self.fake)
+        if not distance:
+            self.lua.execute('ModOptionsMenu.get=function(id) if id=="pickup_dots.distance" then return false end end')
+        self.load()
+        self.settle()
+        self.frames(15, start=20.7)  # continuous observation up to the simulated remote activation at 21
+        return self.fake.units[self.BOMB][1]
+
+    def test_teammate_animation_transition_draws_large_countdown_without_local_input(self):
+        body = self.prepare()
+        body.top = 0  # remote player's action updates this unit; no local input is simulated
+        self.frames(15, start=21)
+        dot = self.mod.dots[1]
+        self.assertIsNotNone(dot.warning)
+        self.assertGreaterEqual(dot.warning.deadline, 31)
+        self.assertLessEqual(dot.warning.deadline, 31.25)
+        texts = list(self.fake.texts.values())
+        timer = [t for t in texts if t.s == '~10s']
+        distances = [t for t in texts if t.s.endswith('m')]
+        self.assertTrue(timer)
+        self.assertGreater(timer[-1].px, distances[-1].px * 2)
+        self.assertGreater(timer[-1].y, distances[-1].y)
+        self.assertGreater(list(self.fake.bitmaps.values())[-1].w, 28)
+
+    def test_countdown_does_not_depend_on_distance_setting(self):
+        body = self.prepare(distance=False)
+        body.top = 0
+        self.frames(15, start=21)
+        self.assertIn('~10s', [t.s for t in self.fake.texts.values()])
+        self.assertFalse(any(t.s.endswith('m') for t in self.fake.texts.values()))
+
+    def test_first_seen_activated_uses_armed_label_without_ten_second_reset(self):
+        self.prepare(top=0)
+        self.assertTrue(self.mod.dots[1].warning.unknown)
+        self.assertIn('ARMED', [t.s for t in self.fake.texts.values()])
+        self.assertNotIn('~10s', [t.s for t in self.fake.texts.values()])
+
+    def test_early_destruction_removes_the_warning_and_stops_animation_reads(self):
+        body = self.prepare()
+        body.top = 0
+        self.frames(15, start=21)
+        before = self.fake.animation_reads
+        body.alive = False
+        self.frames(30, start=22)
+        self.assertEqual(self.dots(), 0)
+        self.assertEqual(self.fake.animation_reads, before)
+
+    def test_damaged_map_bombs_keep_normal_markers_without_animation_reads(self):
+        self.set_units(MissionHellbombTests.DEFUNCT, [dict(unit(5, 25), top=0)])
+        self.prepare()
+        warnings = [d.warning for d in self.mod.dots.values() if d[1] == 5]
+        self.assertEqual(warnings, [None])
+        self.assertEqual(self.dots(), 2)
+
+    def test_leaving_and_returning_does_not_restart_an_observed_fuse(self):
+        body = self.prepare()
+        body.top = 0
+        self.frames(15, start=21)
+        deadline = self.mod.dots[1].warning.deadline
+        self.fake.units[AVATAR][1].y = 1000
+        self.frames(30, start=22)
+        self.assertEqual(self.dots(), 0)
+        self.fake.units[AVATAR][1].y = -8
+        self.frames(30, start=26)
+        self.assertEqual(self.mod.dots[1].warning.deadline, deadline)
+
+
 class VehicleNodeTimingTests(Case):
     VEHICLE = DespawnTests.VEHICLE
     GUN = DespawnTests.GUN

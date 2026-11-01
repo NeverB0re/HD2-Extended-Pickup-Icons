@@ -21,6 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCE = os.path.join(HERE, "src", "extended_pickup_icons_range.lua")
 TARGETS = os.path.join(HERE, "src", "targets.lua")
 LOCAL_PLAYER = os.path.join(HERE, "src", "local_player.lua")
+HELLBOMB_WARNING = os.path.join(HERE, "src", "hellbomb_warning.lua")
 ICON = os.path.join(HERE, "src", "icon.png")   # the Nexus mod's icon
 DIST = os.path.join(HERE, "dist")
 NAME = "Extended Pickup Icons Range"
@@ -60,6 +61,10 @@ What gets a marker (default distance):
 - Mission objectives (50 m): drop-off points, cargo containers, valves and cranks.
 - Hellbombs (100 m): map-placed bombs and fixed mission Hellbomb call-ins, in red.
   Uses the same Hellbomb toggle and range. Portable backpack bombs are not included.
+  Experimental mission-bomb warning: a newly observed activation layer starts an estimated
+  ~10s countdown with a larger, pulsing yellow-to-red icon. Already active on first sight:
+  ARMED only. At estimated expiry: ! until removed. Not an authoritative explosion timer.
+  Current extracted game build only; animation reads/timing still need gameplay validation.
 - Vehicles (100 m): exosuits, FRVs and tanks, in sky blue; out of view, at the screen's edge
   with an arrow.
 - Where you died (500 m): a red skull where your gear lies (your sample container, else your
@@ -219,6 +224,11 @@ def built_source():
     if source.count('"@LOCAL_PLAYER@"') != 1:
         raise SystemExit("extended_pickup_icons_range.lua has no single local-player slot")
     source = source.replace('"@LOCAL_PLAYER@"', "(function()\n" + local_player + "\nend)()")
+    with open(HELLBOMB_WARNING, encoding="utf-8") as f:
+        warning = f.read()
+    if source.count('"@HELLBOMB_WARNING@"') != 1:
+        raise SystemExit("extended_pickup_icons_range.lua has no single Hellbomb warning slot")
+    source = source.replace('"@HELLBOMB_WARNING@"', "(function()\n" + warning + "\nend)()")
     if source.count('"@ICONS@"') != 1:
         raise SystemExit("extended_pickup_icons_range.lua has no single \"@ICONS@\" slot")
     source = source.replace('"@ICONS@"', ICON_TABLE)

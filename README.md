@@ -27,7 +27,7 @@ Player-facing description and install steps: [PUBLISH_NEXUS.txt](PUBLISH_NEXUS.t
 ```bash
 python -m venv .venv
 .venv/Scripts/python -m pip install lupa
-.venv/Scripts/python -m unittest tests.test_extended_pickup_icons_range
+.venv/Scripts/python -m unittest discover -s tests -p "test*.py"
 .venv/Scripts/python build.py
 ```
 
@@ -63,7 +63,11 @@ No loader port is enabled. `2.5.1-test.12` adds the fixed mission Hellbomb to th
 markers and shared settings. It removes deleted units and reversibly hides models whose previously
 visible geometry disappears; portable backpacks and ship props are excluded. All 189 offline tests pass.
 The owner confirmed mission-bomb display/removal and vehicle destruction/despawn marker behavior
-in gameplay on 2026-11-01. A teammate-independent Hellbomb countdown is under investigation; it is not enabled.
+in gameplay on 2026-11-01. `2.5.1-test.13` experimentally observes the fixed mission Hellbomb activation
+animation layer to show a large estimated ten-second warning, with accelerating yellow-to-red icon
+pulsing. Late first observations show ARMED without a guessed countdown. Only the extracted current
+build/graph is enabled; actual animation-state reads and activation timing are not gameplay-verified.
+All 207 offline tests pass. See the staged notes for native-call risk and the exact guards.
 Existing icons, ranges, settings,
 vehicle destruction detection and camera-relative general-marker behavior are preserved. `release/` and the
 published Nexus description still describe the earlier public version.

@@ -19,10 +19,7 @@ if rawget(_G, MOD_KEY) then return rawget(_G, MOD_KEY) end
 -- of the mod's patch). 2.4.0: the mod runs on them alone (CHEF_NEEDS).
 local CHEF = ...
 if type(CHEF) ~= 'table' then CHEF = nil end
-local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
-                    'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
-
-local VERSION = '2.5.1-test.12'
+local VERSION = '2.5.1-test.13'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -170,6 +167,7 @@ local function log(message) write_line(logfile, message) end
 
 local LOCAL_PLAYER = "@LOCAL_PLAYER@"   -- filled by build.py; observations are numeric, never engine handles
 local local_player = LOCAL_PLAYER(CHEF, log)
+local hellbomb_warning = ("@HELLBOMB_WARNING@")(CHEF, log)
 
 -- ------------------------------------------------------------- engine access --
 local sr = rawget(_G, 'stingray')
@@ -178,7 +176,8 @@ local function check_api()
     if CHEF == nil then return 'no Chef Shared Loader' end
     if type(sr) ~= 'table' or not (sr.Application and sr.Application.main_world) then return 'no engine' end
     local missing = {}
-    for _, name in ipairs(CHEF_NEEDS) do
+    for _, name in ipairs({'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
+                          'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}) do
         if type(CHEF[name]) ~= 'function' then missing[#missing + 1] = name end
     end
     if #missing > 0 then return 'Chef Shared Loader without ' .. table.concat(missing, ', ') .. ' (too old?)' end
@@ -718,6 +717,7 @@ local function collect_dots(now)
                     -- or draw the stale point while waiting for its next lookup.
                     node_of[p.unit] = nil
                     blown[p.unit] = nil
+                    hellbomb_warning.forget(p.unit)
                     c.worn = c.worn + 1
                 elseif not keys[i].taken and blown_up(p, now, group, keys[i].reversible_visibility) then
                     c.worn = c.worn + 1
@@ -786,12 +786,14 @@ local function collect_dots(now)
                     c.worn = c.worn + 1
                 else
                     c.drawn = c.drawn + 1
+                    local warning = group == 'hellbombs' and
+                        hellbomb_warning.observe(p, now, blown[p.unit] and blown[p.unit].seen) or nil
                     local nx, ny, nz = node_position(p, keys[i].node)
                     if nx then   -- above the node as other markers are above their unit
-                        dots[#dots + 1] = {nx, ny, nz + (ABOVE_NODE[group] or DOT_HEIGHT), d, who, group, keys[i].icon}
+                        dots[#dots + 1] = {nx, ny, nz + (ABOVE_NODE[group] or DOT_HEIGHT), d, who, group, keys[i].icon, warning = warning}
                     else
                         dots[#dots + 1] = {p[1], p[2], p[3] + (keys[i].height or GROUP_HEIGHT[group] or DOT_HEIGHT), d, who,
-                                           group, keys[i].icon}
+                                           group, keys[i].icon, warning = warning}
                     end
                 end
             end
@@ -1004,16 +1006,28 @@ end
 
 -- the distance above a marker, in the game's font (in the loader's pixels), bold: the loader's text has one
 -- weight, too thin at this size, so it goes down four times, a pixel apart
-local function distance_above(sx, top, d)
+local function distance_above(sx, top, d, warning)
     local c = GROUP_RGB[d[6]]
-    if not LOOK.distance or c == nil then return end
+    if c == nil or (not LOOK.distance and not warning) then return end
     pcall(function()
         local px = math.max(1, ch / 1080 * DISTANCE_PX)
-        local text = string.format('%dm', math.floor(d[4] + 0.5))
-        local color = CHEF.color(c[1], c[2], c[3], math.floor(255 * opacity))
-        local x = sx * kx - CHEF.text_width(text, px) / 2
         local y = (top + 3) * ky
-        for _, o in ipairs(BOLD) do CHEF.text(x + o[1], y + o[2], text, px, color) end
+        if LOOK.distance then
+            local text = string.format('%dm', math.floor(d[4] + 0.5))
+            local color = CHEF.color(c[1], c[2], c[3], math.floor(255 * opacity))
+            local x = sx * kx - CHEF.text_width(text, px) / 2
+            for _, o in ipairs(BOLD) do CHEF.text(x + o[1], y + o[2], text, px, color) end
+            y = y + 22 * ch / 1080
+        end
+        if warning then
+            local size = px * 2.4 -- warning remains independent of the optional distance text
+            local x = sx * kx - CHEF.text_width(warning.label, size) / 2
+            local rgb = warning.rgb
+            local shadow = CHEF.color(0, 0, 0, 230)
+            local color = CHEF.color(rgb[1], rgb[2], rgb[3], 255)
+            CHEF.text(x + 2, y - 2, warning.label, size, shadow)
+            for _, o in ipairs(BOLD) do CHEF.text(x + o[1], y + o[2], warning.label, size, color) end
+        end
     end)
 end
 
@@ -1095,6 +1109,7 @@ local function screen_draw(dots, cam)
     local ok, problem = pcall(function()
         local f = (height / 2) / math.tan(math.rad(cam.fov or read_game_fov(os.clock()) or VERTICAL_FOV) / 2)
         local ui = math.min(width / UI_W, height / UI_H)
+        local now = os.clock()
         for _, d in ipairs(dots) do
             local sx, sy = project(cam, d, width, height, f)
             local dir   -- a vehicle (or where you died) off screen: the way to it
@@ -1102,9 +1117,11 @@ local function screen_draw(dots, cam)
             if sx then
                 local size = size_of(d) * (dir and EDGE.size or 1) * ui
                 opacity = opacity_of(d)
+                local warning = d.warning and hellbomb_warning.visual(d.warning, now)
+                if warning then size = size * warning.scale; opacity = math.max(0.7, opacity) * warning.alpha end
                 -- a texture tinted (ICON_RGB, else white); the shapes around it, the vehicles' V and arrow, the
                 -- group's colour
-                tint = d[7] and ICON_RGB[d[7]] or nil
+                tint = warning and warning.rgb or (d[7] and ICON_RGB[d[7]] or nil)
                 tex_ink = ink_of(255 * opacity)
                 tint = tint or GROUP_RGB[d[6]]
                 ink = ink_of(255 * opacity)
@@ -1123,7 +1140,7 @@ local function screen_draw(dots, cam)
                 elseif d[6] == 'vehicles' then
                     pointer(sx, sy, size, hh)
                 end
-                distance_above(sx, sy + hh, d)
+                distance_above(sx, sy + hh, d, warning)
             end
         end
     end)
@@ -1320,6 +1337,7 @@ local function forget_units()
     avatar_since, avatar_z0, own, candidate = by_unit(), by_unit(), nil, nil
     last_counts = {}
     local_player.reset()
+    hellbomb_warning.reset()
     M.dots = {}   -- don't expose the previous world's markers while waiting
 end
 

@@ -327,3 +327,37 @@ Offline evidence:
 
 Conclusion: the renderer can display a per-unit countdown, but reliable teammate-independent activation
 and remaining-time observation are not yet established. No countdown or additional engine read is enabled.
+
+## Experimental mission Hellbomb warning — 2.5.1-test.13
+
+The owner explicitly requests attempting a ten-second warning from activation, for fixed mission Hellbombs
+only. An isolated factory observes the installed graph's second animation layer (top_retracted=1 to
+top_extend=0) rather than local input, so a visible replicated teammate action follows the same path.
+This is a graph-based experiment, not a verified network detonation deadline. It is gated to the engine
+identifier for the extracted current graph (46805437.../Steam 26251122); other builds keep ordinary markers.
+
+Only the exact fixed Hellbomb resource is queried, in range/in a mission, after a positively visible box.
+Every observation goes through Chef's per-resource crash keys: alive, has_animation_state_machine, alive,
+animation_get_state, alive. Require the expected three-layer tuple and at most five observations/s; refused
+or malformed reads clear the transition baseline and back off. No call is made for damaged map bombs,
+backpacks, vehicles or hidden/deleted units. Once activated, stop animation queries entirely for that unit.
+
+These checks reduce known missing-state-machine/stale-unit paths, but cannot make a native call atomic.
+Animation-state reads previously caused a vehicle crash in older versions. Their reintroduction here is
+experimental and strictly resource-scoped; no native-crash elimination or live callback mapping is claimed.
+
+A fresh observed 1->0 transition starts an estimated ten seconds. The label is `~10s` down to `~1s`, drawn
+2.4 times the distance text size, with shadow/bold rendering. The icon enlarges/pulses and changes yellow
+to red; flash rate increases smoothly from 1 to 4 Hz, opacity never reaching zero. Warning text stays solid
+and works even when distance text is off. At estimated expiry show `!` until the actual marker disappears.
+The timer is not used to delete a marker or indicate that the area is safe.
+
+First observed activated or activated after an observation gap longer than 0.5 s: `ARMED` only, never a new
+full timer. Leaving/returning preserves an existing deadline; new units/worlds discard old history. Earlier
+destruction/visibility suppression removes the warning with its marker. All other marker behavior remains.
+
+All 207 offline tests pass, including the previous 189, 12 factory cases and 6 renderer/lifecycle integration
+cases. Simulated remote activation uses no local input. New tests verify missing/malformed states, guards,
+poll bounds, build gating, late observations, size/color/pulse, distance-off display, early removal and
+leaving/returning. The actual returned animation tuple and its timing relative to gameplay arming remain
+unverified in a played mission. Build test.13 separately; do not publish/push it as a stable release.
