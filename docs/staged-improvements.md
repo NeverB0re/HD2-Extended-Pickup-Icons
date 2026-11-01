@@ -220,3 +220,27 @@ not establish all multiplayer/departure cases or the elimination of intermittent
 
 The next priorities remain category-specific despawn/sinking prevention and multiplayer death ownership
 validation. See `nexus-comment-audit-2026-11-01.md` for the full public-comment review and outstanding requests.
+
+## Despawn recurrence guards — 2.5.1-test.10
+
+Confirmed vehicle destruction now survives a temporary resource/search-membership gap while that exact
+engine unit remains alive. Previously a missing entry in found[] cleared wrecked[], allowing the same
+alive sinking wreck to reappear. Cleanup now requires a failed alive check or a world reset. The old
+handle-reuse fixture now models an actual engine-dead interval rather than equating search absence with
+destruction. A distinct new vehicle near a wreck still keeps its own history.
+
+For samples, supplies, movable mission items, carried loads and vehicles, probe the visible-mesh Unit.box
+through Chef at most twice per second per in-range unit. Only a previously nonempty model becoming empty
+hides its marker. A refused/invalid read preserves the last confirmed display state. Positive visible
+geometry restores a valid temporarily hidden item. Static controls/drop-offs and picked-up-code rules
+are excluded; existing verified terminal hellbomb/wreck/taken states stay terminal. All unit caches reset
+with the world, and dead handles release visibility history. Death coordinates remain numeric snapshots.
+
+This is a reversible geometry-display guard, not an authoritative generic gameplay removal flag. It does
+not classify initially empty models or still-visible sinking objects as despawned. No terrain-height or
+falling-motion cutoff is introduced. Those limits preserve valid falls, caves and reversible visibility.
+Runtime behavior of the new category probes still needs verification; no universal sinking fix is claimed.
+
+Five new replay cases failed before the fix. All 176 tests now pass, including invalid/refused reads,
+visibility restoration, below-zero falling samples, streaming gaps, new items at old positions, world
+reset and the two-probes/s bound. The test.10 ZIP was built without changing target resources or icons.

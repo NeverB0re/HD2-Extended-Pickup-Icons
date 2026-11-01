@@ -528,6 +528,102 @@ class DrawingTests(Case):
         return [dict(rows[i].items()) for i in range(1, len(rows) + 1)]
 
 
+class DespawnTests(Case):
+    VEHICLE = 'content/fac_helldivers/vehicles/frv/frv'
+    GUN = 'content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg'
+
+    def prepare(self, key=SAMPLE):
+        self.set_units(AVATAR, [unit(0, -8)], loaded=False)
+        self.set_units(key, [unit(0, 20)])
+        self.load()
+        self.settle()
+        self.assertEqual(self.dots(), 1)
+        return self.fake.units[key][1]
+
+    def test_hidden_alive_sample_does_not_leave_a_sinking_marker(self):
+        body = self.prepare()
+        body.blown, body.z = True, -20
+        self.frames(40, start=22)
+        self.assertEqual(self.dots(), 0)
+        self.fake.units[SAMPLE] = self.lua.table()
+        self.frames(40, start=24)
+        self.fake.units[SAMPLE] = self.lua.table(body)
+        self.frames(40, start=26)
+        self.assertEqual(self.dots(), 0)
+        self.set_units(SAMPLE, [unit(0, 20, -20)])
+        self.frames(40, start=28)
+        self.assertEqual(self.dots(), 1)  # a new visible item at exactly the same location
+
+    def test_temporary_visibility_loss_can_recover_without_losing_a_valid_item(self):
+        body = self.prepare()
+        body.blown = True
+        self.frames(40, start=22)
+        self.assertEqual(self.dots(), 0)
+        body.blown = False
+        self.frames(40, start=24)
+        self.assertEqual(self.dots(), 1)
+
+    def test_refused_visibility_read_cannot_revive_a_hidden_marker(self):
+        body = self.prepare()
+        body.blown = True
+        self.frames(40, start=22)
+        self.lua.execute('local f=...; local call=f.chef.call; f.chef.call=function(n, ...) if n=="Unit.box" then return nil,"refused" end return call(n, ...) end', self.fake)
+        self.frames(40, start=24)
+        self.assertEqual(self.dots(), 0)
+
+    def test_valid_falling_samples_below_zero_remain_marked(self):
+        body = self.prepare()
+        for i in range(40):
+            body.z = -i * 0.5
+            self.frames(1, start=22 + i / 60)
+            self.assertEqual(self.dots(), 1)
+
+    def test_visibility_probes_are_bounded_and_do_not_read_individual_meshes(self):
+        self.prepare()
+        self.lua.execute('local f=...; local call=f.chef.call; f.box_calls=0; f.mesh_calls=0; f.chef.call=function(n, ...) if n=="Unit.box" then f.box_calls=f.box_calls+1 end if n=="Unit.mesh" or n=="Unit.num_meshes" then f.mesh_calls=f.mesh_calls+1 end return call(n, ...) end', self.fake)
+        self.frames(120, start=22)
+        self.assertGreater(self.fake.box_calls, 0)
+        self.assertLessEqual(self.fake.box_calls, 4)
+        self.assertEqual(self.fake.mesh_calls, 0)
+
+    def test_missing_search_membership_does_not_erase_a_live_wreck(self):
+        self.set_units(self.GUN, [unit(0, 20, 1.5)])
+        body = self.prepare(self.VEHICLE)
+        self.fake.units[self.GUN] = self.lua.table()
+        self.frames(40, start=22)
+        self.assertEqual(self.dots(), 0)
+        self.fake.units[self.VEHICLE] = self.lua.table()  # stream/search gap, not engine death
+        self.frames(40, start=24)
+        self.fake.units[self.VEHICLE] = self.lua.table(body)
+        body.z = -20
+        self.frames(40, start=26)
+        self.assertEqual(self.dots(), 0)
+
+    def test_unknown_or_invalid_box_does_not_hide_a_visible_item(self):
+        self.prepare()
+        for result in ('nil,"refused"', '"POSE",stingray.Vector3(0/0,0,0)', '"POSE",stingray.Vector3(0,nil,0)'):
+            self.lua.execute('local f=...; local call=f.chef.call; f.chef.call=function(n, ...) if n=="Unit.box" then return ' + result + ' end return call(n, ...) end', self.fake)
+            self.frames(40, start=self.fake.now + 1)
+            self.assertEqual(self.dots(), 1)
+
+    def test_an_initially_empty_model_is_not_assumed_to_be_removed(self):
+        self.set_units(AVATAR, [unit(0, -8)], loaded=False)
+        self.set_units(SAMPLE, [dict(unit(0, 20), blown=True)])
+        self.load()
+        self.settle()
+        self.assertEqual(self.dots(), 1)
+
+    def test_new_world_does_not_inherit_hidden_geometry_state(self):
+        body = self.prepare()
+        body.blown = True
+        self.frames(40, start=22)
+        self.assertEqual(self.dots(), 0)
+        self.lua.execute('local f=...; f.world={}', self.fake)
+        self.frames(1, start=24)
+        self.frames(40, start=33)
+        self.assertEqual(self.dots(), 1)  # same fake handle in a new world has no previous visible baseline
+
+
 class ScreenTests(Case):
     def test_item_ahead_is_drawn_at_screen_centre(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
@@ -807,7 +903,9 @@ class ScreenTests(Case):
         self.frames(60, start=40.0)
         self.assertIn("frv lost its weapons", self.log_text())
         self.fake.units[self.VEHICLE] = self.lua.table()               # despawned
+        body.alive = False                                           # actual engine destruction, not just a search gap
         self.frames(60, start=50.0)
+        body.alive = True
         self.fake.units[self.VEHICLE] = self.lua.table(body)           # the engine hands the same unit to a new FRV
         self.set_units(gun, [unit(0, 20, 1.5)])
         self.frames(60, start=60.0)

@@ -22,7 +22,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.5.1-test.9'
+local VERSION = '2.5.1-test.10'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -570,13 +570,18 @@ local candidate = nil         -- {unit, since}: a new helldiver the camera took,
 
 -- Has this unit no visible mesh left? Unit.box over the visible meshes (its second argument true) comes back
 -- empty (2.3.0: a hellbomb that blew up, alive and in place otherwise; not launch codes picked up: test.11).
--- False when it can't be asked.
+-- nil when it can't be asked: a refused read is not evidence of visible or removed geometry.
 local function no_visible_mesh(unit, kind)
-    if not unit_alive(unit) then return false end
+    if not unit_alive(unit) then return nil end
     local _, extents = CHEF.call_kind('Unit.box', kind, unit, true)
-    if extents == nil then return false end
+    if extents == nil then return nil end
     local ok, x, y, z = pcall(function() return sr.Vector3.x(extents), sr.Vector3.y(extents), sr.Vector3.z(extents) end)
-    return ok and type(x) == 'number' and x == 0 and y == 0 and z == 0
+    if not ok then return nil end
+    for _, v in ipairs({x, y, z}) do
+        if type(v) ~= 'number' or v ~= v or v < 0 or v > 1e7 then return nil end
+    end
+    if x == nil or y == nil or z == nil then return nil end
+    return x == 0 and y == 0 and z == 0
 end
 
 -- How many of a unit's meshes are visible (Mesh.visibility), or nil when it can't be asked.
@@ -640,19 +645,37 @@ local function node_position(p, name)
     if ok and type(x) == 'number' and type(y) == 'number' and type(z) == 'number' then return x, y, z end
 end
 
--- A hellbomb that blew up stays, alive, every node where it was; only its meshes go (no_visible_mesh, 2.3.0-test.6
--- log). Once gone, gone (this world).
+-- Hellbomb removal is verified and terminal. For other movable targets, a visible -> empty box only hides
+-- the marker until geometry is positively visible again. It does not prove permanent gameplay removal.
+-- In particular, don't infer despawn from absolute height, falling motion, or a failed native read.
 local blown = by_unit()
 
-local function blown_up(p)
+local function blown_up(p, now, group)
     if p.unit == nil then return false end
-    if blown[p.unit] then return true end
-    if no_visible_mesh(p.unit, p.kind) then
-        blown[p.unit] = true
-        log(string.format('hellbomb: the one at %.1f %.1f %.1f blew up (no visible mesh left)', p[1], p[2], p[3]))
-        return true
+    if group == 'hellbombs' then
+        if blown[p.unit] == true then return true end
+        if no_visible_mesh(p.unit, p.kind) then
+            blown[p.unit] = true
+            log(string.format('hellbomb: the one at %.1f %.1f %.1f blew up (no visible mesh left)', p[1], p[2], p[3]))
+            return true
+        end
+        return false
     end
-    return false
+    -- Controls/drop-offs may be invisible interaction units; codes have their existing mesh-state rule.
+    if (group ~= 'samples' and group ~= 'supplies' and group ~= 'mission' and group ~= 'carry'
+        and group ~= 'vehicles') then return false end
+    local state = blown[p.unit]
+    if state == nil then state = {at = now, seen = false, hidden = false}; blown[p.unit] = state end
+    if now >= state.at then
+        state.at = now + 0.5  -- at most two box probes/s per in-range unit, not a per-mesh scan
+        local empty = no_visible_mesh(p.unit, p.kind)
+        if empty == false then
+            state.seen, state.hidden = true, false
+        elseif empty == true and state.seen then
+            state.hidden = true
+        end
+    end
+    return state.hidden
 end
 
 local function collect_dots(now)
@@ -692,6 +715,9 @@ local function collect_dots(now)
                     -- A sweep cached this position before despawn. Never pass its handle to node/mesh calls,
                     -- or draw the stale point while waiting for its next lookup.
                     node_of[p.unit] = nil
+                    blown[p.unit] = nil
+                    c.worn = c.worn + 1
+                elseif not keys[i].taken and blown_up(p, now, group) then
                     c.worn = c.worn + 1
                 elseif group == 'vehicles' then
                     -- destroyed, you in or at it, or someone else in a moving one: no marker
@@ -736,8 +762,6 @@ local function collect_dots(now)
                 elseif LOOK.hide_near and (keys[i].near or NEAR_ME[group]) and me ~= nil and who == me
                     and d < (keys[i].near or NEAR_ME[group]) - NEAR_OVERLAP then
                     c.worn = c.worn + 1
-                elseif group == 'hellbombs' and blown_up(p) then
-                    c.worn = c.worn + 1
                 elseif keys[i].taken and check_taken(p) then
                     c.worn = c.worn + 1
                 elseif carried and group ~= 'dropoffs' and group ~= 'controls' and group ~= 'hellbombs' then
@@ -765,18 +789,14 @@ local function collect_dots(now)
             end
         end
     end
-    -- a wreck's unit gone (despawned): let go of it, should the engine hand the same unit to a new vehicle
-    if next(wrecked) ~= nil then
-        local there = {}
-        for i = 1, #keys do
-            if keys[i].group == 'vehicles' and found[i] then
-                for _, p in ipairs(found[i]) do
-                    if p.unit ~= nil then there[p.unit] = true end
-                end
-            end
-        end
-        for u in pairs(wrecked) do
-            if not there[u] then wrecked[u] = nil end
+    -- A search/streaming gap does not destroy an engine unit. Forget terminal state only when the
+    -- actual unit is gone (or forget_units resets the world), never merely because it left found[].
+    for u in pairs(wrecked) do
+        if not unit_alive(u) then wrecked[u], node_of[u] = nil, nil end
+    end
+    if stats.frames % 60 == 0 then
+        for u in pairs(blown) do
+            if not unit_alive(u) then blown[u], node_of[u] = nil, nil end
         end
     end
     last_counts = counts
