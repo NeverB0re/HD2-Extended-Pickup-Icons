@@ -50,7 +50,10 @@ the player reported correct death and general markers. The renamed test.4 addon/
 using the mapped local avatar's world coordinates when available. Its live vehicle test failed: the log
 still used the replicated network position. `2.5.1-test.8` adds bounded position diagnostics, not a new fix.
 `2.5.1-test.9` instead prefers the prelinked own sample container's position when local health confirms
-death, as requested. It includes the earlier improvements and needs a live vehicle-death check.
+death, as requested. Its vehicle-death placement was confirmed in gameplay on 2026-11-01; the log also
+names the own-container source and confirms clearing after recovery. Other multiplayer cases and
+intermittent native-crash elimination remain unverified. See
+[the Nexus comment audit](docs/nexus-comment-audit-2026-11-01.md) for outstanding reports and requests.
 Existing icons, ranges, settings,
 vehicle destruction detection and camera-relative general-marker behavior are preserved. `release/` and the
 published Nexus description still describe the earlier public version.

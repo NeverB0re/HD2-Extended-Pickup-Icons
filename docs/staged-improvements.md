@@ -209,3 +209,14 @@ All 167 tests pass, including vehicle death without any avatar mapping, moved/si
 boxes dropped and left behind, stationary ground boxes, teammate-carried boxes, overlapping avatars and
 teammate death. Live testing of the new sample association remains necessary. The test.8 diagnostic drive
 is no longer required before trying this requested method.
+
+## Live sample-container confirmation — 2026-11-01
+
+The player tested test.9 and confirmed the death marker stayed at the actual vehicle-death location.
+The local log independently records `own sample container at death` at 17:24:42, reinforcement with a new
+avatar, a fresh own-container association at 17:24:55, and removal after the local player reached the mark
+at 17:25:00. The session shut down normally at 17:25:20. This verifies this vehicle-death scenario; it does
+not establish all multiplayer/departure cases or the elimination of intermittent native crashes.
+
+The next priorities remain category-specific despawn/sinking prevention and multiplayer death ownership
+validation. See `nexus-comment-audit-2026-11-01.md` for the full public-comment review and outstanding requests.
