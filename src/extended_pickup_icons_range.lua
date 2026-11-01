@@ -22,7 +22,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.5.1-test.8'
+local VERSION = '2.5.1-test.9'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -1322,7 +1322,8 @@ local function tick()
         local cam = camera_of()   -- once a frame, after the game moved it
         me = pick_me(cam)
         if local_player.mode == 'network' then
-            local observed = local_player.update(now, CHEF.in_mission())
+            local observed = local_player.update(now, CHEF.in_mission(), found, box_keys,
+                players_read_at == now and players or nil)
             M.identity = local_player.status
             if observed and observed.death then
                 deaths, cleared = {observed.death}, nil

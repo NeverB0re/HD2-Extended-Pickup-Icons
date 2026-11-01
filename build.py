@@ -85,8 +85,9 @@ in your mod manager (in Arsenal, by default, the bottom of the list).
 Good to know:
 - Valves and cranks stay marked after you turn them.
 - At most the 40 nearest markers are drawn at once.
-- On supported game builds, where you died is fixed at your last living position when
-  your own health reaches zero. It does not follow a corpse or a spectated teammate.
+- On supported game builds, your own health reaching zero confirms death. The position
+  is taken from your previously linked sample container at that instant, else a fresh
+  last-known position. Once saved, it does not follow a corpse or a moved sample container.
   Unknown builds keep the earlier camera-based method. Only your last death is marked.
   Missing or ambiguous network data can delay or miss a mark; it is not treated as death.
 """

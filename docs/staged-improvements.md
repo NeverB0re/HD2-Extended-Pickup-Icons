@@ -181,3 +181,31 @@ and no diagnostic output without a nearby vehicle. The next live capture only ne
 boarding and moving away for 10–20 seconds, then a clean game exit; no further suicide is needed to compare
 the available position sources. Any heuristic association or camera-based substitute requires discussion
 before implementation, as requested by the project's instructions.
+
+## Requested sample-container death position — 2.5.1-test.9
+
+The player requested using the sample container at the instant their death is confirmed. Local identity and
+death confirmation still use the typed/owned network player and positive-to-zero health transition. The
+position now prefers the previously linked own sample container's current guarded world position, copied
+once when death is confirmed. Later corpse/container movement cannot update that numeric mark.
+
+Container association happens while alive, not by selecting the nearest box after death. Initially the
+network position must match one world avatar within 1 m. That avatar and the candidate container must move
+together at least 0.75 m, within 0.35 m of the same displacement, while the container is within the existing
+2.5 m worn reach. A nearer/ambiguous other avatar blocks the candidate. This is a conservative spatial/motion
+association, not a newly discovered authoritative sample-owner field. Camera/spectator selection is unused.
+
+Once linked, follow that exact owner and container unit. A dropped/left-behind container loses its binding;
+it is not rediscovered at death. A teammate carrying the linked container cannot supply the new death point.
+If the unit disappears just as death is confirmed, the last confirmed container point may bridge at most
+0.5 s. Otherwise use the existing fresh last-known position. If no unambiguous container was linked, the old
+position fallback remains and the vehicle case is not claimed fixed for that circumstance.
+
+The established owner unit also supplies live world position, avoiding the boarding-point network value
+without the unavailable UnitSynchronizer mapping. A lost owner association cannot adopt a different avatar.
+Each new avatar/session/world discards it. No new network fields or scene-node calls are introduced.
+
+All 167 tests pass, including vehicle death without any avatar mapping, moved/sinking boxes after death,
+boxes dropped and left behind, stationary ground boxes, teammate-carried boxes, overlapping avatars and
+teammate death. Live testing of the new sample association remains necessary. The test.8 diagnostic drive
+is no longer required before trying this requested method.

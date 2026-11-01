@@ -157,6 +157,109 @@ return function(chef, log)
         life.unit = nil
     end
 
+    local function unit_position(unit)
+        if unit == nil then return nil end
+        local ok, x, y, z = pcall(function()
+            if chef.unit_alive(unit) ~= true then return nil end
+            return chef.unit_position(unit)
+        end)
+        if ok and number(x) and number(y) and number(z) then return {x, y, z} end
+    end
+
+    local function worn(box, body)
+        local dx, dy, dz = box[1] - body[1], box[2] - body[2], box[3] - body[3]
+        local d = dx * dx + dy * dy
+        if d < 6.25 and dz > -0.5 and dz < 2.5 then return d end
+    end
+
+    local function sample_owner(players)
+        if not life.sample_owner then return nil end
+        for _, p in ipairs(players or {}) do
+            if p.unit == life.sample_owner then return {p[1], p[2], p[3], unit = p.unit} end
+        end
+        local pos = unit_position(life.sample_owner)
+        if pos then pos.unit = life.sample_owner end
+        return pos
+    end
+
+    local function follow_sample(now, reference, found, box_keys, players)
+        if not reference then return end
+        local owner = sample_owner(players)
+        if not owner and life.sample_owner then return end  -- a lost association never adopts another avatar
+        if not owner then
+            -- Anchor only while network position uniquely matches a world avatar. The candidate must then
+            -- move with both that avatar and its sample container before it can become an owned binding.
+            for _, p in ipairs(players or {}) do
+                local dx, dy, dz = p[1] - reference[1], p[2] - reference[2], p[3] - reference[3]
+                if dx * dx + dy * dy + dz * dz <= 1 then
+                    if owner then life.sample_candidate = nil; return end
+                    owner = p
+                end
+            end
+        end
+        if not owner then return end
+        local best, best_d
+        for _, i in ipairs(box_keys or {}) do
+            for _, q in ipairs((found or {})[i] or {}) do
+                local d = worn(q, owner)
+                if d and (best_d == nil or d < best_d) then
+                    local ambiguous = false
+                    for _, other in ipairs(players or {}) do
+                        local od = other.unit ~= owner.unit and worn(q, other)
+                        if od and od <= d + 0.01 then ambiguous = true; break end
+                    end
+                    if not ambiguous then best, best_d = q, d end
+                end
+            end
+        end
+        if life.sample_unit then
+            local pos = unit_position(life.sample_unit)
+            if pos and worn(pos, owner) then
+                life.sample_position, life.sample_at = pos, now
+                return
+            end
+            life.sample_unit, life.sample_position, life.sample_at = nil, nil, nil
+        end
+        if not best or best.unit == nil then life.sample_candidate = nil; return end
+        local c = life.sample_candidate
+        if c and c.unit == best.unit and c.owner == owner.unit and now - c.at <= 3 then
+            local dx, dy, dz = owner[1] - c.body[1], owner[2] - c.body[2], owner[3] - c.body[3]
+            local rx, ry, rz = reference[1] - c.reference[1], reference[2] - c.reference[2], reference[3] - c.reference[3]
+            local bx, by, bz = best[1] - c.box[1], best[2] - c.box[2], best[3] - c.box[3]
+            local function matches(x, y, z)
+                return (dx - x)^2 + (dy - y)^2 + (dz - z)^2 <= 0.1225
+            end
+            if dx * dx + dy * dy + dz * dz >= 0.5625 and matches(rx, ry, rz) and matches(bx, by, bz) then
+                life.sample_owner, life.sample_unit = owner.unit, best.unit
+                life.sample_position, life.sample_at, life.sample_candidate = {best[1], best[2], best[3]}, now, nil
+                log('identity: own sample container linked before death')
+            end
+        else
+            life.sample_candidate = {unit = best.unit, owner = owner.unit, at = now,
+                body = {owner[1], owner[2], owner[3]}, reference = {reference[1], reference[2], reference[3]},
+                box = {best[1], best[2], best[3]}}
+        end
+    end
+
+    local function death_position(now, players)
+        if life.sample_unit and life.sample_at and now - life.sample_at <= MAX_GAP_S then
+            local pos = unit_position(life.sample_unit)
+            if pos then
+                for _, other in ipairs(players or {}) do
+                    if other.unit ~= life.sample_owner and worn(pos, other) then pos = nil; break end
+                end
+                if pos then return pos, 'own sample container at death' end
+            elseif life.sample_position then
+                local p = life.sample_position
+                return {p[1], p[2], p[3]}, 'last confirmed own sample container'
+            end
+        end
+        if life.position and life.position_at and now - life.position_at <= MAX_GAP_S then
+            local p = life.position
+            return {p[1], p[2], p[3]}, life.position_source
+        end
+    end
+
     function P.diagnostics(now, players, camera, found, keys)
         if P.mode ~= 'network' or not life or not life.hp or life.hp <= 0 or not camera then return end
         if now < (diagnostic_at or 0) or (diagnostic_count or 0) >= 120 then return end
@@ -194,18 +297,17 @@ return function(chef, log)
         diagnostic_count = (diagnostic_count or 0) + 1
     end
 
-    local function terminal(avatar, now)
+    local function terminal(avatar, now, players)
         if not life or life.avatar ~= avatar or not life.hp or life.hp <= 0 or not life.position
             or not life.at or now < life.at or now - life.at > MAX_GAP_S
             or not life.position_at or now - life.position_at > MAX_GAP_S then return nil end
         local hp = read(avatar, AVATAR, 'health')
         if number(hp) and hp <= 0 then
-            local v = life.position
-            return {v[1], v[2], v[3]}
+            return death_position(now, players)
         end
     end
 
-    function P.update(now, in_mission)
+    function P.update(now, in_mission, found, box_keys, players)
         if not in_mission then P.reset(); return nil end
         if schema ~= true then
             if now < (retry_at or 0) then return nil end
@@ -232,24 +334,26 @@ return function(chef, log)
         -- reference change permits one guarded health read of the previously confirmed local avatar. A nil
         -- reference is a refused/missing read and proves nothing.
         local ended, ended_source = nil, life and life.position_source
-        if av ~= nil and life and life.avatar ~= av then ended = terminal(life.avatar, now) end
+        if av ~= nil and life and life.avatar ~= av then ended, ended_source = terminal(life.avatar, now, players) end
         if not object_id(av) or not exists(av, AVATAR) then
             -- Missing/refused reads are not death. Keep only numeric history, break the health transition.
             if life then life.hp, life.at = nil, nil end
             status('waiting for local avatar')
-            return ended and {death = ended, position_source = life and life.position_source} or nil
+            return ended and {death = ended, position_source = ended_source} or nil
         end
         local hp = read(av, AVATAR, 'health')
         if not number(hp) then
             if life then life.hp, life.at = nil, nil end
             status('local health unavailable; waiting')
-            return ended and {death = ended, position_source = life and life.position_source} or nil
+            return ended and {death = ended, position_source = ended_source} or nil
         end
         if not life or life.avatar ~= av then life = {avatar = av} end
         local observed = {avatar = av, alive = hp > 0, death = ended}
         if hp > 0 then
-            local pos = world_position(av)
-            local source = 'local unit world position'
+            local pos = sample_owner(players)
+            if pos then pos.unit = nil end  -- outward observations and saved positions contain numbers only
+            local source = 'confirmed sample owner world position'
+            if not pos then pos, source = world_position(av), 'local unit world position' end
             if pos then life.had_world_position = true end
             if not pos and not life.had_world_position then
                 pos = position(read(av, AVATAR, 'position'))
@@ -259,12 +363,12 @@ return function(chef, log)
             if pos then
                 life.position, observed.position, life.position_at, life.position_source = pos, pos, now, source
             end
+            follow_sample(now, pos, found, box_keys, players)
         elseif life.hp and life.hp > 0 and life.position and life.at and now >= life.at and now - life.at <= MAX_GAP_S
             and life.position_at and now - life.position_at <= MAX_GAP_S then
-            local v = life.position
-            observed.death = {v[1], v[2], v[3]}  -- freeze the last living position, before ragdoll/despawn motion
+            observed.death, observed.position_source = death_position(now, players)
         end
-        observed.position_source = ended and ended_source or life.position_source
+        observed.position_source = observed.position_source or (ended and ended_source or life.position_source)
         life.hp, life.at = hp, now
         status('local player confirmed')
         return observed

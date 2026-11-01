@@ -2343,6 +2343,97 @@ class NetworkIdentityTests(Case):
         tracker.diagnostics(21, self.fake.units[AVATAR], camera, self.lua.table(), self.lua.table())
         self.assertEqual(lines, [])
 
+    def sample_setup(self, move_box=True):
+        self.lua.execute("stingray.IdString64 = {from_hex=function(hex) return {hex=hex} end}")
+        self.fake.loaded['hex:4d1c334d294dfa97'] = True
+        key = 'hex:a9936cbe561e8180'
+        self.set_units(key, [unit(0.3, -8.2, 1.2)])
+        self.start_network()
+        body, net, box = self.fake.units[AVATAR][1], self.fake.net.objects[2], self.fake.units[key][1]
+        for i in range(12):
+            body.x, net.x = (i + 1) * 0.12, (i + 1) * 0.12
+            if move_box:
+                box.x = body.x + 0.3
+            self.frames(1, start=21 + i / 60)
+        return body, net, box
+
+    def test_vehicle_death_freezes_the_prelinked_sample_container_at_the_death_instant(self):
+        body, net, box = self.sample_setup()
+        self.assertIn('own sample container linked before death', self.log_text())
+        boarding_x = net.x
+        body.x, body.y, body.z = 120, 35, 8
+        box.x, box.y, box.z = 120.3, 34.8, 9.2
+        self.frames(20, start=22)                              # in a moving vehicle; network position is stale
+        self.assertEqual(net.x, boarding_x)
+        net.health = 0
+        box.x, box.y, box.z = 119.8, 34.5, 8.1                 # samples/gear drop here
+        body.x, body.z = 180, -20                            # body is thrown elsewhere
+        self.frames(1, start=22.4)
+        (mark,) = self.marks()
+        for actual, expected in zip(mark, (119.8, 34.5, 9.3)):
+            self.assertAlmostEqual(actual, expected)
+        self.assertIn('(own sample container at death)', self.log_text())
+        box.x, box.z = 500, -100                             # later motion/despawn must never move the mark
+        self.frames(60, start=23)
+        self.assertEqual(self.marks(), [mark])
+
+    def test_a_container_dropped_and_left_behind_is_not_used_for_the_next_death(self):
+        body, net, box = self.sample_setup()
+        body.x, net.x = 25, 25
+        self.frames(12, start=22)
+        net.health = 0
+        self.frames(1, start=22.3)
+        self.assertEqual(self.marks(), [(25, -8, 1.2)])
+        self.assertNotIn('(own sample container at death)', self.log_text())
+
+    def test_a_stationary_ground_container_is_not_claimed_when_you_walk_past_it(self):
+        body, net, box = self.sample_setup(move_box=False)
+        self.assertNotIn('own sample container linked before death', self.log_text())
+        net.health = 0
+        self.frames(1, start=21.3)
+        (mark,) = self.marks()
+        self.assertAlmostEqual(mark[0], net.x)
+        self.assertEqual(mark[1:], (-8, 1.2))
+
+    def test_a_container_that_disappears_at_death_uses_its_last_confirmed_position(self):
+        body, net, box = self.sample_setup()
+        body.x, body.y = 70, 20
+        box.x, box.y = 70.3, 20.2
+        self.frames(12, start=22)
+        box.alive, net.health = False, 0
+        self.frames(1, start=22.3)
+        self.assertEqual(self.marks(), [(70.3, 20.2, 2.4)])
+        self.assertIn('(last confirmed own sample container)', self.log_text())
+
+    def test_a_teammate_carrying_the_linked_container_is_not_a_new_death_location(self):
+        body, net, box = self.sample_setup()
+        teammate = self.fake.units[AVATAR][2]
+        teammate.x, teammate.y, teammate.z = 40, 20, 0
+        box.x, box.y, box.z = 40.2, 20.1, 1.2
+        self.frames(12, start=22)
+        net.health = 0
+        self.frames(1, start=22.3)
+        (mark,) = self.marks()
+        self.assertAlmostEqual(mark[0], body.x)
+        self.assertEqual(mark[1:], (-8, 1.2))
+
+    def test_teammate_death_with_a_linked_own_container_does_not_create_a_mark(self):
+        self.sample_setup()
+        self.fake.net.objects[4].health = 0
+        self.frames(60, start=22)
+        self.assertEqual(self.marks(), [])
+
+    def test_overlapping_avatars_do_not_claim_a_sample_container_as_yours(self):
+        self.lua.execute("""
+            local fake = ...
+            fake.on_update = function()
+                local a = fake.units['content/fac_helldivers/cha_avatar/avatar_helldiver']
+                a[2].x, a[2].y, a[2].z = a[1].x, a[1].y, a[1].z
+            end
+        """, self.fake)
+        self.sample_setup()
+        self.assertNotIn('own sample container linked before death', self.log_text())
+
 
 class NamingCompatibilityTests(Case):
     def test_the_first_renamed_launch_preserves_the_previous_legacy_log(self):
