@@ -100,3 +100,41 @@ Test.10 and test.11 implement the requested sinking-recurrence and vehicle-node 
 deferred; multiplayer death validation awaits public feedback; a separate map-open range is not planned.
 MDL3 unchanged-package validation is the smallest next compatibility step. A Bingus/HellForge adapter or
 new called-in Hellbomb feature remains separate from the current stability package.
+
+## Follow-up: offline analysis instead of owner runtime tests
+
+The owner does not want to install/test alternative loaders. Prioritize archive/API inspection and isolated
+mock execution instead. The official MDL3 archive is account-gated; the owner offered to download it and
+attach it here. Request the complete official ZIP, including any API docs and Data Hub; no installation is
+needed. Inspect helpers, entry arguments, texture loading, lifecycle and network reads before proposing a
+port. Static/mocked analysis can establish concrete mismatches, though it cannot prove native gameplay.
+
+Downloaded the official Bingus v20 binary and source archives to the separate workspace research folder:
+
+- Binary SHA-256: `a42e43e7afe520d0ccd23fe25f9ac5d818c00419d9401de51e59553c87866742`
+- Source SHA-256: `fa6f49e682bdd1979bdaba4397fa9ba21b5ecc70e0448791ce8ec67911630cd0`
+- Both match the hashes on the official v20 release assets page.
+- Binary contains one Lua resource, `7251fdd9bb62480a`, 64,495-byte LuaJIT body, envelope version 2.
+- Released source confirms `pcall(require, name)` at src/shared_loader.lua:521; no Chef argument injection.
+  The packaged readme targets Steam build 25480438. No installer or downloaded loader code was run.
+
+Source: https://github.com/CowboyBingus/BingusSharedLoader/releases/tag/v20
+
+## Clarification: standard mission Hellbomb versus portable backpack
+
+The previously investigated `hellbomb/hellbomb` target is the standard fixed mission Hellbomb, not the
+warbond B-100 Portable Hellbomb. Game resources list the portable item separately as
+`content/fac_helldivers/equipment/backpacks/bomb_backpack/bomb_backpack` (`9ace8638421abc8e`), in
+`packages/generated/loadout/hellbomb_backpack` (`346d785d6ca13ff4`). Thus testing the warbond backpack does
+not validate the fixed bomb's target, deployment/activation or removal behavior.
+
+Arrowhead's warbond announcement identifies B-100 as a backpack:
+https://blog.playstation.com/2025/02/04/helldivers-2-servants-of-freedom-warbond-launches-february-6/
+
+Some missions instead grant a free B-100; the wiki distinguishes that case and its alternate call-in code:
+https://helldivers.wiki.gg/wiki/B-100_Portable_Hellbomb
+
+That is the same portable equipment category as the warbond item, so the warbond version is a sensible
+portable-marker test, not a substitute for standard fixed Hellbomb testing. Exact mission-specific spawn
+bindings have not been traced here, and mission-granted call-in availability/code/cleanup behavior still
+requires its own validation. No portable or fixed called-in target was enabled by this clarification.
