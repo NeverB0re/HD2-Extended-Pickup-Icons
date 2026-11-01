@@ -1,4 +1,4 @@
-"""Pickup Dots on PUC Lua 5.1 (lupa) against a fake engine, plus the built archive as Boot Mod Loader reads it."""
+"""Extended Pickup Icons Range on PUC Lua 5.1 (lupa) against a fake engine, plus the built archive as Boot Mod Loader reads it."""
 import math
 import re
 import os
@@ -206,7 +206,7 @@ class Case(unittest.TestCase):
         return self.load()
 
     def log_text(self):
-        path = os.path.join(self.folder.name, "PickupDots.log")
+        path = os.path.join(self.folder.name, "ExtendedPickupIconsRange.log")
         if not os.path.exists(path):
             return ""
         with open(path, encoding="utf-8") as f:
@@ -390,15 +390,15 @@ class DrawingTests(Case):
         self.assertAlmostEqual(self.centre()[0], 12.0, places=6)
 
     def test_the_log_is_written_fresh_each_launch_in_the_loaders_folder(self):
-        with open(os.path.join(self.folder.name, "PickupDots.log"), "w") as f:
+        with open(os.path.join(self.folder.name, "ExtendedPickupIconsRange.log"), "w") as f:
             f.write("last launch" + chr(10))
         self.set_units(AVATAR, [unit(0)], loaded=False)
         self.load()
         self.lua.globals().shutdown()
         text = self.log_text()
-        with open(os.path.join(self.folder.name, "PickupDots.previous.log")) as f:
+        with open(os.path.join(self.folder.name, "ExtendedPickupIconsRange.previous.log")) as f:
             self.assertEqual(f.read(), "last launch" + chr(10))   # kept, not wiped
-        self.assertRegex(text, r"Pickup Dots \S+ loading")
+        self.assertRegex(text, r"Extended Pickup Icons Range \S+ loading")
         self.assertIn("shutdown: frames=0", text)
         self.assertNotIn("last launch", text)
 
@@ -1738,7 +1738,7 @@ class LifecycleTests(Case):
         mod = self.lua.execute(self.source)
         self.assertEqual(mod.status, "no Chef Shared Loader")
         self.lua.execute("local fake = ...; fake.chef.bitmap = nil", self.fake)
-        self.lua.execute("CodexPickupDots = nil")
+        self.lua.execute("ExtendedPickupIconsRange = nil")
         mod = self.lua.execute(self.source, self.fake.chef)
         self.assertEqual(mod.status, "Chef Shared Loader without bitmap (too old?)")
         self.assertIn("FATAL: Chef Shared Loader without bitmap", self.log_text())
@@ -2147,6 +2147,32 @@ class NetworkIdentityTests(Case):
         self.assertEqual(self.marks(), [])
 
 
+class NamingCompatibilityTests(Case):
+    def test_the_first_renamed_launch_preserves_the_previous_legacy_log(self):
+        legacy = os.path.join(self.folder.name, 'PickupDots.log')
+        with open(legacy, 'w') as f:
+            f.write('previous launch before the rename\n')
+        self.load()
+        with open(os.path.join(self.folder.name, 'ExtendedPickupIconsRange.previous.log')) as f:
+            self.assertEqual(f.read(), 'previous launch before the rename\n')
+        with open(legacy) as f:
+            self.assertEqual(f.read(), 'previous launch before the rename\n')
+        self.assertIn('Extended Pickup Icons Range ', self.log_text())
+
+    def test_a_current_log_takes_precedence_over_the_historical_log(self):
+        for name, text in [('PickupDots.log', 'old name'), ('ExtendedPickupIconsRange.log', 'new name')]:
+            with open(os.path.join(self.folder.name, name), 'w') as f:
+                f.write(text)
+        self.load()
+        with open(os.path.join(self.folder.name, 'ExtendedPickupIconsRange.previous.log')) as f:
+            self.assertEqual(f.read(), 'new name')
+
+    def test_the_loader_title_uses_the_actual_mod_name(self):
+        self.lua.execute("local fake = ...; fake.chef.title = function(name) fake.title = name end", self.fake)
+        self.load()
+        self.assertEqual(self.fake.title, 'Extended Pickup Icons Range')
+
+
 class ArchiveTests(unittest.TestCase):
     def test_boot_mod_loader_finds_the_mod(self):
         """Read the archive the way boot_mod_loader.lua's declared_in() does."""
@@ -2165,11 +2191,11 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual(flag, 2)
         self.assertEqual(size, length + 8)
         text = data[at + 8:at + 8 + length].decode("utf-8")
-        self.assertTrue(text.startswith("-- HD2-Addon: mods/codex/pickup_dots\n"))
+        self.assertTrue(text.startswith("-- HD2-Addon: mods/codex/extended_pickup_icons_range\n"))
 
     def test_compiles_on_lua51(self):
         lua = lua51.LuaRuntime()
-        compiled = lua.eval("function(src) local f, err = loadstring(src, 'pickup_dots'); return f ~= nil, err end")
+        compiled = lua.eval("function(src) local f, err = loadstring(src, 'extended_pickup_icons_range'); return f ~= nil, err end")
         ok, err = compiled(build.built_source())
         self.assertTrue(ok, err)
 

@@ -1,6 +1,6 @@
--- HD2-Addon: mods/codex/pickup_dots
+-- HD2-Addon: mods/codex/extended_pickup_icons_range
 -- HD2-Keep-On-Crash: yes
--- Extended Pickup Icons Range (Pickup Dots): markers over samples, supplies, mission items and vehicles near you.
+-- Extended Pickup Icons Range: markers over samples, supplies, mission items and vehicles near you.
 -- Lua-only rebuild of Extended Pickup Icons for Chef Shared Loader (PUC Lua 5.1, no ffi).
 -- It reads units and guarded network state and draws on the screen; it changes no game state.
 --
@@ -11,7 +11,7 @@
 --     no target is looked up at all and the log says so;
 --   * nothing is looked up until a world has settled and a helldiver is in it.
 
-local MOD_KEY = 'CodexPickupDots'
+local MOD_KEY = 'ExtendedPickupIconsRange'
 if rawget(_G, MOD_KEY) then return rawget(_G, MOD_KEY) end
 
 -- Chef Shared Loader (Nexus 17760) hands its helpers in: the game's own camera, guarded engine calls, units and
@@ -22,7 +22,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.5.1-test.3'
+local VERSION = '2.5.1-test.4'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -133,12 +133,14 @@ local TARGETS = "@TARGETS@"   -- filled in by build.py from targets.lua
 local logfile
 do
     -- Written fresh each launch, in Chef Shared Loader's folder (%APPDATA%\Arrowhead\Helldivers2), where a mod may write;
-    -- the last launch's kept beside it as PickupDots.previous.log (2.4.0: a launch that ended in a crash is the one
+    -- the last launch's kept beside it as ExtendedPickupIconsRange.previous.log (2.4.0: a launch that ended in a crash is the one
     -- the next launch would otherwise wipe).
     local dir = CHEF and type(CHEF.log_directory) == 'string' and CHEF.log_directory or nil
     if dir then
         local okr, old = pcall(function()
-            local f = io.open(dir .. '\\PickupDots.log', 'rb')
+            local f = io.open(dir .. '\\ExtendedPickupIconsRange.log', 'rb')
+            -- One-way log-name migration: preserve the last pre-rename launch without changing its file.
+            if not f then f = io.open(dir .. '\\PickupDots.log', 'rb') end
             if not f then return nil end
             local text = f:read('*a')
             f:close()
@@ -146,12 +148,12 @@ do
         end)
         if okr and type(old) == 'string' and #old > 0 then
             pcall(function()
-                local f = io.open(dir .. '\\PickupDots.previous.log', 'wb')
+                local f = io.open(dir .. '\\ExtendedPickupIconsRange.previous.log', 'wb')
                 f:write(old)
                 f:close()
             end)
         end
-        local ok, file = pcall(io.open, dir .. '\\PickupDots.log', 'w')
+        local ok, file = pcall(io.open, dir .. '\\ExtendedPickupIconsRange.log', 'w')
         if ok then logfile = file end
     end
 end
@@ -1389,13 +1391,15 @@ local TEXTS = {
 }
 
 local function register_settings()
+    -- Persisted since 2.x: retain the key so a naming-only update preserves saved distances/toggles.
+    local settings_prefix = 'pickup_dots.'
     local host = rawget(_G, 'ModOptionsMenu')
     if type(host) ~= 'table' or type(host.register_option) ~= 'function' then
         log('settings: no Mod Options Menu host; the default ranges')
         return
     end
     for _, row in ipairs(ROWS) do
-        local id, kind, field = 'pickup_dots.' .. row[1], row[2], row[3]
+        local id, kind, field = settings_prefix .. row[1], row[2], row[3]
         local text = TEXTS[row[1]]
         local spec, set
         if kind == 'show' then
@@ -1441,7 +1445,7 @@ end
 
 -- ----------------------------------------------------------------- install --
 local function install()
-    log('Pickup Dots ' .. VERSION .. ' loading')
+    log('Extended Pickup Icons Range ' .. VERSION .. ' loading')
     local missing = check_api()
     if missing then
         log('FATAL: ' .. missing)
@@ -1449,6 +1453,7 @@ local function install()
         M.status = missing
         return M
     end
+    if type(CHEF.title) == 'function' then pcall(CHEF.title, 'Extended Pickup Icons Range') end
     log('Application.can_get: ' .. (can_get and 'present - only loaded resources are looked up'
         or 'MISSING - no target is looked up in this version (diagnostic only)'))
     build_keys()

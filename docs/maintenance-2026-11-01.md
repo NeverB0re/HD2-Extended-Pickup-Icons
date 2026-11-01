@@ -1,7 +1,8 @@
 # 2.5.1-test.1: cached-unit access guards
 
 The crash report identified `mods/codex/pickup_dots|Unit.has_node:cc21c7ffd3ebefb9` on Chef 1.3.1.
-The id is the Murmur64 hash of `content/fac_helldivers/vehicles/frv/frv`. Pickup Dots asks Chef for
+This quoted diagnostic is historical; the current resource name is `mods/codex/extended_pickup_icons_range`.
+The id is the Murmur64 hash of `content/fac_helldivers/vehicles/frv/frv`. Extended Pickup Icons Range asks Chef for
 that vehicle's `gun_mount` node to detect a detached gun. Chef's `unit_node` helper calls `Unit.has_node`.
 
 ## Change

@@ -3,7 +3,7 @@
 Each image's shape (a channel, 0..1) is cropped, scaled to `height` screen pixels, and each cell given its
 coverage in quarters (drawn that see-through, like the game's scaled icon). Cells of the same coverage are
 merged into rectangles: runs along a row, stacked while the next row has the same run. Prints Lua (paste into
-ICON_PIXELS in src/pickup_dots.lua) and writes a preview PNG.
+ICON_PIXELS in src/extended_pickup_icons_range.lua) and writes a preview PNG.
 """
 import os
 import sys

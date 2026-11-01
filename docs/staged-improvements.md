@@ -57,3 +57,29 @@ examples in NarrowHUD `597968c2b9e556812e0376b8a6627926df1f2524`. No NarrowHUD i
 
 Next gate: validate this pair of test builds in-game before changing discovery/refresh cadence or replacing
 vehicle and carryable heuristics. Timing changes and unverified object fields are intentionally deferred.
+
+## Local gameplay feedback and naming — 2.5.1-test.4
+
+The player reported correct death markers and other icons in the test. The local 2.5.1-test.3 log confirms
+Chef world-ID mode, confirmed local-player identity, two network-health death events, and normal shutdown.
+No `failed`, `FATAL` or `disabled` line was present in that log. This is one local session, not coverage of
+every host/guest/instant-death case or a frame-time benchmark.
+
+Naming is aligned with Extended Pickup Icons Range:
+
+- Main source/test: `src/extended_pickup_icons_range.lua`, `tests/test_extended_pickup_icons_range.py`.
+- Loader resource and texture namespace: `mods/codex/extended_pickup_icons_range`.
+- Per-environment singleton: `ExtendedPickupIconsRange`; optional Chef title: `Extended Pickup Icons Range`.
+- Logs: `ExtendedPickupIconsRange.log` / `ExtendedPickupIconsRange.previous.log`. On the first renamed launch,
+  the old log is read as the previous launch if there is no current log. Original historical logs are untouched.
+
+The package GUID and saved `pickup_dots.*` option keys are preserved. Chef's ModOptionsMenu get API only
+returns registered rows, so renaming those keys without a migration would reset saved settings. They are
+compatibility identifiers, not the loader/display name. Historical release/test ZIPs and quoted crash reports
+retain their original names. This naming-only build still needs a post-rename launch check before publishing.
+
+Validation: all 147 tests pass, including legacy-log migration and current-log precedence. The packaged Lua
+compiles on Lua 5.1; its addon id and all 135 texture ids use the new namespace. Texture headers/pixels, GPU
+and stream data, mod-manager icon and manifest/GUID are byte-identical to test.3. Local-player logic and the
+target table are unchanged. The settings-prefix local stays inside `register_settings` to respect Lua 5.1's
+200-local limit in the main chunk.

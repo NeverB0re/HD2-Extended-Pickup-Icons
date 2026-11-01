@@ -1,9 +1,9 @@
-"""Build Extended Pickup Icons Range (Pickup Dots) into a mod zip (Modocracy, HD2 Arsenal, HD2MM).
+"""Build Extended Pickup Icons Range into a mod zip (Modocracy, HD2 Arsenal, HD2MM).
 
     python build.py            -> dist/Extended Pickup Icons Range v<version>.zip (a test version, e.g.
                                   2.1.0-test.1: copy it to test-builds/; a release: to release/)
 
-The mod is one plain-text Lua resource, mods/codex/pickup_dots, in
+The mod is one plain-text Lua resource, mods/codex/extended_pickup_icons_range, in
 9ba626afa44a3aa3.patch_0, which Chef Shared Loader finds and starts, and (2.4.0) its icons as textures of that patch
 (tools/bake_icons.py), which the loader's chef.bitmap draws.
 The archive writer below (SCAFFOLD, murmur64, write_module) is taken from
@@ -18,14 +18,14 @@ import sys
 import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SOURCE = os.path.join(HERE, "src", "pickup_dots.lua")
+SOURCE = os.path.join(HERE, "src", "extended_pickup_icons_range.lua")
 TARGETS = os.path.join(HERE, "src", "targets.lua")
 LOCAL_PLAYER = os.path.join(HERE, "src", "local_player.lua")
 ICON = os.path.join(HERE, "src", "icon.png")   # the Nexus mod's icon
 DIST = os.path.join(HERE, "dist")
 NAME = "Extended Pickup Icons Range"
 FOLDER = "Addon"
-RESOURCE = "mods/codex/pickup_dots"
+RESOURCE = "mods/codex/extended_pickup_icons_range"
 LUA_SOURCE_FLAG = 2
 ICON_TABLE = "{}"   # the baked icons' Lua table (icon_textures), set by build()
 
@@ -115,7 +115,7 @@ def murmur64(data, seed=0):
 
 LUA_TYPE = murmur64(b"lua")
 TEXTURE_TYPE = murmur64(b"texture")
-ICONS_PREFIX = "mods/codex/pickup_dots/icons/"   # a texture's resource name: this, the icon's name and its size
+ICONS_PREFIX = RESOURCE + "/icons/"   # a texture's resource name: this, the icon's name and its size
 
 
 def texture_part(width, height):
@@ -208,17 +208,17 @@ def built_source():
     with open(TARGETS, encoding="utf-8") as f:
         targets = f.read()
     if source.count('"@TARGETS@"') != 1:
-        raise SystemExit("pickup_dots.lua has no single \"@TARGETS@\" slot")
+        raise SystemExit("extended_pickup_icons_range.lua has no single \"@TARGETS@\" slot")
     if not source.startswith("-- HD2-Addon: " + RESOURCE + "\n"):
         raise SystemExit("the first line must declare " + RESOURCE)
     source = source.replace('"@TARGETS@"', "(function()\n" + targets + "end)()")
     with open(LOCAL_PLAYER, encoding="utf-8") as f:
         local_player = f.read()
     if source.count('"@LOCAL_PLAYER@"') != 1:
-        raise SystemExit("pickup_dots.lua has no single local-player slot")
+        raise SystemExit("extended_pickup_icons_range.lua has no single local-player slot")
     source = source.replace('"@LOCAL_PLAYER@"', "(function()\n" + local_player + "\nend)()")
     if source.count('"@ICONS@"') != 1:
-        raise SystemExit("pickup_dots.lua has no single \"@ICONS@\" slot")
+        raise SystemExit("extended_pickup_icons_range.lua has no single \"@ICONS@\" slot")
     source = source.replace('"@ICONS@"', ICON_TABLE)
     for banned in ("require('ffi')", 'require("ffi")', "ffi.", "bit.", "jit.", "popen", "os.execute", "goto "):
         if banned in source:
@@ -231,7 +231,7 @@ def built_source():
 def version_of(source):
     match = re.search(r"local VERSION = '([0-9A-Za-z.-]+)'", source)
     if not match:
-        raise SystemExit("no VERSION in pickup_dots.lua")
+        raise SystemExit("no VERSION in extended_pickup_icons_range.lua")
     return match.group(1)
 
 
