@@ -244,3 +244,25 @@ Runtime behavior of the new category probes still needs verification; no univers
 Five new replay cases failed before the fix. All 176 tests now pass, including invalid/refused reads,
 visibility restoration, below-zero falling samples, streaming gaps, new items at old positions, world
 reset and the two-probes/s bound. The test.10 ZIP was built without changing target resources or icons.
+
+## Vehicle node timing — 2.5.1-test.11
+
+Vehicle mount lookup and node-position access now require the existing three-second parked interval.
+Weapon membership is tested first; missing weapons, already confirmed wrecks, nearby exosuit wrecks and
+fully hidden geometry bypass the mount call. A large already-observed change in root-to-weapon distance
+also bypasses it. This reduces calls in falling/driving/destruction paths; no polling guard can guarantee
+that the engine cannot start destruction between the final alive check and a native call.
+
+Moving vehicles retain same-frame weapon-loss and detached-nearby-weapon detection from root positions.
+Root and mount distances have separate per-unit baselines, so switching to the stationary mount coordinate
+system cannot itself flag a normal vehicle destroyed. The existing fallback remains when a mount call is
+refused. No vehicle type, marker, setting or destruction check was removed.
+
+All four new timing/detection cases failed before the fix. All 180 tests now pass: falling and newly seen
+vehicles make no early mount calls, parked vehicles query once, moving vehicles read no mount positions,
+and lost/detached weapons still suppress wreck markers. Test.11 integrates test.10 and the previously
+gameplay-confirmed sample-container death fix. New node timing/geometry guards still need gameplay checks.
+
+The owner has deferred color changes and multiplayer validation (await user feedback), excluded separate
+map-open ranges, and requested read-only loader compatibility/called-in Hellbomb investigation. No loader
+port, game deployment or additional target is enabled by this test build.

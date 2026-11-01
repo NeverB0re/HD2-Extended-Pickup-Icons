@@ -624,6 +624,61 @@ class DespawnTests(Case):
         self.assertEqual(self.dots(), 1)  # same fake handle in a new world has no previous visible baseline
 
 
+class VehicleNodeTimingTests(Case):
+    VEHICLE = DespawnTests.VEHICLE
+    GUN = DespawnTests.GUN
+
+    def prepare(self):
+        self.set_units(AVATAR, [unit(0, -8)], loaded=False)
+        self.set_units(self.VEHICLE, [dict(unit(0, 20), mx=0, my=20, mz=1.5)])
+        self.set_units(self.GUN, [unit(0, 20, 1.6)])
+        self.lua.execute('local f=...; local node=f.chef.unit_node; local pos=f.chef.unit_position; f.mount_calls=0; f.mount_positions=0; f.chef.unit_node=function(u,n) f.mount_calls=f.mount_calls+1; return node(u,n) end; f.chef.unit_position=function(u,n) if n==8 then f.mount_positions=f.mount_positions+1 end return pos(u,n) end', self.fake)
+        self.load()
+        self.settle()
+        return self.fake.units[self.VEHICLE][1], self.fake.units[self.GUN][1]
+
+    def test_mount_is_not_queried_until_vehicle_has_stood_still(self):
+        self.prepare()
+        self.assertEqual(self.fake.mount_calls, 0)
+        self.frames(120, start=21)
+        self.assertEqual(self.fake.mount_calls, 0)
+        self.frames(40, start=24)
+        self.assertEqual(self.fake.mount_calls, 1)
+        self.assertEqual(self.dots(), 1)
+
+    def test_moving_vehicle_uses_no_mount_calls_and_keeps_detachment_detection(self):
+        body, gun = self.prepare()
+        self.frames(40, start=24)  # establish mount-based history while parked
+        before = self.fake.mount_positions
+        for k in range(20):
+            body.x = body.mx = gun.x = (k + 1) * 0.2
+            self.frames(1, start=25 + k / 60)
+            self.assertEqual(self.dots(), 1)  # changing coordinate bases cannot mark it destroyed
+        self.assertEqual(self.fake.mount_positions, before)
+        gun.x, gun.z = body.x + 3, 0
+        body.x = body.mx = body.x + 0.2
+        self.frames(1, start=26)
+        self.assertEqual(self.dots(), 0)  # detached nearby gun still detected while moving
+
+    def test_no_mount_read_after_the_weapon_has_disappeared(self):
+        self.prepare()
+        self.frames(40, start=24)
+        before = self.fake.mount_positions
+        self.fake.units[self.GUN] = self.lua.table()
+        self.frames(40, start=26)
+        self.assertEqual(self.fake.mount_positions, before)
+        self.assertEqual(self.dots(), 0)
+
+    def test_falling_vehicle_never_gets_a_first_node_query(self):
+        body, gun = self.prepare()
+        for k in range(240):
+            body.z = body.mz = 70 - k * 0.25
+            gun.z = body.z + 1.6
+            self.frames(1, start=21 + k / 60)
+        self.assertEqual(self.fake.mount_calls, 0)
+        self.assertEqual(self.dots(), 1)
+
+
 class ScreenTests(Case):
     def test_item_ahead_is_drawn_at_screen_centre(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)

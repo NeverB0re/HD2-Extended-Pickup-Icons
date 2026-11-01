@@ -22,7 +22,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.5.1-test.10'
+local VERSION = '2.5.1-test.11'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -354,7 +354,7 @@ local function track(previous, x, y, z, now, unit)
         end
     end
     local armed = best ~= nil and best.armed or nil   -- it had weapons on it (kept while it is followed)
-    local arm = best ~= nil and best.arm or nil       -- how far from its mount its weapon sat (2.3.0)
+    local arm = best ~= nil and best.arm or nil       -- separate mount/root weapon-distance baselines
     local off = best ~= nil and best.off or nil       -- its weapon came off (2.3.0)
     if best ~= nil and best.anchor ~= nil then
         local a = best.anchor
@@ -723,23 +723,34 @@ local function collect_dots(now)
                     -- destroyed, you in or at it, or someone else in a moving one: no marker
                     local v = follow_vehicle(p, now, seen_now)
                     local parked = now - v.still_since >= VEHICLE_PARKED_S
-                    local mx, my, mz = node_position(p, keys[i].mount)
-                    local from = nearest_from(arms, p, ARMS_NEAR, mx and {mx, my, mz} or p)
-                    local armed_now = from ~= nil
+                    local root_from = nearest_from(arms, p, ARMS_NEAR, p)
+                    local armed_now = root_from ~= nil
                     if p.unit ~= nil and wrecked[p.unit] then v.off = true end   -- destroyed before (this world)
                     if armed_now and not v.off then v.armed, v.lost = true, nil end
                     if v.armed and not armed_now and not v.off then
                         v.off = true   -- its weapon gone: destroyed, for good
                     end
+                    local beside_wreck = near(wrecks, p, WRECK_NEAR)
                     -- (only on a vehicle with a mount: an exosuit's weapons are its arms, which move as it walks and
                     -- aims; 2.4.0-test.5 took one just called in for destroyed)
-                    if armed_now and not v.off and keys[i].mount then
-                        if v.arm == nil then
-                            v.arm = from
-                        elseif math.abs(from - v.arm) > ARM_MOVED then
+                    if armed_now and not v.off and not beside_wreck and keys[i].mount then
+                        -- Query the mount only after three seconds at the same anchor. No node lookup or
+                        -- node-position access while falling/driving, after weapon loss, or by a wreck.
+                        -- Root and mount measurements have different origins: never compare them directly.
+                        local mx, my, mz
+                        local root_changed = v.arm and v.arm.root and math.abs(root_from - v.arm.root) > ARM_MOVED
+                        if parked and not root_changed then mx, my, mz = node_position(p, keys[i].mount) end
+                        local from = mx and nearest_from(arms, p, ARMS_NEAR, {mx, my, mz}) or root_from
+                        local basis = mx and 'mount' or 'root'
+                        v.arm = v.arm or {}
+                        v.arm.root = v.arm.root or root_from
+                        local previous = v.arm[basis]
+                        if previous == nil then
+                            v.arm[basis] = from
+                        elseif math.abs(from - previous) > ARM_MOVED then
                             v.off = true
-                            log(string.format('vehicle: %s - its weapon came off (%.1f m from its mount; it sat %.1f)',
-                                string.match(keys[i].label, '([^/]+)$') or keys[i].label, from, v.arm))
+                            log(string.format('vehicle: %s - its weapon came off (%.1f m from %s; it sat %.1f)',
+                                string.match(keys[i].label, '([^/]+)$') or keys[i].label, from, basis, previous))
                         end
                     end
                     -- kept by its unit: followed from frame to frame only while near, a wreck left and come back to
@@ -747,7 +758,7 @@ local function collect_dots(now)
                     -- ground a player told of). Not one by an exosuit wreck: a new exosuit may land beside the old
                     -- one's wreck and walk off.
                     if v.off and p.unit ~= nil then wrecked[p.unit] = true end
-                    local destroyed = v.off or near(wrecks, p, WRECK_NEAR)
+                    local destroyed = v.off or beside_wreck
                     if destroyed and not v.lost then
                         v.lost = true
                         log('vehicle: ' .. (string.match(keys[i].label, '([^/]+)$') or keys[i].label)
