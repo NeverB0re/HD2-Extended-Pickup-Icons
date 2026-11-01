@@ -138,3 +138,43 @@ That is the same portable equipment category as the warbond item, so the warbond
 portable-marker test, not a substitute for standard fixed Hellbomb testing. Exact mission-specific spawn
 bindings have not been traced here, and mission-granted call-in availability/code/cleanup behavior still
 requires its own validation. No portable or fixed called-in target was enabled by this clarification.
+
+## Offline destruction investigation and owner reply policy
+
+The owner asks to investigate called-in Hellbomb removal without requiring a gameplay test. Read-only
+Filediver extraction of the two state_machine resources produced these decoded animation states:
+
+- Standard fixed bomb: undeployed, raise_hellbomb, idle, package_retract; top_extend/top_retracted;
+  bridge_idle/Empty_State. Decoded events include package_deploy, package_retract, package_retract_done,
+  raise_top, top_done and base_done, plus three unresolved hashes.
+- Portable backpack: armed, arming, inactive; Empty_State/spinning. One event hash remains unresolved.
+
+There is no explicitly decoded destruction-complete state in these files. These are animation graphs,
+not the complete gameplay/native destruction implementation. Unresolved event hashes must not be guessed
+to mean explosion. Data does not establish that destruction is absent or unknowable; it does not yet
+provide an authoritative terminal signal. Do not add risky live animation-state reads: previous project
+versions crashed after destruction through that path.
+
+Engine semantics provide two independently useful conditions:
+
+1. A deleted unit is not a valid marker target (Unit.alive is object existence, not health). Existing guards
+   can remove it without needing a bomb-specific health field.
+2. A previously visible model becoming fully invisible can be suppressed reversibly, preserving uncertainty
+   on refused reads and allowing normal deployment visibility to recover. Whole-unit visibility is not
+   enough if the destroyed bomb leaves visible pod/remnant geometry. A selective bomb-mesh rule would need
+   an established mapping; none is enabled from a guessed mesh index.
+
+Official API reference:
+https://help.autodesk.com/cloudhelp/ENU/Stingray-Help/lua_ref/obj_stingray_Unit.html
+
+Do not reuse the defunct bomb's immediate terminal all-mesh-hidden rule for a called-in bomb. Do not time
+out a mark from activation/ten seconds alone: neither an animation event nor a nominal fuse proves actual
+destruction/removal. Current data supports a conservative implementation design and offline transition
+tests, not a claim that every native explosion/destruction path has been verified without gameplay.
+No new bomb target or runtime rule is implemented by this note.
+
+For later Nexus reply drafting, the owner chose this support policy (do not post it now): the mod is made
+for Chef Shared Loader; operation through other loaders is not guaranteed; another loader must support
+Chef compatibility. The owner reports Boot Loader appears to coexist already. Preserve that distinction
+when drafting: do not claim Boot Loader alone replaces every required Chef helper, or guarantee all
+alternative loaders. Further ports are not a prerequisite for answering the compatibility questions.
