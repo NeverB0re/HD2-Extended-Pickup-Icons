@@ -1,85 +1,81 @@
 # Extended Pickup Icons Range
 
-A **HELLDIVERS 2** mod that marks samples, supplies, mission items, drop-off points, valves and vehicles
-from farther away, using the game's own icons. Since 2.0.0 (numbered as on Nexus) it runs on
-**Chef Shared Loader** (Nexus 17760) and draws its own on-screen markers; the older Bingus Shared Loader
-versions (released here as v2.4, v2.5 and v3.0) are in this repository's history and releases.
+A HELLDIVERS 2 Chef Shared Loader addon that draws markers over samples, supplies, mission items,
+objective interactions, Hellbombs, vehicles and your last death, using the game's icons.
 
-Player-facing description and install steps: [PUBLISH_NEXUS.txt](PUBLISH_NEXUS.txt) (Nexus BBCode).
+The local **2.6.0 release candidate** includes the gameplay-tested changes from 2.5.1-test.14, removes
+experimental measurements, and adds native Chef settings with folded categories and per-type ranges.
+The final settings UI still needs an in-game display/navigation check before publication.
 
-## Layout
+- [Nexus page text, English + Korean BBCode](PUBLISH_NEXUS.txt)
+- [2.6.0 changelog, upload description and announcement, English + Korean](docs/nexus-release-2.6.0.txt)
+- [Release audit and validation scope](docs/release-audit-2.6.0.md)
+- [Development history](docs/staged-improvements.md)
 
-| Path | What |
+## Player requirements
+
+Chef Shared Loader 1.4.0 or newer for the folded interface; use the latest version. This is a Chef addon.
+Other loaders must provide compatible Chef addon support. No independent loader port is claimed.
+Remove the old mod before deploying the new ZIP, with Chef at the highest priority.
+
+**2.6.0 starts marker settings at defaults.** The owner approved the new settings backend without
+migration of legacy ModOptionsMenu values. Reconfigure in F9; subsequent changes persist normally.
+Native setting IDs use `epir.*`. The previous `pickup_dots.*` IDs are retained only in the legacy
+category-control fallback, for loaders without native option helpers. Older native interfaces without
+headings show flat settings. These fallback paths do not create duplicate options on current Chef.
+
+## Runtime behavior
+
+Defaults: samples 50 m, supplies 25 m, mission items/objectives 50 m, Hellbombs and vehicles 100 m,
+last death 500 m. At most 40 nearest markers are drawn. Folded sections contain individual type
+visibility/range controls, master switches that preserve child choices, explicit bulk distance sliders,
+and related appearance controls. Shared appearance settings stay together. Settings update cached
+per-target ranges only on changes; frames do not poll the options backend.
+
+Own death is confirmed from guarded typed local-player health on supported builds. A previously linked
+own sample container supplies a fixed death coordinate, else a fresh last-known position is used. The
+marker does not follow a moving/despawning corpse. Unknown game builds retain the earlier camera method.
+
+Fixed mission Hellbombs share the red Hellbomb icon but have independent settings from damaged map
+bombs. A guarded observed activation transition starts an estimated 15-second warning in seconds:hundredths,
+with accelerating yellow-to-red pulsing. Late observations show ARMED. Zero remains an alert until removal.
+This is a local estimate, not an authoritative explosion deadline. The animation reader is restricted to the
+verified build/resource, and stops after activation. Portable backpacks have no marker/countdown support.
+
+Deleted units and confirmed vanished geometry are suppressed. Destruction/in-use/ownership decisions
+still include heuristics: no universal underground height filter or replicated vehicle-health replacement
+is claimed. Valves/cranks remain marked after use. See the player page for behavior and limits.
+
+## Layout and development
+
+| Path | Purpose |
 | --- | --- |
-| `src/extended_pickup_icons_range.lua` | The mod (PUC Lua 5.1, runs inside Chef Shared Loader). `VERSION` is set here. |
-| `src/targets.lua` | Which game units get a marker: group, icon and distances per unit. |
-| `src/local_player.lua` | Build/schema-checked local player and death observations, inlined into the main Lua by `build.py`. |
-| `src/icon.png` | Mod manager icon. |
-| `build.py` | Builds `dist/Extended Pickup Icons Range v<VERSION>.zip` (Arsenal-importable). |
-| `tests/test_extended_pickup_icons_range.py` | Runs the mod against a fake engine (needs `lupa`). |
-| `tools/bake_icons.py` | Bakes `tools/icons/game/*.png` (game icons, extracted with filediver) into the mod's own textures; `build.py` packs them into the patch. |
-| `tools/draw_skull.py` | Draws the death mark's skull (from the game's death screen) into `tools/icons/game/skull.png`. |
-| `tools/raster_icons.py` | Turns `tools/icons/supply.png` into the `ICON_PIXELS` table (the supply crate's pixel icon). |
-| `release/` | The released ZIP. |
+| `src/extended_pickup_icons_range.lua` | Runtime and VERSION; Lua 5.1 |
+| `src/targets.lua` | 87 target/helper resource definitions |
+| `src/local_player.lua` | Build-checked identity/death observations |
+| `src/hellbomb_warning.lua` | Guarded activation observation and warning appearance |
+| `src/settings.lua` | Native options and cached per-target settings |
+| `build.py` | Inlines modules and packs one Lua plus 135 icon textures |
+| `tests/` | Lua 5.1 fake-engine regression tests via lupa |
+| `tools/compare_discovery_reads.py` | Native-read count comparison, not an FPS benchmark |
+| `tools/bake_icons.py` | Bakes game icon PNGs into resource textures |
+| `tools/verify_release.py` | Checks ZIP contents, Lua, texture compatibility and package hash |
+| `release/` | Historical releases plus the local candidate; a ZIP here does not mean published |
 
-## Working on it
-
-```bash
+```powershell
 python -m venv .venv
 .venv/Scripts/python -m pip install lupa
-.venv/Scripts/python -m unittest discover -s tests -p "test*.py"
-.venv/Scripts/python build.py
+.venv/Scripts/python -B -m unittest discover -s tests -p 'test*.py'
+.venv/Scripts/python -B build.py
+.venv/Scripts/python -B tools/verify_release.py 'dist/Extended Pickup Icons Range v2.6.0.zip'
 ```
 
-To change an icon, replace its PNG in `tools/icons/game/` (its entry in `ICONS` in `tools/bake_icons.py`
-says how it is cut out) and rebuild; `python tools/bake_icons.py` writes a preview of every icon and size.
-The supply crate is still a pixel icon: edit `tools/icons/supply.png`, run `python tools/raster_icons.py`
-and paste the printed table into `ICON_PIXELS` in `src/extended_pickup_icons_range.lua`.
+Lua 5.1 on Windows requires an ASCII writable TEMP path for file-I/O tests. Build refuses to overwrite
+an existing version directory. Source asset changes are not needed for this update. Never push or
+publish experimental changes or a candidate before its final in-game check.
 
-Unit names come from filediver's resource listing (https://github.com/xypwn/filediver).
-Sample rarity: rare samples are Crystallized E-710, Legendarium and Black Saffron; the super sample
-is Super Uranium.
-
-## Current local test builds
-
-See [docs/staged-improvements.md](docs/staged-improvements.md). `2.5.1-test.2` isolates the Chef world-ID
-change; `2.5.1-test.3` also uses guarded local-player health/position observations on the two supported game
-builds. In a local gameplay session, its network identity and two death detections were confirmed in the log;
-the player reported correct death and general markers. The renamed test.4 addon/logs were also seen running.
-`2.5.1-test.7` integrates discovery optimization, vehicle identity tracking and a fix for vehicle-death position
-using the mapped local avatar's world coordinates when available. Its live vehicle test failed: the log
-still used the replicated network position. `2.5.1-test.8` adds bounded position diagnostics, not a new fix.
-`2.5.1-test.9` instead prefers the prelinked own sample container's position when local health confirms
-death, as requested. Its vehicle-death placement was confirmed in gameplay on 2026-11-01; the log also
-names the own-container source and confirms clearing after recovery. Other multiplayer cases and
-intermittent native-crash elimination remain unverified. See
-[the Nexus comment audit](docs/nexus-comment-audit-2026-11-01.md) for outstanding reports and requests.
-`2.5.1-test.10` preserves wreck state across search gaps and suppresses vanished geometry after a
-positive visible baseline. `2.5.1-test.11` also delays vehicle mount reads until parked while keeping
-weapon-loss/detachment detection during motion. All 180 offline tests pass; these new guards need
-gameplay verification. Still-visible sinking objects are not classified by height or movement alone.
-Loader and called-in Hellbomb feasibility: [investigation](docs/loader-and-hellbomb-audit-2026-11-01.md).
-No loader port is enabled. `2.5.1-test.12` adds the fixed mission Hellbomb to the existing red Hellbomb
-markers and shared settings. It removes deleted units and reversibly hides models whose previously
-visible geometry disappears; portable backpacks and ship props are excluded. All 189 offline tests pass.
-The owner confirmed mission-bomb display/removal and vehicle destruction/despawn marker behavior
-in gameplay on 2026-11-01. `2.5.1-test.13` experimentally observes the fixed mission Hellbomb activation
-animation layer to show a large estimated ten-second warning, with accelerating yellow-to-red icon
-pulsing. Late first observations show ARMED without a guessed countdown. Only the extracted current
-build/graph is enabled; actual animation-state reads and activation timing are not gameplay-verified.
-The owner confirmed test.13 activation detection but reported explosion several seconds after its
-ten-second timer. `2.5.1-test.14` uses a fifteen-second calibration hypothesis (the extracted activation
-clip is five seconds), displays seconds:hundredths without a tilde, and logs activation-to-removal
-intervals for calibration. This is not a replicated deadline or hundredth-second accuracy.
-All 209 offline tests pass. See the staged notes for native-call risk and the exact guards.
-Existing icons, ranges, settings,
-vehicle destruction detection and camera-relative general-marker behavior are preserved. `release/` and the
-published Nexus description still describe the earlier public version.
-
-Current loader resource: `mods/codex/extended_pickup_icons_range`. Current logs:
-`ExtendedPickupIconsRange.log` and `ExtendedPickupIconsRange.previous.log`, in Chef's log folder.
-The first renamed launch carries the old log into the new previous-log file without altering the original.
-Only the persisted `pickup_dots.*` setting keys remain for compatibility with existing saved options.
-
-Network vehicle/carryable-state replacement remains gated; see [the state audit](docs/object-state-audit.md).
-The existing vehicle and mission-item decisions continue to operate for these unverified states.
+Addon resource: `mods/codex/extended_pickup_icons_range`. Manifest GUID remains unchanged.
+Logs: `ExtendedPickupIconsRange.log` and `ExtendedPickupIconsRange.previous.log` in Chef's log folder.
+Only basic startup, state-change and error information remains; experimental position/timing/statistics
+code and its extra bookkeeping are removed. Research assets, developer tools, tests and logs are not
+included in the player ZIP.

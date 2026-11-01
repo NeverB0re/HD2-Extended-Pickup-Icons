@@ -50,53 +50,61 @@ MANIFEST = {
 README = """Extended Pickup Icons Range v{version}
 =======================================
 
-See samples, supplies, mission items and vehicles from farther away, marked with the
-game's own icons.
+See samples, supplies, mission items and vehicles from farther away, using the game's icons.
+
+Requires Chef Shared Loader 1.4.0 or newer (Nexus mod 17760); the latest is recommended.
+Give Chef the highest priority in your mod manager. This is a Chef addon. Other loaders
+must provide compatible Chef addon support; standalone compatibility is not guaranteed.
+Remove the previous version before importing and deploying this ZIP. Do not run both.
+
+IMPORTANT FOR UPDATING PLAYERS: 2.6.0 switches to native Chef settings. Marker preferences
+start at defaults. Press F9, select Extended Pickup Icons Range and configure them again.
+Later changes are saved normally. No separate Mod Options Menu mod is required.
 
 What gets a marker (default distance):
-- Samples (50 m): common, rare and super samples, sample containers, Terminid eggs.
-- Supplies (25 m): ammo boxes, grenade boxes, stims and resupply pod crates.
-- Mission items (50 m): SSSDs, data drives, black boxes, larva containers (in sky blue),
-  launch codes, keycards, video cameras, artillery shells, warheads and other things you carry.
-- Mission objectives (50 m): drop-off points, cargo containers, valves and cranks.
-- Hellbombs (100 m): map-placed bombs and fixed mission Hellbomb call-ins, in red.
-  Uses the same Hellbomb toggle and range. Portable backpack bombs are not included.
-  Experimental mission-bomb warning: a newly observed activation layer starts an estimated
-  15:00 countdown (seconds:hundredths) with a pulsing yellow-to-red icon. This is a
-  calibration estimate including the five-second activation clip. Already active on first sight:
-  ARMED only. At estimated expiry: 00:00 until removed. Not an authoritative explosion timer.
-  Current extracted game build only; animation reads/timing still need gameplay validation.
-- Vehicles (100 m): exosuits, FRVs and tanks, in sky blue; out of view, at the screen's edge
-  with an arrow.
-- Where you died (500 m): a red skull where your gear lies (your sample container, else your
-  body), gone once you get there; out of view, at the screen's edge with an arrow.
+- Samples (50 m): common, rare, super, sample containers and Terminid eggs.
+- Supplies (25 m): ammo, grenades, stims and resupply crates.
+- Mission items (50 m): SSSDs/data, black boxes, larva containers, launch codes/keycards,
+  cameras, briefcases, chemical containers, artillery shells, warheads and fusion batteries.
+- Objective interactions (50 m): drop-off points, cargo containers, valves and cranks.
+- Hellbombs (100 m): damaged map bombs and fixed mission call-ins. Portable backpacks excluded.
+- Vehicles (100 m): exosuits, FRV variants and tanks. Off-screen markers have direction arrows.
+- Your last death (500 m): a red skull, also with an off-screen arrow, cleared within 4 m.
 
-Vehicle and hellbomb markers show their distance. Markers sit where the game shows its own
-icon, get smaller farther away (supply markers fainter too), are sized to your screen
-resolution, follow the game's camera (scopes too), and hide while a menu is open; on your
-ship mission markers are off. Items someone is
-carrying, picked-up launch codes and keycards, hellbombs that blew up, destroyed vehicles
-and the vehicle you or a teammate are driving get no marker. Items close enough
-for the game to show its own icon get none either: samples within 9 m (Terminid eggs and
-Automaton super samples 20 m, sample containers 15 m) and ammo and grenade boxes within
-4 m. Stims have no icon of the game's and keep theirs, drawn solid within 5 m.
+F9 settings use folded categories: Samples, Supplies, Mission items and objectives,
+Hellbombs, Vehicles, Death marker and Common appearance. Open a category to configure
+individual type visibility and distance. Master switches keep individual choices intact.
+Changing "Set all ... distances (m)" overwrites the type distances in that category.
+Sample/supply fading is in its category. Common settings include distance text, opacity,
+size at range and hiding our markers where vanilla icons appear. A warning toggle is in
+Hellbombs. Older Chef interfaces without headings display the same native options flat;
+loaders without the native option API retain only the previous category-level controls.
 
-Settings: press F9 in the game (Chef Shared Loader's options menu) and pick Extended
-Pickup Icons Range: turn each kind on or off and set its distance, fade supplies (and samples) far away,
-show or hide the distance above vehicles and hellbombs, keep markers on up close, and change their size far away
-and opacity.
+Mission Hellbomb warning:
+- Observes the bomb's activation, rather than local button input.
+- Large 15:00 -> 00:00 display in seconds:hundredths, with an accelerating yellow-to-red pulse.
+- First observed already active: ARMED, without a guessed new countdown.
+- This is a local estimate, not a replicated explosion deadline or hundredth-second accuracy.
+  Damage may destroy the bomb earlier. Zero keeps warning until the marker disappears.
+- Only fixed mission Hellbombs on the verified game build have this warning. Other builds
+  retain ordinary markers. Damaged map bombs and portable backpacks have no countdown.
 
-Requires Chef Shared Loader 1.2.0 or newer (Nexus mod 17760). Give it the highest priority
-in your mod manager (in Arsenal, by default, the bottom of the list).
-
-Good to know:
-- Valves and cranks stay marked after you turn them.
-- At most the 40 nearest markers are drawn at once.
-- On supported game builds, your own health reaching zero confirms death. The position
-  is taken from your previously linked sample container at that instant, else a fresh
-  last-known position. Once saved, it does not follow a corpse or a moved sample container.
-  Unknown builds keep the earlier camera-based method. Only your last death is marked.
-  Missing or ambiguous network data can delay or miss a mark; it is not treated as death.
+Behavior and limits:
+- At most the 40 nearest markers are drawn. Markers scale with distance/resolution, follow
+  the camera and scopes, and hide in menus. Mission markers are hidden on the ship.
+- Near vanilla icons, our markers normally hide: samples 9 m, eggs/Automaton super samples
+  20 m, sample containers 15 m, ammo/grenades 4 m. Stims keep their marker, solid within 5 m.
+- Carried/delivered items and destroyed vehicles use guarded position/geometry heuristics;
+  detection can be imperfect. Deleted units and confirmed vanished geometry are suppressed.
+  There is no universal height cutoff for underground targets. Valves/cranks stay marked
+  after use. Occupied/moving vehicles are suppressed using nearby-player observations.
+- On supported builds, local health reaching zero confirms death. The position is frozen
+  from the previously linked own sample container, else a fresh last-known position; it
+  does not follow the corpse or container afterward. Missing/ambiguous data is not death.
+  Unknown builds retain the earlier camera-based death method. Only the last death is shown.
+- Experimental position/timing/statistics logs are removed. Basic support information and
+  errors remain in ExtendedPickupIconsRange.log (previous launch: .previous.log) in Chef's
+  log folder. No debug panel, calibration mode or test files are shipped.
 """
 
 

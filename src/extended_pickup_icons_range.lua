@@ -19,7 +19,7 @@ if rawget(_G, MOD_KEY) then return rawget(_G, MOD_KEY) end
 -- of the mod's patch). 2.4.0: the mod runs on them alone (CHEF_NEEDS).
 local CHEF = ...
 if type(CHEF) ~= 'table' then CHEF = nil end
-local VERSION = '2.5.1-test.14'
+local VERSION = '2.6.0'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 

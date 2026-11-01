@@ -1,0 +1,46 @@
+NEXUS RELEASE FILE
+Version: 2.6.0
+File name: Extended Pickup Icons Range v2.6.0
+Category: Main Files
+
+ENGLISH — FILE DESCRIPTION
+Adds fixed mission Hellbomb markers and an activation countdown, fixes vehicle-death marker placement, improves destroyed/despawned marker cleanup and discovery efficiency, and adds folded F9 settings with individual type toggles and distances. Requires Chef Shared Loader 1.4.0 or newer; the latest version is recommended. IMPORTANT: marker settings start at defaults after this update. Reconfigure them in F9.
+
+한국어 — 파일 설명
+고정식 임무용 헬밤 마커와 작동 카운트다운을 추가했습니다. 차량 탑승 중 사망 위치 표시를 수정하고, 파괴·디스폰된 대상의 마커 정리와 탐색 효율을 개선했습니다. F9 설정을 접을 수 있는 분류로 정리하고 종류별 표시 여부와 거리를 추가했습니다. Chef Shared Loader 1.4.0 이상이 필요하며 최신 버전을 권장합니다. 중요: 이번 업데이트 후 마커 설정은 기본값으로 시작합니다. F9에서 다시 설정해 주세요.
+
+ENGLISH — CHANGELOG
+Version 2.6.0
+
+- Added markers for fixed mission Hellbombs, using the existing red Hellbomb icon. Portable backpack Hellbombs are not included.
+- Added a large mission Hellbomb activation warning with a 15:00 seconds:hundredths countdown and a pulsing yellow-to-red icon that flashes faster as the estimate runs down. Activation is observed on the bomb itself, rather than from local button presses. Bombs first seen already active show ARMED instead of a fresh countdown. Damaged map Hellbombs have no countdown.
+- The countdown is a local estimate, not a guaranteed explosion deadline. Damage can destroy a bomb earlier; 00:00 remains an alert until the marker disappears.
+- Improved identification of the local player and death confirmation on supported game builds. The death marker now saves a fixed position when death is confirmed, preferring the previously linked personal sample container. This fixes the tested case of dying inside a vehicle and seeing the marker at the boarding point.
+- Improved destroyed-vehicle tracking across discovery gaps and removal of stale markers after unit deletion or confirmed loss of visible geometry. Added safer node/mesh checks and delayed vehicle mount reads until parked.
+- Reduced repeated resource enumeration while keeping nearby unit positions current. Vehicle, weapon and wreck observations still run together.
+- Rebuilt F9 settings with collapsible sections and individual visibility/distance controls for sample and supply types, mission items, objective interactions, vehicle variants, and mission/damaged Hellbombs. Added a mission Hellbomb warning toggle. Category switches preserve individual choices; bulk distance sliders explicitly apply a distance to all types in that category.
+- IMPORTANT: the new settings backend starts at defaults. Please reconfigure your preferences in F9 after updating. Subsequent changes are saved normally.
+- Standardized the internal addon and log names to Extended Pickup Icons Range.
+- Removed experimental vehicle-position diagnostics, Hellbomb timing measurements and periodic resource statistics, including the extra bookkeeping used only for them. Basic startup, state-change and error logs remain for support.
+- Requires Chef Shared Loader 1.4.0 or newer for the documented folded settings interface. Other loaders must provide compatible Chef addon support; standalone compatibility is not guaranteed.
+
+한국어 — 변경 내역
+버전 2.6.0
+
+- 고정식 임무용 헬밤에 기존의 빨간 헬밤 아이콘을 추가했습니다. 배낭형 헬밤은 지원 대상에 포함하지 않았습니다.
+- 임무용 헬밤이 작동하면 크게 표시되는 15:00 카운트다운과 경고 효과를 추가했습니다. 표시는 초:100분의 1초 형식입니다. 아이콘은 노란색에서 빨간색으로 바뀌며 점점 빠르게 깜빡입니다. 내 버튼 입력이 아닌 헬밤 자체의 작동 상태 변화를 관찰합니다. 처음 발견했을 때 이미 작동 중이었다면 새 카운트다운 대신 ARMED를 표시합니다. 맵에 놓인 불발 헬밤에는 카운트다운이 적용되지 않습니다.
+- 카운트다운은 로컬 추정치이며 정확한 폭발 시점을 보장하지 않습니다. 피해를 입으면 더 일찍 파괴될 수 있습니다. 00:00이 되어도 마커가 사라질 때까지 경고를 유지합니다.
+- 지원되는 게임 빌드에서 내 플레이어 식별과 사망 확인을 개선했습니다. 사망이 확인되는 순간 좌표를 고정하며, 미리 연결해 둔 내 샘플통 위치를 우선 사용합니다. 차량 안에서 사망했을 때 탑승 장소에 사망 마커가 남던 재현 사례를 수정했습니다.
+- 탐색이 잠시 끊겨도 파괴된 차량의 상태를 유지하도록 개선했습니다. 유닛이 삭제되거나 보이던 모델이 사라졌음을 확인한 경우 오래된 마커를 정리합니다. 노드·메시 조회 전 검사를 보강하고 차량의 장착 노드 조회는 정차 후에 수행하도록 했습니다.
+- 근처 대상의 위치 갱신은 유지하면서 리소스 목록을 반복 조회하는 횟수를 줄였습니다. 차량·무장·잔해는 계속 같은 프레임에서 관찰합니다.
+- F9 설정을 접을 수 있는 분류로 다시 구성했습니다. 샘플·보급품·임무 아이템·상호작용 대상·차량 종류와 임무용/불발 헬밤의 표시 여부 및 거리를 각각 조절할 수 있습니다. 임무용 헬밤 경고 켜기/끄기도 추가했습니다. 분류 전체를 꺼도 개별 설정은 유지되며, 거리 일괄 적용 슬라이더는 해당 분류의 모든 종류에 거리를 적용합니다.
+- 중요: 새 설정 방식으로 전환하면서 이번 업데이트 후에는 기본값으로 시작합니다. F9에서 선호 설정을 다시 맞춰 주세요. 이후 변경 사항은 정상적으로 저장됩니다.
+- 내부 애드온과 로그 이름을 Extended Pickup Icons Range로 통일했습니다.
+- 시험용 차량 위치 진단, 헬밤 시간 측정, 주기적 리소스 통계와 이를 위해서만 수행하던 계산을 제거했습니다. 문제 해결을 위한 기본 시작·상태 변경·오류 로그는 유지합니다.
+- 안내된 접기 설정 화면을 사용하려면 Chef Shared Loader 1.4.0 이상이 필요합니다. 다른 로더에서 사용하려면 해당 로더가 Chef 애드온 호환을 제공해야 하며, 독립적인 실행 호환은 보장하지 않습니다.
+
+ENGLISH — UPDATE NOTICE / PINNED COMMENT DRAFT
+2.6.0 adds mission Hellbomb markers/countdown and detailed F9 settings, along with fixes for vehicle-death positions and stale destroyed/despawned markers. Please update Chef Shared Loader and remove the previous mod version before installing. IMPORTANT: the settings system has changed, so please reconfigure your marker preferences in F9. The Hellbomb countdown is an estimate; it is not a promise that a bomb will remain safe until zero.
+
+한국어 — 업데이트 공지 / 고정 댓글 초안
+2.6.0에서 임무용 헬밤 마커·카운트다운과 세부 F9 설정을 추가하고, 차량 탑승 중 사망 위치 및 파괴·디스폰된 대상의 오래된 마커 처리를 개선했습니다. Chef Shared Loader를 업데이트하고 이전 모드 버전을 제거한 뒤 설치해 주세요. 중요: 설정 방식이 변경되었으므로 F9에서 마커 설정을 다시 맞춰 주세요. 헬밤 카운트다운은 추정치이며 0초 전까지 안전하다는 보장은 아닙니다.

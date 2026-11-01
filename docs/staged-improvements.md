@@ -431,3 +431,32 @@ Implementation constraints:
   folded menu rendering/navigation, old-capability fallback, and unchanged unrelated target behavior.
 
 This is a recorded final-release work item only. No runtime/settings/package changes are made by this note.
+
+
+## Final release review — 2.6.0, 2026-11-02
+
+The owner confirmed satisfactory test.14 gameplay and requested release review. Experimental position,
+Hellbomb removal-timing and periodic resource-statistics code/bookkeeping were removed. The retained
+fifteen-second warning is a local estimate, not a replicated explosion deadline.
+
+The finer folded settings work item above is now implemented with native Chef options. The compatibility
+shim cannot forward headings and limits options to 32 per mod/heading. There is no public import API for
+its stored rows without registering a duplicate settings UI; reading the loader's settings file is not
+allowed by its mod sandbox. After being told preferences would need reconfiguration, the owner explicitly
+approved the native settings backend and reset to defaults. No loader file is read or modified for migration.
+This approval supersedes the earlier automatic-migration requirement for the new backend.
+
+Seven folded headings group individual sample/supply/item/interaction/vehicle/Hellbomb controls. Mission
+objectives use a subheading within Mission. Group masters preserve child state; named bulk sliders update
+only their own item category. Effective per-target ranges update on option changes, not through polling.
+Flat-native and legacy category-only fallback paths remain. Old defaults and general marker behavior stay.
+
+All 220 tests pass. The ZIP's embedded Lua/source, 136 resources, 135 textures, pixels, GUID and player-only
+contents were checked. Full audit: [release-audit-2.6.0.md](release-audit-2.6.0.md). The new settings screen
+needs a short actual F9 layout/navigation/application check; offline persistence tests pass. No repeat of
+the already-confirmed death/vehicle/Hellbomb gameplay experiment is required just for this review.
+
+Bilingual page copy is updated in PUBLISH_NEXUS.txt; upload/changelog/announcement drafts are in
+[nexus-release-2.6.0.txt](nexus-release-2.6.0.txt). A local candidate ZIP is prepared, not published or pushed.
+Multiplayer feedback and color checks remain deferred as requested. There is no universal sinking-object
+filter, new-loader port, portable-backpack marker, separate map range or vehicle-network-state replacement.

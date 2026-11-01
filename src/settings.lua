@@ -104,7 +104,8 @@ return function(chef, log, ranges, show, look, targets)
                 function(v) show[g] = v end, headings and label or nil, g == 'objectives',
                 'Master switch. Individual type choices are kept when this is off.')
             -- Bulk writes are a deliberate user action, never a side effect of loading saved defaults.
-            slider('range_' .. g, g == 'deaths' and 'Death marker distance (m)' or 'Apply distance to all types (m)',
+            slider('range_' .. g, g == 'deaths' and 'Death marker distance (m)' or
+                'Set all ' .. (g == 'mission' and 'mission items' or label:lower()) .. ' distances (m)',
                 ranges[g], most, function(v) ranges[g] = v end,
                 g ~= 'deaths' and 'Changing this overwrites every type distance in this category. 0 hides markers.' or
                     'Only your last death is marked. Cleared when you reach it. 0 hides the marker.')
