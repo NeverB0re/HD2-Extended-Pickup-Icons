@@ -1768,6 +1768,73 @@ class LifecycleTests(Case):
         self.assertTrue(self.lua.globals().rawequal(first, second))
 
 
+class ChefWorldTests(Case):
+    def setUp(self):
+        super().setUp()
+        self.lua.execute("""
+            local fake = ...
+            fake.world_id = 1
+            fake.chef.world = function() return fake.world end
+            fake.chef.world_id = function() return fake.world_id end
+            stingray.Application.main_world = function() error('must use the loader world') end
+        """, self.fake)
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(SAMPLE, [unit(0, 25, 0)])
+
+    def test_fresh_wrappers_with_the_same_loader_id_keep_markers_and_do_not_reset(self):
+        self.load()
+        self.settle()
+        self.assertEqual(self.dots(), 1)
+        for i in range(30):
+            self.lua.execute("local fake = ...; fake.world = fake.new_world('same world')", self.fake)
+            self.frames(1, start=40 + i / 60)
+            self.assertEqual(self.dots(), 1)
+        self.assertEqual(self.log_text().count('world changed:'), 1)
+
+    def test_a_new_loader_id_resets_even_when_the_world_handle_is_reused(self):
+        self.load()
+        self.settle()
+        self.fake.world_id = 2
+        before = self.fake.lookups[SAMPLE]
+        self.frames(1, start=40)
+        self.assertEqual(self.dots(), 0)
+        self.assertEqual(self.fake.lookups[SAMPLE], before)
+        self.frames(40, start=49)
+        self.assertEqual(self.dots(), 1)
+        self.assertEqual(self.log_text().count('world changed:'), 2)
+
+    def test_an_unsettled_loader_world_waits_without_raw_engine_fallback(self):
+        self.load()
+        self.settle()
+        self.fake.world_id = None
+        before = self.fake.lookups[SAMPLE]
+        self.frames(60, start=40)
+        self.assertEqual(self.dots(), 0)
+        self.assertEqual(self.fake.lookups[SAMPLE], before)
+        self.fake.world_id = 1
+        self.frames(1, start=50)
+        self.frames(40, start=59)
+        self.assertEqual(self.dots(), 1)
+        self.assertEqual(self.log_text().count('world changed:'), 1)
+
+    def test_a_refused_world_answer_waits_instead_of_switching_to_raw_worlds(self):
+        self.lua.execute("local fake = ...; fake.chef.world = function() error('not ready') end", self.fake)
+        self.load()
+        self.settle()
+        self.assertEqual(len(self.fake.lookups), 0)
+        self.assertEqual(self.mod.status, 'running')
+
+    def test_an_id_change_during_the_world_read_is_not_used(self):
+        self.lua.execute("""
+            local fake = ...
+            fake.chef.world = function() fake.world_id = fake.world_id + 1; return fake.world end
+        """, self.fake)
+        self.load()
+        self.settle()
+        self.assertEqual(len(self.fake.lookups), 0)
+        self.assertEqual(self.dots(), 0)
+
+
 class ArchiveTests(unittest.TestCase):
     def test_boot_mod_loader_finds_the_mod(self):
         """Read the archive the way boot_mod_loader.lua's declared_in() does."""

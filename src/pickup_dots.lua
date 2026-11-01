@@ -22,7 +22,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.5.1-test.1'
+local VERSION = '2.5.1-test.2'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -1234,34 +1234,57 @@ end
 -- -------------------------------------------------------------------- tick --
 local started_at, next_status, last_world, world_seen_at
 local world_seq, world_id = 0, nil
+local chef_worlds = CHEF and type(CHEF.world) == 'function' and type(CHEF.world_id) == 'function'
+local last_chef_world_id
 
 local function main_world()
+    if chef_worlds then
+        -- Take a coherent snapshot. A nil/refused loader answer means wait, never bypass its world guard.
+        local ok1, id = pcall(CHEF.world_id)
+        if not ok1 or id == nil then return nil end
+        local okw, world = pcall(CHEF.world)
+        local ok2, after = pcall(CHEF.world_id)
+        if okw and world ~= nil and ok2 and id == after then return world, id end
+        return nil
+    end
     local ok, world = pcall(sr.Application.main_world)
     if ok then return world end
+end
+
+local function forget_units()
+    cursor, found, players, players_read_at, me, hot = 1, {}, {}, nil, nil, {}
+    vehicles_seen, vehicles_near = {}, false
+    wrecked, node_of = by_unit(), by_unit()
+    taken, blown, first_visible, me_unit = by_unit(), by_unit(), by_unit(), nil
+    avatar_since, avatar_z0, own, candidate = by_unit(), by_unit(), nil, nil
+    last_counts = {}
+    M.dots = {}   -- don't expose the previous world's markers while waiting
 end
 
 local function tick()
     local now = os.clock()
     if now - started_at < STARTUP_GRACE_S then return end
-    local world = main_world()
+    local world, chef_world_id = main_world()
     if world == nil then
-        if last_world ~= nil then last_world, cursor, found, players, me, hot = nil, 1, {}, {}, nil, {} end
-        node_of = by_unit()
+        if last_world ~= nil then
+            forget_units()
+            last_world, world_seen_at = nil, nil
+        end
         return
     end
-    if not same_world(world, last_world) then
+    local changed = chef_worlds and chef_world_id ~= last_chef_world_id
+        or not chef_worlds and not same_world(world, last_world)
+    if changed then
         -- a new mission or the ship: forget everything read in the old world
         world_seq = world_seq + 1
         world_id = 'world #' .. world_seq
-        last_world, world_seen_at, cursor, found, players, players_read_at, me = world, now, 1, {}, {}, nil, nil
-        vehicles_seen = {}
-        wrecked = by_unit()
-        node_of = by_unit()   -- node indices belong to this world's units, never to reused handles
-        taken, blown, first_visible, me_unit = by_unit(), by_unit(), by_unit(), nil
-        deaths, cleared, avatar_since, avatar_z0, own, candidate = {}, nil, by_unit(), by_unit(), nil, nil
-        hot = {}
+        forget_units()
+        deaths, cleared = {}, nil
+        last_chef_world_id = chef_world_id
         log('world changed: ' .. world_id)
     end
+    if last_world == nil or changed then world_seen_at = now end
+    last_world = world
     if now - world_seen_at < WORLD_SETTLE_S then return end
     stats.frames = stats.frames + 1
     local saved = temp_begin()
@@ -1408,6 +1431,7 @@ local function install()
     log('Application.can_get: ' .. (can_get and 'present - only loaded resources are looked up'
         or 'MISSING - no target is looked up in this version (diagnostic only)'))
     build_keys()
+    log('worlds: ' .. (chef_worlds and 'Chef world_id' or 'legacy world comparison (no Chef world API)'))
     register_settings()
     started_at = os.clock()
     local previous = rawget(_G, 'update')
