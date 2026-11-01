@@ -54,6 +54,12 @@ death, as requested. Its vehicle-death placement was confirmed in gameplay on 20
 names the own-container source and confirms clearing after recovery. Other multiplayer cases and
 intermittent native-crash elimination remain unverified. See
 [the Nexus comment audit](docs/nexus-comment-audit-2026-11-01.md) for outstanding reports and requests.
+`2.5.1-test.10` preserves wreck state across search gaps and suppresses vanished geometry after a
+positive visible baseline. `2.5.1-test.11` also delays vehicle mount reads until parked while keeping
+weapon-loss/detachment detection during motion. All 180 offline tests pass; these new guards need
+gameplay verification. Still-visible sinking objects are not classified by height or movement alone.
+Loader and called-in Hellbomb feasibility: [investigation](docs/loader-and-hellbomb-audit-2026-11-01.md).
+No loader port or new target is enabled in this stability package.
 Existing icons, ranges, settings,
 vehicle destruction detection and camera-relative general-marker behavior are preserved. `release/` and the
 published Nexus description still describe the earlier public version.

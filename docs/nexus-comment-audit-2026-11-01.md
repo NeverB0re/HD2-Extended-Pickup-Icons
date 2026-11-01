@@ -46,6 +46,11 @@ new removal heuristic.
 
 ## Suggested order
 
+Update after owner review: color work is deferred, multiplayer validation awaits comments, and separate
+map-open ranges are not planned. Test.10/test.11 address the two selected stability tasks; see
+`staged-improvements.md`. Loader and called-in Hellbomb feasibility is recorded in
+`loader-and-hellbomb-audit-2026-11-01.md`; no new loader support or target is enabled yet.
+
 1. Complete category-specific sinking/despawn prevention and verify the exact multiplayer own-death case.
 2. Resolve the outstanding FRV first-node-lookup promise without losing vehicle destruction behavior;
    validate long-session stability. Prepare a stable release only after the required runtime checks.
