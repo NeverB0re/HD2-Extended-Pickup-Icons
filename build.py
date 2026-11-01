@@ -62,8 +62,9 @@ What gets a marker (default distance):
 - Hellbombs (100 m): map-placed bombs and fixed mission Hellbomb call-ins, in red.
   Uses the same Hellbomb toggle and range. Portable backpack bombs are not included.
   Experimental mission-bomb warning: a newly observed activation layer starts an estimated
-  ~10s countdown with a larger, pulsing yellow-to-red icon. Already active on first sight:
-  ARMED only. At estimated expiry: ! until removed. Not an authoritative explosion timer.
+  15:00 countdown (seconds:hundredths) with a pulsing yellow-to-red icon. This is a
+  calibration estimate including the five-second activation clip. Already active on first sight:
+  ARMED only. At estimated expiry: 00:00 until removed. Not an authoritative explosion timer.
   Current extracted game build only; animation reads/timing still need gameplay validation.
 - Vehicles (100 m): exosuits, FRVs and tanks, in sky blue; out of view, at the screen's edge
   with an arrow.

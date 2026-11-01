@@ -19,7 +19,7 @@ if rawget(_G, MOD_KEY) then return rawget(_G, MOD_KEY) end
 -- of the mod's patch). 2.4.0: the mod runs on them alone (CHEF_NEEDS).
 local CHEF = ...
 if type(CHEF) ~= 'table' then CHEF = nil end
-local VERSION = '2.5.1-test.13'
+local VERSION = '2.5.1-test.14'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -717,9 +717,11 @@ local function collect_dots(now)
                     -- or draw the stale point while waiting for its next lookup.
                     node_of[p.unit] = nil
                     blown[p.unit] = nil
+                    hellbomb_warning.removed(p, now, 'unit deleted')
                     hellbomb_warning.forget(p.unit)
                     c.worn = c.worn + 1
                 elseif not keys[i].taken and blown_up(p, now, group, keys[i].reversible_visibility) then
+                    hellbomb_warning.removed(p, now, 'visible geometry disappeared')
                     c.worn = c.worn + 1
                 elseif group == 'vehicles' then
                     -- destroyed, you in or at it, or someone else in a moving one: no marker
@@ -1152,6 +1154,7 @@ end
 
 local function draw(now, cam)
     local dots = collect_dots(now)
+    hellbomb_warning.check_removed(now)
     M.dots = dots   -- this frame's markers (the tests read them)
     if menu_open() then return end   -- a menu is open: nothing drawn
     screen_draw(dots, cam)

@@ -361,3 +361,34 @@ cases. Simulated remote activation uses no local input. New tests verify missing
 poll bounds, build gating, late observations, size/color/pulse, distance-off display, early removal and
 leaving/returning. The actual returned animation tuple and its timing relative to gameplay arming remain
 unverified in a played mission. Build test.13 separately; do not publish/push it as a stable release.
+
+## Countdown calibration and hundredths — 2.5.1-test.14
+
+The owner played test.13: the countdown starts promptly with activation, confirming that this live
+activation-layer read works in the tested scenario. The explosion occurs several seconds after the
+ten-second display ends. Activation-to-detonation timing and the teammate case are not thereby fully
+verified. Do not call the original ten-second start-to-explosion assumption correct.
+
+Read-only extraction of `hellbomb_activate.animation` gives header.length=5 (seconds). The state graph
+enters this clip on the transition we observe and emits top_done at its end. A five-second activation clip
+followed by the assumed ten-second fuse explains the reported late explosion; this remains a hypothesis
+about gameplay sequencing, not a proven replicated deadline. Test.14 uses 15 seconds from the observed
+transition as the next calibration value. Do not label fifteen seconds an exact measured game fuse.
+
+At the owner's request, remove the tilde and render seconds:hundredths, `15:00 -> 14:99 -> ... -> 00:00`.
+The right two digits are hundredths of a second, not minutes/seconds or a promise of hundredth-second
+accuracy. Compute from the deadline each frame; do not accumulate frame-count drift. Keep 00:00 and the
+red alert pulse until actual marker removal. Pulse/color progression now covers the full fifteen seconds,
+retaining the 1-to-4-Hz ramp and readable solid warning text.
+
+Log elapsed time from observed activation to positive geometry loss and/or unit deletion, separately.
+These are removal observations, not proof of natural detonation (shots can cause early destruction).
+Logging deduplicates each signal, performs no extra animation reads, and uses only the guarded existence
+helper at most five times/s per started warning to catch deletion even after discovery drops the point or
+the player leaves range. A world reset forgets measurements. No automatic fuse learning is enabled.
+
+All 209 tests pass, adding hundredth-boundary/zero-clamp checks and deduplicated removal-timing checks;
+the integrated early-deletion case confirms logging after hot discovery removes the dead point. Existing
+guarded activation, late-observation handling, teammate-independent logic and all prior features remain.
+The revised duration still needs comparison with an undisturbed natural explosion; new timing logs allow
+that comparison without asking the owner to use a stopwatch or upload another player's files.

@@ -752,10 +752,10 @@ class HellbombWarningIntegrationTests(Case):
         self.frames(15, start=21)
         dot = self.mod.dots[1]
         self.assertIsNotNone(dot.warning)
-        self.assertGreaterEqual(dot.warning.deadline, 31)
-        self.assertLessEqual(dot.warning.deadline, 31.25)
+        self.assertGreaterEqual(dot.warning.deadline, 36)
+        self.assertLessEqual(dot.warning.deadline, 36.25)
         texts = list(self.fake.texts.values())
-        timer = [t for t in texts if t.s == '~10s']
+        timer = [t for t in texts if t.s == '15:00']
         distances = [t for t in texts if t.s.endswith('m')]
         self.assertTrue(timer)
         self.assertGreater(timer[-1].px, distances[-1].px * 2)
@@ -766,14 +766,14 @@ class HellbombWarningIntegrationTests(Case):
         body = self.prepare(distance=False)
         body.top = 0
         self.frames(15, start=21)
-        self.assertIn('~10s', [t.s for t in self.fake.texts.values()])
+        self.assertIn('15:00', [t.s for t in self.fake.texts.values()])
         self.assertFalse(any(t.s.endswith('m') for t in self.fake.texts.values()))
 
     def test_first_seen_activated_uses_armed_label_without_ten_second_reset(self):
         self.prepare(top=0)
         self.assertTrue(self.mod.dots[1].warning.unknown)
         self.assertIn('ARMED', [t.s for t in self.fake.texts.values()])
-        self.assertNotIn('~10s', [t.s for t in self.fake.texts.values()])
+        self.assertNotIn('15:00', [t.s for t in self.fake.texts.values()])
 
     def test_early_destruction_removes_the_warning_and_stops_animation_reads(self):
         body = self.prepare()
@@ -784,6 +784,7 @@ class HellbombWarningIntegrationTests(Case):
         self.frames(30, start=22)
         self.assertEqual(self.dots(), 0)
         self.assertEqual(self.fake.animation_reads, before)
+        self.assertIn('hellbomb timing:', self.log_text())  # hot discovery already discarded the dead point
 
     def test_damaged_map_bombs_keep_normal_markers_without_animation_reads(self):
         self.set_units(MissionHellbombTests.DEFUNCT, [dict(unit(5, 25), top=0)])

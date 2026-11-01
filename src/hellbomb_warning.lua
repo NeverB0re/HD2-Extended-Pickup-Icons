@@ -2,6 +2,9 @@
 -- Installed graph: layer 2, top_retracted (1) -> top_extend (0), hellbomb_activate. Fuse is an estimate.
 return function(chef, log)
     local H = {}
+    -- Extracted hellbomb_activate clip: 5 s. Allow that visual deployment plus the requested 10 s fuse.
+    -- Fifteen seconds is a calibration hypothesis, not a replicated game deadline; removal logs measure it.
+    local DURATION = 15
     local RESOURCE = 'content/fac_helldivers/hellpod/hellbomb/hellbomb'
     local states = setmetatable({}, {__mode = 'k'})
     local function call(name, kind, ...)
@@ -21,6 +24,29 @@ return function(chef, log)
 
     function H.reset() states = setmetatable({}, {__mode = 'k'}) end
     function H.forget(u) if u ~= nil then states[u] = nil end end
+    function H.removed(p, now, reason)
+        if p.kind ~= RESOURCE then return end
+        local state = states[p.unit]
+        if not state or not state.warning or not state.warning.started then return end
+        state.reported = state.reported or {}
+        if state.reported[reason] then return end
+        state.reported[reason] = true
+        log(string.format('hellbomb timing: %.3f s since activation observed; %s (not proof of natural detonation)',
+            math.max(0, now - state.warning.started), reason))
+    end
+    function H.check_removed(now)
+        -- Discovery may drop a deleted unit before collect_dots sees it. Keep measuring started warnings
+        -- with only the safe existence helper, also when the player has left its marker range.
+        for u, state in pairs(states) do
+            if state.warning and state.warning.started and now >= (state.next_alive or 0) then
+                state.next_alive = now + 0.2
+                if not alive(u) then
+                    H.removed({kind = RESOURCE, unit = u}, now, 'unit deleted')
+                    states[u] = nil
+                end
+            end
+        end
+    end
 
     function H.observe(p, now, visible)
         if not H.enabled or p.kind ~= RESOURCE or visible ~= true then return nil end
@@ -50,8 +76,8 @@ return function(chef, log)
         end
         if top == 0 then
             local fresh_transition = state.top == 1 and state.at ~= nil and now - state.at <= 0.5
-            state.warning = fresh_transition and {started = now, deadline = now + 10} or {unknown = true}
-            log(fresh_transition and 'hellbomb countdown: activation layer transition - estimated 10 s' or
+            state.warning = fresh_transition and {started = now, deadline = now + DURATION} or {unknown = true}
+            log(fresh_transition and 'hellbomb countdown: activation layer transition - calibrated estimate 15 s' or
                 'hellbomb countdown: first seen activated - remaining time unknown')
             return state.warning
         end
@@ -63,13 +89,14 @@ return function(chef, log)
         if not warning then return nil end
         if warning.unknown then return {label = 'ARMED', rgb = {255, 150, 35}, alpha = 1, scale = 1.2} end
         local elapsed = math.max(0, now - warning.started)
-        local progress = math.min(1, elapsed / 10)
-        -- The derivative of this phase rises from 1 to 4 Hz over the ten-second estimate.
-        local t = math.min(elapsed, 10)
-        local phase = t + 0.15 * t * t + math.max(0, elapsed - 10) * 4
+        local progress = math.min(1, elapsed / DURATION)
+        -- The derivative of this phase rises from 1 to 4 Hz over the full estimate.
+        local t = math.min(elapsed, DURATION)
+        local phase = t + 1.5 * t * t / DURATION + math.max(0, elapsed - DURATION) * 4
         local pulse = 0.5 + 0.5 * math.cos(2 * math.pi * phase)
         local remaining = math.max(0, warning.deadline - now)
-        return {label = remaining > 0 and ('~' .. math.ceil(remaining) .. 's') or '!',
+        local centiseconds = math.max(0, math.ceil(remaining * 100 - 1e-7))
+        return {label = string.format('%02d:%02d', math.floor(centiseconds / 100), centiseconds % 100),
             rgb = {255, math.floor(180 * (1 - progress)), math.floor(35 * (1 - progress))},
             alpha = 0.4 + 0.6 * pulse, scale = 1.18 + 0.18 * pulse}
     end

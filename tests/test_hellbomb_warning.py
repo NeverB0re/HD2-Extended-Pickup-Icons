@@ -32,12 +32,28 @@ class WarningTests(unittest.TestCase):
         self.fake.top = 0
         return self.observe(0.21)
 
-    def test_observed_transition_starts_ten_second_estimate(self):
+    def test_observed_transition_uses_full_calibrated_estimate(self):
         record = self.activate()
-        self.assertAlmostEqual(record.deadline, 10.21)
-        self.assertEqual(self.warning.visual(record, 0.21).label, '~10s')
-        self.assertEqual(self.warning.visual(record, 5.22).label, '~5s')
-        self.assertEqual(self.warning.visual(record, 10.22).label, '!')
+        self.assertAlmostEqual(record.deadline, 15.21)
+        self.assertEqual(self.warning.visual(record, 0.21).label, '15:00')
+        self.assertEqual(self.warning.visual(record, 5.22).label, '09:99')
+        self.assertEqual(self.warning.visual(record, 15.22).label, '00:00')
+
+    def test_hundredths_roll_over_without_estimate_prefix_or_negative_time(self):
+        record = self.activate()
+        for elapsed, label in ((0, '15:00'), (0.01, '14:99'), (0.99, '14:01'),
+                               (1, '14:00'), (14.99, '00:01'), (15, '00:00'), (20, '00:00')):
+            self.assertEqual(self.warning.visual(record, record.started + elapsed).label, label)
+
+    def test_removal_measurement_is_logged_once_per_signal_without_native_reads(self):
+        record = self.activate()
+        before = self.fake.reads
+        self.warning.removed(self.point, record.started + 15.15, 'unit deleted')
+        self.warning.removed(self.point, record.started + 15.16, 'unit deleted')
+        messages = [s for s in self.fake.logs.values() if 'hellbomb timing:' in s]
+        self.assertEqual(len(messages), 1)
+        self.assertIn('15.150 s', messages[0])
+        self.assertEqual(self.fake.reads, before)
 
     def test_already_activated_bomb_never_restarts_a_full_timer(self):
         self.fake.top = 0

@@ -67,7 +67,11 @@ in gameplay on 2026-11-01. `2.5.1-test.13` experimentally observes the fixed mis
 animation layer to show a large estimated ten-second warning, with accelerating yellow-to-red icon
 pulsing. Late first observations show ARMED without a guessed countdown. Only the extracted current
 build/graph is enabled; actual animation-state reads and activation timing are not gameplay-verified.
-All 207 offline tests pass. See the staged notes for native-call risk and the exact guards.
+The owner confirmed test.13 activation detection but reported explosion several seconds after its
+ten-second timer. `2.5.1-test.14` uses a fifteen-second calibration hypothesis (the extracted activation
+clip is five seconds), displays seconds:hundredths without a tilde, and logs activation-to-removal
+intervals for calibration. This is not a replicated deadline or hundredth-second accuracy.
+All 209 offline tests pass. See the staged notes for native-call risk and the exact guards.
 Existing icons, ranges, settings,
 vehicle destruction detection and camera-relative general-marker behavior are preserved. `release/` and the
 published Nexus description still describe the earlier public version.
