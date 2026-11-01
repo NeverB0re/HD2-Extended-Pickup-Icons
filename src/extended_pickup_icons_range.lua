@@ -119,7 +119,6 @@ local HOT_MARGIN = 10         -- metres beyond a group's range that still counts
 local MAX_DOTS = 40           -- the nearest dots only, at most this many in one frame (icons are many triangles)
 local STARTUP_GRACE_S = 10    -- wait after start before touching the world
 local WORLD_SETTLE_S = 8      -- wait after a world appears before looking anything up in it
-local STATUS_EVERY_S = 60     -- a summary line in the log this often
 local AVATAR = 'content/fac_helldivers/cha_avatar/avatar_helldiver'
 
 local menu_open               -- defined before tick
@@ -291,7 +290,7 @@ local found = {}         -- per key index: list of {x, y, z} from the last time 
 local players = {}       -- list of {x, y, z}: every helldiver avatar (teammates and bodies too)
 local me                 -- the one of them nearest the camera: you (or whoever the camera follows)
 local cursor = 1
-local stats = {sweeps = 0, looked_up = 0, skipped_unloaded = 0, units = 0, key_errors = 0, frames = 0, dots_peak = 0}
+local stats = {key_errors = 0, frames = 0}
 
 local function build_keys()
     local unnamed = 0
@@ -318,19 +317,6 @@ local function key_for(k)
     if not id_form then return nil end
     -- units_by_resource takes an IdString64 (as the reference mods use it); can_get takes the tested form
     return id_key(k.hex, id_form), id_key(k.hex, 'IdString64')
-end
-
--- Which resources had units in the last sweep: "label=count ..." for the status line.
-local function found_summary()
-    local parts = {}
-    for i = 1, #keys do
-        local n = found[i] and #found[i] or 0
-        if n > 0 then
-            local short = string.match(keys[i].label, '([^/]+)$') or keys[i].label
-            parts[#parts + 1] = short .. '=' .. n
-        end
-    end
-    return #parts > 0 and table.concat(parts, ' ') or 'none'
 end
 
 local players_read_at
@@ -403,7 +389,6 @@ end
 -- unit is discovered within the existing full-sweep bound. Vehicles/arms/wrecks keep same-frame discovery.
 local hot = {}           -- list of key indices, made by collect_dots
 local vehicles_near = false   -- a vehicle near you in the last frame: READ_TOGETHER read every frame (2.4.0)
-local hot_reads = 0      -- for the status line
 
 local function refresh_hot(world, first, last)
     local function refresh_positions(i)
@@ -431,7 +416,7 @@ local function refresh_hot(world, first, last)
             done = done + 1
         end
     end
-    hot_reads = hot_reads + done
+
 end
 
 local function sweep_step(world)
@@ -440,14 +425,14 @@ local function sweep_step(world)
     for i = cursor, last do
         local points, looked, problem = read_key(world, i)
         if looked then
-            stats.looked_up = stats.looked_up + 1
+
             if problem ~= nil then
                 stats.key_errors = stats.key_errors + 1
                 if stats.key_errors <= 5 then log('lookup failed for ' .. keys[i].label .. ': ' .. tostring(problem)) end
             end
-            stats.units = stats.units + #points
+
         else
-            stats.skipped_unloaded = stats.skipped_unloaded + 1
+
         end
         found[i] = points
     end
@@ -456,14 +441,14 @@ local function sweep_step(world)
         for i = 1, #keys do
             if READ_TOGETHER[keys[i].group] and (i < first or i > last) then
                 found[i] = read_key(world, i)
-                hot_reads = hot_reads + 1
+
             end
         end
     end
     cursor = last + 1
     if cursor > #keys then
         cursor = 1
-        stats.sweeps = stats.sweeps + 1
+
     end
 end
 
@@ -530,7 +515,6 @@ end
 local SHIP_HIDDEN = {mission = true, carry = true, dropoffs = true, controls = true, deaths = true}
 
 -- Last frame's counts per group, for the status line: drawn, hidden as worn/held, out of range.
-local last_counts = {}
 
 -- Per-unit tables are keyed by the unit itself, weakly: under Chef Shared Loader every unit's tostring is the
 -- same (one key for all would mix units up).
@@ -681,7 +665,6 @@ end
 
 local function collect_dots(now)
     local dots = {}
-    local counts = {}
     local new_hot = {}
     local any_vehicle = false
     local seen_now = {}
@@ -704,25 +687,23 @@ local function collect_dots(now)
         if on_ship and (SHIP_HIDDEN[group] or keys[i].mission_only) then range = 0 end
         local points = found[i]
         if points and range > 0 then
-            local c = counts[group] or {drawn = 0, worn = 0, far = 0}
-            counts[group] = c
+
             local near_any = false
             for _, p in ipairs(points) do
                 local d, who, carried, mine, others = measure(p[1], p[2], p[3], keys[i].worn)
                 if d ~= nil and d <= range + HOT_MARGIN then near_any = true end
                 if d == nil or d > range then
-                    c.far = c.far + 1
+                    -- Outside this marker's range.
                 elseif not unit_alive(p.unit) then
                     -- A sweep cached this position before despawn. Never pass its handle to node/mesh calls,
                     -- or draw the stale point while waiting for its next lookup.
                     node_of[p.unit] = nil
                     blown[p.unit] = nil
-                    hellbomb_warning.removed(p, now, 'unit deleted')
+
                     hellbomb_warning.forget(p.unit)
-                    c.worn = c.worn + 1
+
                 elseif not keys[i].taken and blown_up(p, now, group, keys[i].reversible_visibility) then
-                    hellbomb_warning.removed(p, now, 'visible geometry disappeared')
-                    c.worn = c.worn + 1
+                    -- Geometry confirmed hidden/destroyed; no marker.
                 elseif group == 'vehicles' then
                     -- destroyed, you in or at it, or someone else in a moving one: no marker
                     local v = follow_vehicle(p, now, seen_now)
@@ -769,25 +750,25 @@ local function collect_dots(now)
                             .. ' lost its weapons (or is by a wreck) - taken for destroyed')
                     end
                     if destroyed or mine or (others and not parked) then
-                        c.worn = c.worn + 1
+
                     else
-                        c.drawn = c.drawn + 1
+
                         dots[#dots + 1] = {p[1], p[2], p[3] + (keys[i].height or GROUP_HEIGHT.vehicles), d, who, group, keys[i].icon}
                     end
                 elseif LOOK.hide_near and (keys[i].near or NEAR_ME[group]) and me ~= nil and who == me
                     and d < (keys[i].near or NEAR_ME[group]) - NEAR_OVERLAP then
-                    c.worn = c.worn + 1
+
                 elseif keys[i].taken and check_taken(p) then
-                    c.worn = c.worn + 1
+
                 elseif carried and group ~= 'dropoffs' and group ~= 'controls' and group ~= 'hellbombs' then
                     -- (those never worn; a teammate may stand at it)
-                    c.worn = c.worn + 1
+
                 elseif (group == 'mission' or group == 'carry') and near(dropoffs, p, DELIVERED_NEAR) then
-                    c.worn = c.worn + 1
+
                 elseif group == 'carry' and near(racks, p, LOADED_NEAR) then
-                    c.worn = c.worn + 1
+
                 else
-                    c.drawn = c.drawn + 1
+
                     local warning = group == 'hellbombs' and
                         hellbomb_warning.observe(p, now, blown[p.unit] and blown[p.unit].seen) or nil
                     local nx, ny, nz = node_position(p, keys[i].node)
@@ -816,7 +797,6 @@ local function collect_dots(now)
             if not unit_alive(u) then blown[u], node_of[u] = nil, nil end
         end
     end
-    last_counts = counts
     hot = new_hot
     vehicles_near = any_vehicle
     vehicles_seen = seen_now
@@ -1154,11 +1134,10 @@ end
 
 local function draw(now, cam)
     local dots = collect_dots(now)
-    hellbomb_warning.check_removed(now)
+
     M.dots = dots   -- this frame's markers (the tests read them)
     if menu_open() then return end   -- a menu is open: nothing drawn
     screen_draw(dots, cam)
-    if #dots > stats.dots_peak then stats.dots_peak = #dots end
 end
 
 -- A menu is open (Esc, the map...) while the mouse cursor shows: the markers are hidden then. Asked of
@@ -1313,7 +1292,7 @@ local function follow_own(now)
 end
 
 -- -------------------------------------------------------------------- tick --
-local started_at, next_status, last_world, world_seen_at
+local started_at, last_world, world_seen_at
 local world_seq, world_id = 0, nil
 local chef_worlds = CHEF and type(CHEF.world) == 'function' and type(CHEF.world_id) == 'function'
 local last_chef_world_id
@@ -1338,7 +1317,6 @@ local function forget_units()
     wrecked, node_of = by_unit(), by_unit()
     taken, blown, first_visible, me_unit = by_unit(), by_unit(), by_unit(), nil
     avatar_since, avatar_z0, own, candidate = by_unit(), by_unit(), nil, nil
-    last_counts = {}
     local_player.reset()
     hellbomb_warning.reset()
     M.dots = {}   -- don't expose the previous world's markers while waiting
@@ -1399,30 +1377,13 @@ local function tick()
             sweep_step(world)
         end
         draw(now, cam)   -- every frame: the loader draws what it is given each frame only
-        local_player.diagnostics(now, players, cam, found, keys)
     end)
     temp_end(saved)
     if not ok then
         M.tick_errors = (M.tick_errors or 0) + 1
         if M.tick_errors <= 5 then log('tick failed: ' .. tostring(problem)) end
     end
-    if now >= (next_status or 0) then
-        next_status = now + STATUS_EVERY_S
-        log(string.format('status: players=%d sweeps=%d looked_up=%d skipped_unloaded=%d units=%d '
-            .. 'dots_peak=%d lookup_errors=%d near_resources=%d hot_reads=%d', #players, stats.sweeps, stats.looked_up,
-            stats.skipped_unloaded, stats.units, stats.dots_peak, stats.key_errors, #hot, hot_reads))
-        hot_reads = 0
-        if #players > 0 then
-            log('found: ' .. found_summary())
-            local parts = {}
-            for _, group in ipairs({'samples', 'supplies', 'mission', 'carry', 'dropoffs', 'controls', 'hellbombs', 'vehicles'}) do
-                local c = last_counts[group]
-                if c then parts[#parts + 1] = string.format('%s drawn=%d worn=%d far=%d', group, c.drawn, c.worn, c.far) end
-            end
-            log('last frame: ' .. (#parts > 0 and table.concat(parts, ' | ') or 'nothing found'))
-        end
-        stats.dots_peak = 0
-    end
+
 end
 
 -- ---------------------------------------------------------------- settings --
@@ -1534,7 +1495,7 @@ local function install()
     end
     if type(CHEF.title) == 'function' then pcall(CHEF.title, 'Extended Pickup Icons Range') end
     log('Application.can_get: ' .. (can_get and 'present - only loaded resources are looked up'
-        or 'MISSING - no target is looked up in this version (diagnostic only)'))
+        or 'MISSING - target lookup disabled for safety'))
     build_keys()
     log('worlds: ' .. (chef_worlds and 'Chef world_id' or 'legacy world comparison (no Chef world API)'))
     register_settings()
@@ -1563,7 +1524,7 @@ local function install()
     local shutdown = rawget(_G, 'shutdown')
     if type(shutdown) == 'function' then
         rawset(_G, 'shutdown', function(...)
-            log(string.format('shutdown: frames=%d sweeps=%d', stats.frames, stats.sweeps))
+            log('shutdown')
             if logfile then pcall(function() logfile:close() end) end
             return shutdown(...)
         end)

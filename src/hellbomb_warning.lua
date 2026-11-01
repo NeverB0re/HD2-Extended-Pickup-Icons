@@ -1,9 +1,9 @@
--- Experimental fixed-mission Hellbomb warning. Observe the replicated visual layer, never player input.
+-- Fixed-mission Hellbomb warning. Observe the replicated visual layer, never player input.
 -- Installed graph: layer 2, top_retracted (1) -> top_extend (0), hellbomb_activate. Fuse is an estimate.
 return function(chef, log)
     local H = {}
     -- Extracted hellbomb_activate clip: 5 s. Allow that visual deployment plus the requested 10 s fuse.
-    -- Fifteen seconds is a calibration hypothesis, not a replicated game deadline; removal logs measure it.
+    -- Locally timed from the observed animation transition; not a replicated detonation deadline.
     local DURATION = 15
     local RESOURCE = 'content/fac_helldivers/hellpod/hellbomb/hellbomb'
     local states = setmetatable({}, {__mode = 'k'})
@@ -24,30 +24,6 @@ return function(chef, log)
 
     function H.reset() states = setmetatable({}, {__mode = 'k'}) end
     function H.forget(u) if u ~= nil then states[u] = nil end end
-    function H.removed(p, now, reason)
-        if p.kind ~= RESOURCE then return end
-        local state = states[p.unit]
-        if not state or not state.warning or not state.warning.started then return end
-        state.reported = state.reported or {}
-        if state.reported[reason] then return end
-        state.reported[reason] = true
-        log(string.format('hellbomb timing: %.3f s since activation observed; %s (not proof of natural detonation)',
-            math.max(0, now - state.warning.started), reason))
-    end
-    function H.check_removed(now)
-        -- Discovery may drop a deleted unit before collect_dots sees it. Keep measuring started warnings
-        -- with only the safe existence helper, also when the player has left its marker range.
-        for u, state in pairs(states) do
-            if state.warning and state.warning.started and now >= (state.next_alive or 0) then
-                state.next_alive = now + 0.2
-                if not alive(u) then
-                    H.removed({kind = RESOURCE, unit = u}, now, 'unit deleted')
-                    states[u] = nil
-                end
-            end
-        end
-    end
-
     function H.observe(p, now, visible)
         if not H.enabled or p.kind ~= RESOURCE or visible ~= true then return nil end
         local u = p.unit

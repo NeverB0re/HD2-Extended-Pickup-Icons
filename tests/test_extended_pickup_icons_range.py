@@ -271,8 +271,8 @@ class DrawingTests(Case):
         self.assertIn("87 target resources: 81 named, 6 by id only (looked up if the id self-test passes)", log)
         self.frames(1, start=200.0)                   # the next status line, after a full sweep
         log = self.log_text()
-        self.assertIn("found: il_sarcophagus=2", log)
-        self.assertIn("mission drawn=1 worn=0 far=1", log)
+        self.assertEqual(self.dots(), 1)
+        self.assertEqual(len(list(self.fake.units[MARK].values())), 2)
 
     def test_supply_range_is_shorter(self):
         self.set_units(AVATAR, [unit(0)], loaded=False)
@@ -365,7 +365,7 @@ class DrawingTests(Case):
         self.assertEqual(self.dots(), 1)
         self.assertAlmostEqual(self.centre()[0], 2.0, places=6)
         self.frames(1, start=200.0)
-        self.assertIn("mission drawn=1 worn=1", self.log_text())
+        self.assertEqual(self.dots(), 1)
 
     def test_a_crawling_teammates_items_stay_hidden(self):
         self.set_units(AVATAR, [unit(0), unit(10)], loaded=False)
@@ -399,7 +399,7 @@ class DrawingTests(Case):
         with open(os.path.join(self.folder.name, "ExtendedPickupIconsRange.previous.log")) as f:
             self.assertEqual(f.read(), "last launch" + chr(10))   # kept, not wiped
         self.assertRegex(text, r"Extended Pickup Icons Range \S+ loading")
-        self.assertIn("shutdown: frames=0", text)
+        self.assertIn("shutdown", text)
         self.assertNotIn("last launch", text)
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
@@ -784,7 +784,6 @@ class HellbombWarningIntegrationTests(Case):
         self.frames(30, start=22)
         self.assertEqual(self.dots(), 0)
         self.assertEqual(self.fake.animation_reads, before)
-        self.assertIn('hellbomb timing:', self.log_text())  # hot discovery already discarded the dead point
 
     def test_damaged_map_bombs_keep_normal_markers_without_animation_reads(self):
         self.set_units(MissionHellbombTests.DEFUNCT, [dict(unit(5, 25), top=0)])
@@ -940,7 +939,7 @@ class ScreenTests(Case):
         self.load()
         self.settle()
         self.assertGreater(len(self.screen_tris()), 16)          # icons, not chevrons
-        self.assertIn("vehicles drawn=2", self.log_text() + self.status_now())
+        self.assertEqual(self.group_dots("vehicles"), 2)
 
     def test_an_exosuits_icon_sits_higher_than_a_cars(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
@@ -963,7 +962,7 @@ class ScreenTests(Case):
         self.set_units(tank, [unit(3, 20, 0)])               # a tank: no weapon units of its own
         self.load()
         self.settle()
-        self.assertIn("vehicles drawn=2", self.status_now())
+        self.assertEqual(self.group_dots("vehicles"), 2)
         self.fake.units[gun] = self.lua.table()             # destroyed: the gun is gone
         self.frames(60, start=201.0)
         self.assertIn("frv lost its weapons", self.log_text())
@@ -1065,7 +1064,7 @@ class ScreenTests(Case):
             arm.z = body.z + 1.5
             self.frames(1, start=40.0 + k / 60)
         self.assertNotIn("lost its weapons", self.log_text())
-        self.assertIn("vehicles drawn=1", self.status_now())
+        self.assertEqual(self.group_dots("vehicles"), 1)
 
     def test_a_wreck_still_rolling_loses_its_marker_at_once(self):
         gun = "content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg"
@@ -1093,7 +1092,7 @@ class ScreenTests(Case):
         arm.x, arm.z = 4, 0.5                                          # swung low: 0.9 m farther from its root
         self.frames(120, start=50.0)
         self.assertNotIn("came off", self.log_text())
-        self.assertIn("vehicles drawn=1", self.status_now())
+        self.assertEqual(self.group_dots("vehicles"), 1)
 
     def test_a_wreck_left_and_come_back_to_stays_unmarked(self):
         gun = "content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg"
@@ -1110,7 +1109,7 @@ class ScreenTests(Case):
         self.frames(60, start=50.0)
         me.y = -8                                                      # ... and back
         self.frames(60, start=60.0)
-        self.assertIn("vehicles drawn=0", self.status_now())
+        self.assertEqual(self.group_dots("vehicles"), 0)
 
     def test_an_exosuit_landing_by_an_old_wreck_is_marked_once_it_walks_off(self):
         wreck = "content/fac_helldivers/vehicles/combat_walker_wreck/combat_walker_wreck"
@@ -1120,13 +1119,12 @@ class ScreenTests(Case):
         self.set_units(wreck, [unit(0.5, 20, 0)])                      # the last one's wreck, where the new one lands
         self.load()
         self.settle()
-        self.assertIn("vehicles drawn=0 worn=1", self.status_now())
+        self.assertEqual(self.group_dots("vehicles"), 0)
         mech, arm = self.fake.units[self.MECH][1], self.fake.units[self.MECH_ARM][1]
         mech.x, arm.x = 10, 11                                         # walked off
         self.frames(60, start=210.0)
         self.frames(1, start=300.0)                                    # the next status line
-        last = [l for l in self.log_text().splitlines() if "last frame:" in l][-1]
-        self.assertIn("vehicles drawn=1 worn=0", last)
+        self.assertEqual(self.group_dots("vehicles"), 1)
 
     def test_a_wrecks_unit_is_let_go_once_it_is_gone(self):
         gun = "content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg"
@@ -1146,14 +1144,14 @@ class ScreenTests(Case):
         self.fake.units[self.VEHICLE] = self.lua.table(body)           # the engine hands the same unit to a new FRV
         self.set_units(gun, [unit(0, 20, 1.5)])
         self.frames(60, start=60.0)
-        self.assertIn("vehicles drawn=1", self.status_now())
+        self.assertEqual(self.group_dots("vehicles"), 1)
 
     def test_vehicles_side_by_side_each_get_a_marker(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(self.MECH, [unit(-1, 20, 0), unit(1, 20, 0)])   # two exosuits 2 m apart
         self.load()
         self.settle()
-        self.assertIn("vehicles drawn=2", self.status_now())
+        self.assertEqual(self.group_dots("vehicles"), 2)
 
     def test_crossing_vehicles_keep_their_own_weapon_mount_history(self):
         gun = "content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg"
@@ -1195,7 +1193,7 @@ class ScreenTests(Case):
         self.set_units(SAMPLE, [unit(8, 10, 0)])                                  # a sample 2 m off: shown
         self.load()
         self.settle()
-        self.assertIn("samples drawn=1 worn=1", self.status_now())
+        self.assertEqual(self.group_dots("samples"), 1)
 
     def test_an_exosuit_beside_its_wreck_gets_no_marker(self):
         wreck = "content/fac_helldivers/vehicles/combat_walker_wreck/combat_walker_wreck"
@@ -1205,7 +1203,7 @@ class ScreenTests(Case):
         self.load()
         self.settle()
         self.assertTrue(all(t.a._x < 960 for t in self.screen_tris()))
-        self.assertIn("vehicles drawn=1 worn=1", self.status_now())
+        self.assertEqual(self.group_dots("vehicles"), 1)
 
     def test_a_vehicle_you_are_in_never_gets_a_chevron(self):
         self.set_units(AVATAR, [unit(30, 1, 1.5)], loaded=False)   # you, in it
@@ -1213,7 +1211,7 @@ class ScreenTests(Case):
         self.load()
         self.settle(count=600)                                        # parked for 10 s
         self.assertEqual(self.screen_tris(), [])
-        self.assertIn("vehicles drawn=0 worn=1", self.status_now())
+        self.assertEqual(self.group_dots("vehicles"), 0)
 
     def test_a_teammates_vehicle_is_hidden_while_it_moves_and_shown_once_parked(self):
         self.set_units(AVATAR, [unit(0, -8, 0), unit(2, 31, 1.5)], loaded=False)   # you, a teammate driving
@@ -1251,11 +1249,10 @@ class ScreenTests(Case):
         self.load()
         self.settle()
         self.assertEqual(len(self.screen_points()), 1)
-        self.assertIn("dropoffs drawn=1 worn=0 far=1", self.status_now())
+        self.assertEqual(self.group_dots("dropoffs"), 1)
 
-    def status_now(self):
-        self.frames(1, start=200.0)
-        return self.log_text()
+    def group_dots(self, group):
+        return sum(d[6] == group for d in self.mod.dots.values())
 
     def test_worlds_that_all_print_the_same_are_still_told_apart(self):
         # in the game every world prints as '[World]' (0.6.1 log); the engine compares them with ==
@@ -1387,8 +1384,8 @@ class ScreenTests(Case):
         self.set_units(sssd, [unit(-4, 0, 1.0), unit(4, 0, 0)])        # one put in, one on the ground
         self.load()
         self.settle()
-        self.assertIn("mission drawn=1 worn=1", self.status_now())
-        self.assertIn("dropoffs drawn=1 worn=0", self.status_now())   # the drop-off keeps its marker: SSSDs are taken
+        self.assertEqual(self.group_dots("mission"), 1)
+        self.assertEqual(self.group_dots("dropoffs"), 1)   # the drop-off keeps its marker: SSSDs are taken
                                                                          # out of drop-offs in some missions
 
     def test_a_drop_off_keeps_its_marker_while_an_sssd_is_only_carried_past(self):
@@ -1398,7 +1395,7 @@ class ScreenTests(Case):
         self.set_units(sssd, [unit(-4, 1, 1.0)])                         # in the teammate's hands
         self.load()
         self.settle()
-        self.assertIn("dropoffs drawn=1 worn=0", self.status_now())
+        self.assertEqual(self.group_dots("dropoffs"), 1)
 
     def test_a_loaded_artillery_shell_gets_no_marker(self):
         shell = "content/objectives/obj_common/seaf_artillery/seaf_shell_regular"
@@ -1408,7 +1405,7 @@ class ScreenTests(Case):
         self.set_units(shell, [unit(-4, 0, 0.5), unit(-2.5, 0, 0)])     # one in the rack; one left beside it
         self.load()
         self.settle()
-        self.assertIn("carry drawn=1 worn=1", self.status_now())
+        self.assertEqual(self.group_dots("carry"), 1)
 
     def test_launch_codes_a_helldiver_stands_at_keep_their_marker(self):
         codes = "content/objectives/obj_common/generic_intel/generic_intel"
@@ -1416,7 +1413,7 @@ class ScreenTests(Case):
         self.set_units(codes, [unit(10, 1.2, 0), unit(-6, 0, 0)])
         self.load()
         self.settle()                                                  # 9 s on: no guess from who stands where
-        self.assertIn("mission drawn=2 worn=0", self.status_now())
+        self.assertEqual(self.group_dots("mission"), 2)
         self.assertNotIn("taken: ", self.log_text())
 
     def test_markers_are_the_loaders_shapes_on_its_layer(self):
@@ -1489,7 +1486,7 @@ class ScreenTests(Case):
         self.load_with_chef()
         self.settle()
         self.frames(120, start=40.0)                         # it stands still: how far the gun sits is kept
-        self.assertIn("vehicles drawn=1", self.status_now())
+        self.assertEqual(self.group_dots("vehicles"), 1)
         lying = self.fake.units[rack][1]                    # destroyed: the gun lies beside it, still within 5 m
         lying.x, lying.z = 1.5, 0.2
         self.frames(120, start=50.0)
@@ -1518,9 +1515,8 @@ class ScreenTests(Case):
         self.load_with_chef()
         self.fake.mission = False
         self.settle()
-        status = self.status_now()
-        self.assertNotIn("mission drawn=1", status)
-        self.assertIn("samples drawn=1", status)
+        self.assertEqual(self.group_dots("mission"), 0)
+        self.assertEqual(self.group_dots("samples"), 1)
 
     def bitmaps_now(self, start=40.0):
         """The textures drawn in one frame from now."""
@@ -1670,7 +1666,7 @@ class ScreenTests(Case):
         texts = list(self.fake.texts.values())
         self.assertEqual({t.s for t in texts}, {"88m"})                    # its distance above it, in red
         self.assertEqual({(t.c.r, t.c.g, t.c.b) for t in texts}, {(255, 90, 70)})
-        self.assertIn("hellbombs drawn=1 worn=0 far=1", self.status_now())
+        self.assertEqual(self.group_dots("hellbombs"), 1)
 
     def test_a_sample_on_a_stalk_is_marked_higher_where_the_game_shows_its_icon(self):
         def top(name):
@@ -1740,7 +1736,7 @@ class ScreenTests(Case):
         self.set_units(SAMPLE, [unit(8)])                     # inside the game's own 9 m
         self.load()
         self.settle()
-        self.assertIn("samples drawn=1 worn=0", self.status_now())
+        self.assertEqual(self.group_dots("samples"), 1)
 
     def test_the_size_at_the_edge_of_range_is_a_setting(self):
         self.set_options({"pickup_dots.smallest_size": 30})
@@ -2141,7 +2137,7 @@ class LifecycleTests(Case):
         self.assertIn("unnamed targets: id form IdString64 works - looked up by id", log)
         self.assertEqual(self.dots(), 1)
         self.frames(1, start=200.0)
-        self.assertIn("mission drawn=1", self.log_text())
+        self.assertEqual(self.dots(), 1)
 
     def test_equipment_and_weapons_are_not_targets(self):
         with open(build.TARGETS, encoding="utf-8") as f:
@@ -2635,49 +2631,6 @@ class NetworkIdentityTests(Case):
         self.frames(1, start=22.1)
         self.assertEqual(self.marks(), [])
 
-    def test_vehicle_position_diagnostics_preserve_refusal_reason_and_add_no_native_reads(self):
-        self.lua.execute("""
-            local fake = ...
-            local previous = fake.chef.call
-            fake.chef.call = function(name, ...)
-                if name == 'GameSession.unit_synchronizer' then return nil, 'not supported in this fixture' end
-                return previous(name, ...)
-            end
-        """, self.fake)
-        with open(build.LOCAL_PLAYER, encoding='utf-8') as f:
-            factory = self.lua.execute(f.read())
-        lines = []
-        tracker = factory(self.fake.chef, lines.append)
-        tracker.reset()
-        tracker.update(20, True)
-        lines.clear()
-        before = dict(self.fake.net.counts.items())
-        camera = self.lua.table_from({'translation': self.lua.table(0, -10, 0.6)})
-        keys = self.lua.table(self.lua.table_from({'group': 'vehicles', 'label': 'test/frv'}))
-        found = self.lua.table(self.lua.table(self.lua.table(0, 10, 0)))
-        players = self.lua.execute("""
-            local fake = ...
-            return {{0, -8, 0, unit=fake.units['content/fac_helldivers/cha_avatar/avatar_helldiver'][1]}}
-        """, self.fake)
-        for i in range(160):
-            tracker.diagnostics(21 + i, players, camera, found, keys)
-        self.assertEqual(len(lines), 120)
-        self.assertIn('synchronizer: not supported in this fixture', lines[0])
-        self.assertIn('avatars={1=(0.0,-8.0,0.0)', lines[0])
-        self.assertEqual(dict(self.fake.net.counts.items()), before)
-
-    def test_vehicle_position_diagnostics_are_quiet_without_a_nearby_vehicle(self):
-        with open(build.LOCAL_PLAYER, encoding='utf-8') as f:
-            factory = self.lua.execute(f.read())
-        lines = []
-        tracker = factory(self.fake.chef, lines.append)
-        tracker.reset()
-        tracker.update(20, True)
-        lines.clear()
-        camera = self.lua.table_from({'translation': self.lua.table(0, -10, 0.6)})
-        tracker.diagnostics(21, self.fake.units[AVATAR], camera, self.lua.table(), self.lua.table())
-        self.assertEqual(lines, [])
-
     def sample_setup(self, move_box=True):
         self.lua.execute("stingray.IdString64 = {from_hex=function(hex) return {hex=hex} end}")
         self.fake.loaded['hex:4d1c334d294dfa97'] = True
@@ -2797,6 +2750,14 @@ class NamingCompatibilityTests(Case):
 
 
 class ArchiveTests(unittest.TestCase):
+    def test_release_source_has_no_experimental_measurements_or_periodic_statistics(self):
+        source = build.built_source()
+        for removed in ('position-diagnostic:', 'hellbomb timing:', 'function P.diagnostics',
+                        'function H.check_removed', 'STATUS_EVERY_S', "log('last frame:", 'found_summary'):
+            self.assertNotIn(removed, source)
+        self.assertIn("log('FATAL: '", source)
+        self.assertIn("log('lookup failed for '", source)
+
     def test_boot_mod_loader_finds_the_mod(self):
         """Read the archive the way boot_mod_loader.lua's declared_in() does."""
         with tempfile.TemporaryDirectory() as tmp:

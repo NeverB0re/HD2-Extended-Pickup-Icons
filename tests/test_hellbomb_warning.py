@@ -45,16 +45,6 @@ class WarningTests(unittest.TestCase):
                                (1, '14:00'), (14.99, '00:01'), (15, '00:00'), (20, '00:00')):
             self.assertEqual(self.warning.visual(record, record.started + elapsed).label, label)
 
-    def test_removal_measurement_is_logged_once_per_signal_without_native_reads(self):
-        record = self.activate()
-        before = self.fake.reads
-        self.warning.removed(self.point, record.started + 15.15, 'unit deleted')
-        self.warning.removed(self.point, record.started + 15.16, 'unit deleted')
-        messages = [s for s in self.fake.logs.values() if 'hellbomb timing:' in s]
-        self.assertEqual(len(messages), 1)
-        self.assertIn('15.150 s', messages[0])
-        self.assertEqual(self.fake.reads, before)
-
     def test_already_activated_bomb_never_restarts_a_full_timer(self):
         self.fake.top = 0
         record = self.observe(0)
