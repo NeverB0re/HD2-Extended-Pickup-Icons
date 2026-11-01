@@ -3,9 +3,9 @@
 A HELLDIVERS 2 Chef Shared Loader addon that draws markers over samples, supplies, mission items,
 objective interactions, Hellbombs, vehicles and your last death, using the game's icons.
 
-The local **2.6.0 release candidate** includes the gameplay-tested changes from 2.5.1-test.14, removes
-experimental measurements, and adds native Chef settings with folded categories and per-type ranges.
-The final settings UI still needs an in-game display/navigation check before publication.
+Version **2.6.0** includes the gameplay-tested changes from 2.5.1-test.14, removes experimental
+measurements, and adds native Chef settings with folded categories and per-type ranges. The owner
+confirmed that the new settings display correctly in game and approved GitHub publication on 2026-11-02.
 
 - [Nexus page text, English + Korean BBCode](PUBLISH_NEXUS.txt)
 - [2.6.0 changelog, upload description and announcement, English + Korean](docs/nexus-release-2.6.0.txt)
@@ -60,7 +60,7 @@ is claimed. Valves/cranks remain marked after use. See the player page for behav
 | `tools/compare_discovery_reads.py` | Native-read count comparison, not an FPS benchmark |
 | `tools/bake_icons.py` | Bakes game icon PNGs into resource textures |
 | `tools/verify_release.py` | Checks ZIP contents, Lua, texture compatibility and package hash |
-| `release/` | Historical releases plus the local candidate; a ZIP here does not mean published |
+| `release/` | Packaged releases, including 2.6.0 |
 
 ```powershell
 python -m venv .venv

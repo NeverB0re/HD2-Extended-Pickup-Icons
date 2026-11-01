@@ -1,8 +1,9 @@
 # 2.6.0 release review — 2026-11-02
 
-Status: **local release candidate, not published or pushed**. The owner confirmed satisfactory gameplay
-with 2.5.1-test.14. The subsequent cleanup and native settings changes pass offline checks. The new F9
-folded settings screen still needs a short in-game display/navigation and setting-application check.
+Status: **2.6.0 approved for GitHub publication**. The owner confirmed satisfactory gameplay with
+2.5.1-test.14. Cleanup and native settings changes pass offline checks. On 2026-11-02 the owner also
+confirmed that the new settings display correctly in game and authorized the GitHub upload. Nexus
+publication will be handled by the owner.
 
 ## Changes reviewed
 
@@ -58,7 +59,7 @@ These are fake-engine native-call counts, **not FPS or frame-time measurements**
 continue to refresh; vehicle, weapon and wreck observations remain together. Settings processing adds
 cached Lua configuration reads to marker collection, with no extra engine calls or per-frame callbacks.
 
-## Candidate files
+## Release files
 
 - `release/Extended Pickup Icons Range v2.6.0.zip`
 - SHA-256: `7700895dbe1f602c87f34911c2fe782ea90e50d8aef22c5b470a4256b6d20966`
@@ -66,12 +67,12 @@ cached Lua configuration reads to marker collection, with no extra engine calls 
 - `PUBLISH_NEXUS.txt`: full English/Korean Nexus BBCode page.
 - `docs/nexus-release-2.6.0.txt`: bilingual changelog, upload description and announcement draft.
 
-## Final live check and remaining limits
+## Live confirmation and remaining limits
 
-Before publishing, open the new F9 mod entry, expand the categories, change one type's range/toggle,
-then restart once to check persistence. The backend/defaults/metadata/navigation structure were checked
-offline; the game's actual F9 layout and controls were not rendered here. The owner has already approved
-the gameplay behavior of death, vehicle, mission Hellbomb and revised warning timing in preceding tests.
+The owner confirmed the new settings display correctly and approved publication. Native option
+application and save/restore behavior passed offline tests; this does not separately claim a reported
+live restart/persistence test. Death, vehicle, mission Hellbomb and revised warning gameplay behavior
+was confirmed by the owner in preceding tests.
 
 Multiplayer edge cases, including a reinforced teammate leaving the session, still await player feedback
 by the owner's decision. The warning observes the bomb rather than local input, and simulated remote
@@ -84,5 +85,5 @@ network data does not prove death. Existing vehicle/item heuristics remain; ther
 for still-visible sinking objects, valve completion state or portable backpack Hellbomb support.
 
 No new-loader port, separate map-open range, automatic fuse learning or network vehicle-state replacement
-is included. Other loaders must supply Chef compatibility. No game deployment, Nexus upload, GitHub
-push or GitHub release was performed during this review.
+is included. Other loaders must supply Chef compatibility. The review itself did not deploy the game files or publish externally. The owner subsequently authorized
+GitHub upload after confirming the settings screen. Nexus upload remains with the owner.

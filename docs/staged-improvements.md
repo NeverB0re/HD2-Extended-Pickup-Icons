@@ -460,3 +460,10 @@ Bilingual page copy is updated in PUBLISH_NEXUS.txt; upload/changelog/announceme
 [nexus-release-2.6.0.txt](nexus-release-2.6.0.txt). A local candidate ZIP is prepared, not published or pushed.
 Multiplayer feedback and color checks remain deferred as requested. There is no universal sinking-object
 filter, new-loader port, portable-backpack marker, separate map range or vehicle-network-state replacement.
+
+
+## GitHub publication approval - 2026-11-02
+
+The owner confirmed the settings display correctly in game and authorized GitHub upload of 2.6.0.
+The earlier pending F9 display check is resolved. Save/restore behavior passed offline tests; no
+separate live restart test was reported. Nexus upload will be handled by the owner.
