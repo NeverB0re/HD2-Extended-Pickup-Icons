@@ -22,7 +22,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.5.1-test.5'
+local VERSION = '2.5.1-test.6'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -1321,8 +1321,8 @@ local function tick()
             M.identity = local_player.status
             if observed and observed.death then
                 deaths, cleared = {observed.death}, nil
-                log(string.format('death: local health confirmed at %.1f %.1f %.1f',
-                    observed.death[1], observed.death[2], observed.death[3]))
+                log(string.format('death: local health confirmed at %.1f %.1f %.1f (%s)',
+                    observed.death[1], observed.death[2], observed.death[3], observed.position_source or 'network'))
             elseif observed and observed.alive and observed.position and #deaths > 0 then
                 local p, m = observed.position, deaths[1]
                 local dx, dy = p[1] - m[1], p[2] - m[2]

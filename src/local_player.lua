@@ -129,9 +129,28 @@ return function(chef, log)
         if ok and number(x) and number(y) and number(z) then return {x, y, z} end
     end
 
+    local function world_position(avatar)
+        -- A seated avatar's replicated `position` may stay at its boarding point. Resolve the unit through
+        -- the exact, already-typed local avatar object; never infer identity from camera/distance here.
+        local synchronizer = call('synchronizer', 'GameSession.unit_synchronizer', session)
+        local unit = synchronizer and call('avatar.unit', 'UnitSynchronizer.game_object_id_to_unit', synchronizer, avatar)
+        if unit ~= nil then life.unit = unit end
+        -- Keep an established association through a transient missing map, but ask only through Chef's
+        -- current-world/alive guards. A new avatar/session/world creates a new life and discards the handle.
+        unit = life.unit
+        if unit == nil or type(chef.unit_alive) ~= 'function' or type(chef.unit_position) ~= 'function' then return nil end
+        local ok, x, y, z = pcall(function()
+            if chef.unit_alive(unit) ~= true then return nil end
+            return chef.unit_position(unit)
+        end)
+        if ok and number(x) and number(y) and number(z) then return {x, y, z} end
+        life.unit = nil
+    end
+
     local function terminal(avatar, now)
         if not life or life.avatar ~= avatar or not life.hp or life.hp <= 0 or not life.position
-            or not life.at or now < life.at or now - life.at > MAX_GAP_S then return nil end
+            or not life.at or now < life.at or now - life.at > MAX_GAP_S
+            or not life.position_at or now - life.position_at > MAX_GAP_S then return nil end
         local hp = read(avatar, AVATAR, 'health')
         if number(hp) and hp <= 0 then
             local v = life.position
@@ -165,29 +184,40 @@ return function(chef, log)
         -- The player can clear/replace its avatar reference before the final health sample. Only an explicit
         -- reference change permits one guarded health read of the previously confirmed local avatar. A nil
         -- reference is a refused/missing read and proves nothing.
-        local ended
+        local ended, ended_source = nil, life and life.position_source
         if av ~= nil and life and life.avatar ~= av then ended = terminal(life.avatar, now) end
         if not object_id(av) or not exists(av, AVATAR) then
             -- Missing/refused reads are not death. Keep only numeric history, break the health transition.
             if life then life.hp, life.at = nil, nil end
             status('waiting for local avatar')
-            return ended and {death = ended} or nil
+            return ended and {death = ended, position_source = life and life.position_source} or nil
         end
         local hp = read(av, AVATAR, 'health')
         if not number(hp) then
             if life then life.hp, life.at = nil, nil end
             status('local health unavailable; waiting')
-            return ended and {death = ended} or nil
+            return ended and {death = ended, position_source = life and life.position_source} or nil
         end
         if not life or life.avatar ~= av then life = {avatar = av} end
         local observed = {avatar = av, alive = hp > 0, death = ended}
         if hp > 0 then
-            local pos = position(read(av, AVATAR, 'position'))
-            if pos then life.position, observed.position = pos, pos else life.position = nil end
-        elseif life.hp and life.hp > 0 and life.position and life.at and now >= life.at and now - life.at <= MAX_GAP_S then
+            local pos = world_position(av)
+            local source = 'local unit world position'
+            if pos then life.had_world_position = true end
+            if not pos and not life.had_world_position then
+                pos = position(read(av, AVATAR, 'position'))
+                source = 'network position'
+            end
+            if pos and life.position_source ~= source then log('identity: position source ' .. source) end
+            if pos then
+                life.position, observed.position, life.position_at, life.position_source = pos, pos, now, source
+            end
+        elseif life.hp and life.hp > 0 and life.position and life.at and now >= life.at and now - life.at <= MAX_GAP_S
+            and life.position_at and now - life.position_at <= MAX_GAP_S then
             local v = life.position
             observed.death = {v[1], v[2], v[3]}  -- freeze the last living position, before ragdoll/despawn motion
         end
+        observed.position_source = ended and ended_source or life.position_source
         life.hp, life.at = hp, now
         status('local player confirmed')
         return observed

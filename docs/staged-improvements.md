@@ -106,3 +106,25 @@ All 151 tests pass. `tools/compare_discovery_reads.py` compares 240 frames with 
 | Nearby items plus FRV/gun | 3120 → 1020 | 3120 → 3120 | 11 → 11 |
 
 These are deterministic fake-engine call counts, not measured gameplay time or FPS improvements.
+
+## Vehicle death position — 2.5.1-test.6
+
+The player reported a death inside a vehicle leaving the skull at its boarding point. The current test.4
+log confirms the renamed addon/logs run and local health detection is active; it does not contain a second
+position source with which to prove the engine-side cause. A stale replicated avatar `position` is the
+reproduced model of this report, not a directly measured vehicle-network trace.
+
+For the already-confirmed local avatar id, ask `GameSession.unit_synchronizer` and
+`UnitSynchronizer.game_object_id_to_unit` for its exact unit, then obtain its root world position through
+Chef's current-world/alive guards. Do not select a unit by camera proximity or substitute a teammate.
+Keep a confirmed association through a transient missing map; discard it on avatar/session/world change.
+
+The last living world position is frozen when local health confirms death. After a world-position source
+has been established, a refused/gone unit must not overwrite that snapshot with a stale network/boarding
+position. A fresh snapshot may bridge a brief gap, at most 0.5 s; after a longer gap there is no new guessed
+mark. Engines that supply no avatar-unit mapping retain the network-position source, so the fix must still
+be checked in the affected vehicle. Logs now identify which position source was used.
+
+All 156 tests pass. The boarding-point case fails on the prior module and passes after the change. Tests
+also cover spectator isolation, transient map gaps, gone units and stale snapshot rejection. This does not
+establish that the affected live vehicle exposes a usable mapping; a live vehicle test remains necessary.

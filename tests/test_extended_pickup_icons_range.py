@@ -2200,6 +2200,74 @@ class NetworkIdentityTests(Case):
         self.frames(40, start=49)
         self.assertEqual(self.marks(), [])
 
+    def mapped_avatar(self):
+        self.lua.execute("""
+            local fake = ...
+            fake.net.unit_map = {[2] = fake.units['content/fac_helldivers/cha_avatar/avatar_helldiver'][1]}
+            local previous = fake.chef.call
+            fake.chef.call = function(name, ...)
+                local a = {...}
+                if name == 'GameSession.unit_synchronizer' then return fake.net.unit_map end
+                if name == 'UnitSynchronizer.game_object_id_to_unit' then return fake.net.unit_map[a[2]] end
+                return previous(name, ...)
+            end
+        """, self.fake)
+        return self.fake.units[AVATAR][1]
+
+    def test_vehicle_death_uses_the_moving_local_unit_not_its_stale_boarding_position(self):
+        actual = self.mapped_avatar()
+        self.start_network()
+        actual.x, actual.y, actual.z = 120, 35, 8
+        self.frames(20, start=21)
+        self.assertEqual(self.fake.net.objects[2].x, 0)           # replicated position still at boarding point
+        self.fake.net.objects[2].health = 0
+        actual.x, actual.z = 180, -20                          # body thrown/sinking after death
+        self.frames(1, start=21.4)
+        self.assertEqual(self.marks(), [(120, 35, 9.2)])
+        self.assertIn('(local unit world position)', self.log_text())
+
+    def test_a_spectated_teammate_cannot_supply_the_local_units_death_position(self):
+        actual = self.mapped_avatar()
+        self.start_network()
+        actual.x, actual.y = 10, 20
+        self.lua.execute("local fake = ...; fake.cam.pos = {80, -2, 0.6}", self.fake)
+        self.frames(1, start=21)
+        self.fake.net.objects[2].health = 0
+        self.frames(1, start=21.1)
+        self.assertEqual(self.marks(), [(10, 20, 1.2)])
+
+    def test_a_transient_unit_map_gap_keeps_the_confirmed_local_association(self):
+        actual = self.mapped_avatar()
+        self.start_network()
+        self.fake.net.unit_map[2] = None
+        actual.x, actual.y = 50, 10
+        self.frames(1, start=21)
+        self.fake.net.objects[2].health = 0
+        self.frames(1, start=21.1)
+        self.assertEqual(self.marks(), [(50, 10, 1.2)])
+
+    def test_a_gone_mapped_unit_cannot_overwrite_its_last_world_position_with_stale_network_data(self):
+        actual = self.mapped_avatar()
+        self.start_network()
+        actual.x, actual.y = 70, 20
+        self.frames(1, start=21)
+        actual.alive = False
+        self.frames(1, start=21.1)                             # replication still says health 125
+        self.fake.net.objects[2].health = 0
+        self.frames(1, start=21.2)
+        self.assertEqual(self.marks(), [(70, 20, 1.2)])
+
+    def test_a_long_unavailable_world_position_does_not_create_a_mark_at_the_boarding_point(self):
+        actual = self.mapped_avatar()
+        self.start_network()
+        actual.x, actual.y = 70, 20
+        self.frames(1, start=21)
+        actual.alive = False
+        self.frames(1, start=22)
+        self.fake.net.objects[2].health = 0
+        self.frames(1, start=22.1)
+        self.assertEqual(self.marks(), [])
+
 
 class NamingCompatibilityTests(Case):
     def test_the_first_renamed_launch_preserves_the_previous_legacy_log(self):
