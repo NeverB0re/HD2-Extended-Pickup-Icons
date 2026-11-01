@@ -12,11 +12,13 @@ return function(chef, log)
     local NO_OBJECT = 32767
     local SCAN_BATCH, RETRY_S, MAX_GAP_S = 32, 1, 0.5
     local schema, session, peer, player, scan, life, retry_at
+    local diagnostic_at, diagnostic_count, labels, next_label
 
     local function call(kind, name, ...)
         if type(chef) ~= 'table' or type(chef.call_kind) ~= 'function' then return nil end
         local result = {pcall(chef.call_kind, name, 'pickup_identity.' .. kind, ...)}
-        if result[1] then return result[2] end
+        if result[1] then return result[2], result[3] end
+        return nil, tostring(result[2])
     end
 
     local function number(v)
@@ -36,7 +38,9 @@ return function(chef, log)
 
     function P.reset()
         session, peer, player, scan, life, retry_at = nil, nil, nil, nil, nil, nil
+        diagnostic_at, diagnostic_count, labels, next_label = nil, 0, setmetatable({}, {__mode = 'k'}), 0
     end
+    function P.diagnostics() end
 
     local build = call('build', 'Application.build_identifier')
     if type(build) ~= 'string' or not BUILDS[(string.gsub(build, '%s+', ''))] then
@@ -132,8 +136,14 @@ return function(chef, log)
     local function world_position(avatar)
         -- A seated avatar's replicated `position` may stay at its boarding point. Resolve the unit through
         -- the exact, already-typed local avatar object; never infer identity from camera/distance here.
-        local synchronizer = call('synchronizer', 'GameSession.unit_synchronizer', session)
-        local unit = synchronizer and call('avatar.unit', 'UnitSynchronizer.game_object_id_to_unit', synchronizer, avatar)
+        local synchronizer, why = call('synchronizer', 'GameSession.unit_synchronizer', session)
+        local unit
+        if synchronizer ~= nil then
+            unit, why = call('avatar.unit', 'UnitSynchronizer.game_object_id_to_unit', synchronizer, avatar)
+            P.map_reason = unit ~= nil and 'unit returned' or ('unit mapping: ' .. tostring(why or 'nil result'))
+        else
+            P.map_reason = 'synchronizer: ' .. tostring(why or 'nil result')
+        end
         if unit ~= nil then life.unit = unit end
         -- Keep an established association through a transient missing map, but ask only through Chef's
         -- current-world/alive guards. A new avatar/session/world creates a new life and discards the handle.
@@ -145,6 +155,43 @@ return function(chef, log)
         end)
         if ok and number(x) and number(y) and number(z) then return {x, y, z} end
         life.unit = nil
+    end
+
+    function P.diagnostics(now, players, camera, found, keys)
+        if P.mode ~= 'network' or not life or not life.hp or life.hp <= 0 or not camera then return end
+        if now < (diagnostic_at or 0) or (diagnostic_count or 0) >= 120 then return end
+        diagnostic_at = now + 1
+        local cam, vehicles = camera.translation, {}
+        for i, k in ipairs(keys) do
+            if k.group == 'vehicles' then
+                for _, p in ipairs(found[i] or {}) do
+                    local dx, dy, dz = p[1] - cam[1], p[2] - cam[2], p[3] - cam[3]
+                    if dx * dx + dy * dy + dz * dz <= 1600 and #vehicles < 4 then
+                        vehicles[#vehicles + 1] = string.format('%s=(%.1f,%.1f,%.1f)',
+                            string.match(k.label, '([^/]+)$') or k.label, p[1], p[2], p[3])
+                    end
+                end
+            end
+        end
+        if #vehicles == 0 then return end
+        local actors = {}
+        labels = labels or setmetatable({}, {__mode = 'k'})
+        for i, p in ipairs(players) do
+            if i > 8 then break end
+            if p.unit ~= nil and labels[p.unit] == nil then
+                next_label = (next_label or 0) + 1
+                labels[p.unit] = next_label
+            end
+            actors[#actors + 1] = string.format('%s=(%.1f,%.1f,%.1f)', tostring(labels[p.unit] or '?'), p[1], p[2], p[3])
+        end
+        local v = life.position
+        local at = v and string.format('(%.1f,%.1f,%.1f)', v[1], v[2], v[3]) or 'unavailable'
+        local why = string.sub(string.gsub(tostring(P.map_reason), '[\r\n]', ' '), 1, 160)
+        log(string.format('position-diagnostic: avatar=%s hp=%.1f source=%s map=%s recorded=%s '
+            .. 'camera=(%.1f,%.1f,%.1f) avatars={%s} vehicles={%s}', tostring(life.avatar), life.hp,
+            life.position_source or 'none', why, at, cam[1], cam[2], cam[3], table.concat(actors, ' '),
+            table.concat(vehicles, ' ')))
+        diagnostic_count = (diagnostic_count or 0) + 1
     end
 
     local function terminal(avatar, now)

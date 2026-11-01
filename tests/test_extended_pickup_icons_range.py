@@ -2300,6 +2300,49 @@ class NetworkIdentityTests(Case):
         self.frames(1, start=22.1)
         self.assertEqual(self.marks(), [])
 
+    def test_vehicle_position_diagnostics_preserve_refusal_reason_and_add_no_native_reads(self):
+        self.lua.execute("""
+            local fake = ...
+            local previous = fake.chef.call
+            fake.chef.call = function(name, ...)
+                if name == 'GameSession.unit_synchronizer' then return nil, 'not supported in this fixture' end
+                return previous(name, ...)
+            end
+        """, self.fake)
+        with open(build.LOCAL_PLAYER, encoding='utf-8') as f:
+            factory = self.lua.execute(f.read())
+        lines = []
+        tracker = factory(self.fake.chef, lines.append)
+        tracker.reset()
+        tracker.update(20, True)
+        lines.clear()
+        before = dict(self.fake.net.counts.items())
+        camera = self.lua.table_from({'translation': self.lua.table(0, -10, 0.6)})
+        keys = self.lua.table(self.lua.table_from({'group': 'vehicles', 'label': 'test/frv'}))
+        found = self.lua.table(self.lua.table(self.lua.table(0, 10, 0)))
+        players = self.lua.execute("""
+            local fake = ...
+            return {{0, -8, 0, unit=fake.units['content/fac_helldivers/cha_avatar/avatar_helldiver'][1]}}
+        """, self.fake)
+        for i in range(160):
+            tracker.diagnostics(21 + i, players, camera, found, keys)
+        self.assertEqual(len(lines), 120)
+        self.assertIn('synchronizer: not supported in this fixture', lines[0])
+        self.assertIn('avatars={1=(0.0,-8.0,0.0)', lines[0])
+        self.assertEqual(dict(self.fake.net.counts.items()), before)
+
+    def test_vehicle_position_diagnostics_are_quiet_without_a_nearby_vehicle(self):
+        with open(build.LOCAL_PLAYER, encoding='utf-8') as f:
+            factory = self.lua.execute(f.read())
+        lines = []
+        tracker = factory(self.fake.chef, lines.append)
+        tracker.reset()
+        tracker.update(20, True)
+        lines.clear()
+        camera = self.lua.table_from({'translation': self.lua.table(0, -10, 0.6)})
+        tracker.diagnostics(21, self.fake.units[AVATAR], camera, self.lua.table(), self.lua.table())
+        self.assertEqual(lines, [])
+
 
 class NamingCompatibilityTests(Case):
     def test_the_first_renamed_launch_preserves_the_previous_legacy_log(self):

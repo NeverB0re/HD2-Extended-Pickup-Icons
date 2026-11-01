@@ -161,3 +161,23 @@ unverified, so the existing features are preserved. No extra speculative native 
    from the existing offline tests.
 
 This section records the next requested work; no new despawn-filter behavior is implemented by this note.
+
+## Live vehicle failure and diagnostic test — 2.5.1-test.8
+
+The player repeated the test in test.7 and the marker still stayed at the boarding point. Its local log
+records `position source network position` throughout and the death event also names `network position`.
+Thus the mapped-unit path did not produce usable world coordinates in this session. The test.6/test.7
+offline case modeled an available mapping and did not establish that this game uses that map for avatars.
+Do not call that vehicle bug fixed on the evidence of the offline case.
+
+Test.8 is diagnostic, not a new vehicle-position fix. It retains the refusal/nil reason from the mapping
+calls already made, and logs existing numeric snapshots once a second near a vehicle (within 40 m of the
+camera, at most 120 lines per session/world). It includes the recorded position/source, camera position,
+stable labels and positions of currently enumerated avatars, and nearby vehicle positions. It adds no
+native calls or new guessed ownership/coordinate fallback. Dead-state tracking remains unchanged.
+
+All 160 tests pass, including mapping-reason retention, the diagnostic line cap, no additional native reads
+and no diagnostic output without a nearby vehicle. The next live capture only needs walking to the car,
+boarding and moving away for 10–20 seconds, then a clean game exit; no further suicide is needed to compare
+the available position sources. Any heuristic association or camera-based substitute requires discussion
+before implementation, as requested by the project's instructions.

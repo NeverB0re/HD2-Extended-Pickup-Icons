@@ -47,7 +47,8 @@ change; `2.5.1-test.3` also uses guarded local-player health/position observatio
 builds. In a local gameplay session, its network identity and two death detections were confirmed in the log;
 the player reported correct death and general markers. The renamed test.4 addon/logs were also seen running.
 `2.5.1-test.7` integrates discovery optimization, vehicle identity tracking and a fix for vehicle-death position
-using the mapped local avatar's world coordinates when available. It needs live vehicle verification.
+using the mapped local avatar's world coordinates when available. Its live vehicle test failed: the log
+still used the replicated network position. `2.5.1-test.8` adds bounded position diagnostics, not a new fix.
 Existing icons, ranges, settings,
 vehicle destruction detection and camera-relative general-marker behavior are preserved. `release/` and the
 published Nexus description still describe the earlier public version.

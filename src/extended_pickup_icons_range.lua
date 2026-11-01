@@ -22,7 +22,7 @@ if type(CHEF) ~= 'table' then CHEF = nil end
 local CHEF_NEEDS = {'camera', 'call', 'call_kind', 'unit_alive', 'unit_position', 'unit_node', 'in_mission',
                     'screen', 'color', 'rect', 'triangle', 'bitmap', 'text', 'text_width'}
 
-local VERSION = '2.5.1-test.7'
+local VERSION = '2.5.1-test.8'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -1344,6 +1344,7 @@ local function tick()
             sweep_step(world)
         end
         draw(now, cam)   -- every frame: the loader draws what it is given each frame only
+        local_player.diagnostics(now, players, cam, found, keys)
     end)
     temp_end(saved)
     if not ok then
