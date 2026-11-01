@@ -140,3 +140,24 @@ All 158 tests pass. The integrated build includes naming, world management, netw
 discovery/refresh separation and the vehicle-death coordinate fix. See `object-state-audit.md` for why direct
 network vehicle/carryable-state replacement is not enabled: specific type bindings and value meanings remain
 unverified, so the existing features are preserved. No extra speculative native field reads were added.
+
+## Next priorities after the integrated vehicle test
+
+1. Inspect the live position-source log for the vehicle death. Verify the actual mapping is available and the
+   mark stays at the death location, then validate recovery and spectator isolation in host/guest sessions.
+2. Investigate the reported generic despawn/sinking marker recurrence before extending state heuristics.
+   `Unit.alive` means the engine object exists, not that it remains a valid pickup/vehicle. A unit can remain
+   listed while its removal animation sinks it underground. Do not treat alive handles as sufficient evidence
+   for a persistent marker; use category-specific, verified removal/visibility/interaction signals.
+3. Keep confirmed-removed state attached to the actual unit so cached points cannot re-create its marker.
+   Forget unit state on world changes or genuine handle replacement. Keep death marks as numeric snapshots,
+   never as a moving corpse/container reference. Preserve valid new items/vehicles near an old wreck.
+4. Add regressions for alive-but-removed units, sinking while meshes disappear, stale discovery/position
+   caches, a new unit at the old position, and leaving/returning to the area. Pair them with valid movement
+   cases (falling vehicles, blasted samples, slopes/elevation changes) to prevent false removals. Absolute
+   world height or downward movement alone is not a valid despawn criterion.
+5. Validate gameplay cost and remaining crashes; only then replace verified network vehicle/carryable state
+   decisions and prepare a stable package/docs/release. No frame-time gain or universal despawn fix is claimed
+   from the existing offline tests.
+
+This section records the next requested work; no new despawn-filter behavior is implemented by this note.
