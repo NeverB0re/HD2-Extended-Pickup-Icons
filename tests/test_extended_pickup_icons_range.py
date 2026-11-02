@@ -20,6 +20,15 @@ MARK = "content/objectives/obj_illuminate/il_sarcophagus/il_sarcophagus"   # dra
 FAKE_ENGINE = r"""
 local fake = { now = 0, lookups = {}, units = {}, loaded = {}, tris = {}, frame_tris = {}, assets = {} }
 os.clock = function() return fake.now end
+fake.real_open = io.open
+fake.log_reads = {}
+io.open = function(path, mode)   -- Chef 1.4: "mods read only the logs they write themselves"
+  if tostring(path):find('%.log$') and tostring(mode or 'r'):find('r') then
+    fake.log_reads[#fake.log_reads + 1] = path
+    return nil, 'blocked'
+  end
+  return fake.real_open(path, mode)
+end
 local real_getenv = os.getenv
 fake.appdata = 'Z:\\no-such-folder'
 os.getenv = function(k)
@@ -96,6 +105,12 @@ fake.chef = {
       fake.chef.triangle(t[1], t[2], t[3], t[4], t[5], t[6], c, layer)
     end
   end,
+  own_log = function(name) fake.log_name = name; return true end,
+  log = function(fmt, ...)
+    local f = fake.real_open(fake.chef.log_directory .. '\\' .. (fake.log_name or 'chef_loader') .. '.log', 'a')
+    f:write(string.format(fmt, ...), '\n')
+    f:close()
+  end,
   text_width = function(s, px) return #s * px / 2 end,
   text = function(x, y, s, px, c) fake.texts[#fake.texts + 1] = {x = x, y = y, s = s, px = px, c = c} end,
   unit_alive = function(u) return u.alive ~= false end,
@@ -113,6 +128,8 @@ fake.chef = {
   call_kind = function(name, kind, ...)
     fake.kinds = fake.kinds or {}
     fake.kinds[name] = kind
+    fake.calls = fake.calls or {}
+    fake.calls[name] = (fake.calls[name] or 0) + 1
     if name ~= 'World.units_by_resource' then return fake.chef.call(name, ...) end
     local ok, value = pcall(stingray.World.units_by_resource, ...)
     if not ok then return nil, value end
@@ -206,7 +223,7 @@ class Case(unittest.TestCase):
         return self.load()
 
     def log_text(self):
-        path = os.path.join(self.folder.name, "ExtendedPickupIconsRange.log")
+        path = os.path.join(self.folder.name, "ExtendedPickupIcons.log")
         if not os.path.exists(path):
             return ""
         with open(path, encoding="utf-8") as f:
@@ -253,6 +270,37 @@ class Case(unittest.TestCase):
 
 
 class DrawingTests(Case):
+    def test_own_log_refusal_falls_back_to_the_loader_log_without_stopping_markers(self):
+        self.lua.execute("local f=...; f.chef.own_log=function() return false,'unavailable' end", self.fake)
+        self.set_units(AVATAR, [unit(0)], loaded=False)
+        self.set_units(MARK, [unit(8)])
+        self.load()
+        self.settle()
+        self.assertEqual(self.dots(), 1)
+        with open(os.path.join(self.folder.name, 'chef_loader.log'), encoding='utf-8') as f:
+            self.assertIn('Extended Pickup Icons Range ', f.read())
+        self.assertEqual(list(self.fake.log_reads.values()), [])
+
+    def test_a_failing_log_helper_does_not_disable_markers(self):
+        self.lua.execute("local f=...; f.chef.log=function() error('log unavailable') end", self.fake)
+        self.set_units(AVATAR, [unit(0)], loaded=False)
+        self.set_units(MARK, [unit(8)])
+        self.load()
+        self.settle()
+        self.assertEqual(self.dots(), 1)
+        self.assertIsNone(self.mod.tick_errors)
+
+    def test_the_complete_resource_sweep_keeps_the_public_eight_frame_bound(self):
+        self.set_units(AVATAR, [unit(0)], loaded=False)
+        names = {t['name'] for t in self.targets() if t.get('name')}
+        for name in names:
+            self.set_units(name, [unit(1000)])
+        self.load()
+        self.settle()
+        self.fake.lookups = self.lua.table()
+        self.frames(8, start=40)
+        self.assertTrue(names.issubset(set(self.fake.lookups.keys())))
+
     def test_dots_only_within_range_and_only_loaded_resources_are_looked_up(self):
         self.set_units(AVATAR, [unit(0)], loaded=False)
         self.set_units(MARK, [unit(10), unit(60)])  # mission items: 50 m
@@ -389,18 +437,17 @@ class DrawingTests(Case):
         self.assertEqual(self.dots(), 1)
         self.assertAlmostEqual(self.centre()[0], 12.0, places=6)
 
-    def test_the_log_is_written_fresh_each_launch_in_the_loaders_folder(self):
-        with open(os.path.join(self.folder.name, "ExtendedPickupIconsRange.log"), "w") as f:
-            f.write("last launch" + chr(10))
+    def test_a_launchs_log_is_kept_and_no_old_log_is_read(self):
+        with open(os.path.join(self.folder.name, "ExtendedPickupIcons.log"), "w") as f:
+            f.write("the launch that crashed" + chr(10))
         self.set_units(AVATAR, [unit(0)], loaded=False)
         self.load()
         self.lua.globals().shutdown()
         text = self.log_text()
-        with open(os.path.join(self.folder.name, "ExtendedPickupIconsRange.previous.log")) as f:
-            self.assertEqual(f.read(), "last launch" + chr(10))   # kept, not wiped
+        self.assertIn("the launch that crashed", text)                 # the loader's own log follows on
         self.assertRegex(text, r"Extended Pickup Icons Range \S+ loading")
         self.assertIn("shutdown", text)
-        self.assertNotIn("last launch", text)
+        self.assertEqual(list(self.fake.log_reads.values()), [])       # Chef 1.4 blocks it and logs each try
 
     def test_samples_and_supplies_near_you_get_no_marker_but_stims_do(self):
         stim = "content/fac_helldivers/discoverables/health_pack_discoverable_01/health_pack_discoverable_01"
@@ -446,10 +493,12 @@ class DrawingTests(Case):
         self.load()
         self.settle()
         flying = self.fake.units[MARK][1]
-        for k in range(1, 6):            # thrown by an explosion: a new place every frame
+        flying.x = 8.25                  # it was at rest: noticed within 4 frames ...
+        self.frames(4, start=21.0)
+        for k in range(1, 6):            # thrown by an explosion: ... then a new place every frame
             # Movement keeps the engine unit's identity. Creating a replacement unit tests discovery instead.
             flying.x, flying.z = 8 + k * 0.5, k * 0.3
-            self.frames(1, start=21.0 + k / 60)
+            self.frames(1, start=21.1 + k / 60)
             cx, cy, cz = self.centre()
             self.assertAlmostEqual(cx, 8 + k * 0.5, places=6)
             self.assertAlmostEqual(cz, k * 0.3 + 0.6, places=6)
@@ -461,11 +510,13 @@ class DrawingTests(Case):
         self.settle()
         before = self.fake.lookups[MARK]
         target = self.fake.units[MARK][1]
+        target.x = 7.9                                                 # at rest till now: noticed within 4 frames
+        self.frames(4, start=20.9)
         for k in range(32):
             target.x = 8 + k * 0.1
             self.frames(1, start=21 + k / 60)
             self.assertAlmostEqual(self.centre()[0], target.x)
-        self.assertLessEqual(self.fake.lookups[MARK] - before, 4)
+        self.assertLessEqual(self.fake.lookups[MARK] - before, 5)       # 36 frames, at most one enumeration per eight-frame sweep
 
     def test_a_new_unit_of_a_hot_resource_is_discovered_within_a_full_sweep(self):
         self.set_units(AVATAR, [unit(0)], loaded=False)
@@ -479,13 +530,13 @@ class DrawingTests(Case):
         self.frames(8, start=21)
         self.assertEqual(self.dots(), 2)
 
-    def test_a_cached_hot_unit_that_despawns_is_removed_on_the_next_frame(self):
+    def test_a_cached_hot_unit_that_despawns_is_removed_within_its_next_read(self):
         self.set_units(AVATAR, [unit(0)], loaded=False)
         self.set_units(MARK, [unit(8)])
         self.load()
         self.settle()
         self.fake.units[MARK][1].alive = False
-        self.frames(1, start=21)
+        self.frames(4, start=21)                                       # at rest: read every 4 frames
         self.assertEqual(self.dots(), 0)
 
     def test_hot_cache_cannot_read_positions_after_its_resource_unloads(self):
@@ -654,7 +705,7 @@ class MissionHellbombTests(Case):
     def test_deleted_mission_bomb_loses_its_marker_with_cached_membership(self):
         body = self.prepare()
         body.alive = False
-        self.frames(1, start=22)
+        self.frames(4, start=22)
         self.assertEqual(self.dots(), 0)
 
     def test_visible_bomb_that_loses_all_geometry_is_hidden_until_it_returns(self):
@@ -1314,19 +1365,119 @@ class ScreenTests(Case):
         top = max(b.y + b.h for b in shown.values())
         self.assertLess(top, 600 - 0.3 * f / 10 + 10)     # 0.3 m above the items: below a diamond's 0.6 m
 
-    def test_the_supply_crate_is_its_pixel_icon_pixel_for_pixel(self):
+    def calls_in_a_second(self, name, start=40.0):
+        """How often this guarded call is made in one second at 60 frames a second."""
+        self.frames(60, start=start)                                   # past the first questions
+        self.fake.calls = self.lua.table()
+        self.frames(60, start=start + 1)
+        return self.fake.calls[name] or 0
+
+    def test_past_the_limit_what_you_would_walk_to_stays_and_near_clutter_goes(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(SAMPLE, [unit(-30 + k, 20, 0) for k in range(60)])   # 60 samples nearer than the rest
+        self.set_units(self.VEHICLE, [unit(0, 80, 0)])                      # 88 m
+        self.set_units(self.HELLBOMB, [unit(10, 85, 0)])                    # 93 m
+        self.load()
+        self.settle()
+        self.assertEqual(self.dots(), 40)
+        kinds = [d[6] for d in self.mod.dots.values()]
+        self.assertIn("vehicles", kinds)
+        self.assertIn("hellbombs", kinds)
+        self.assertEqual(kinds.count("samples"), 38)
+
+    def test_a_near_unit_at_rest_is_read_every_few_frames(self):
+        self.lua.execute("""local fake = ...
+            local read = fake.chef.unit_position
+            fake.reads = 0
+            fake.chef.unit_position = function(u, node)
+              if u.counted then fake.reads = fake.reads + 1 end
+              return read(u, node)
+            end""", self.fake)
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(MARK, [unit(0, 0, 0)])
+        self.load()
+        self.settle()
+        self.fake.units[MARK][1].counted = True
+        self.frames(60, start=40.0)
+        self.assertLessEqual(self.fake.reads, 23)                      # 15 resting probes + at most 8 full-sweep reads; previously 60
+
+    def test_a_launch_code_is_asked_about_its_meshes_four_times_a_second(self):
+        codes = "content/objectives/obj_common/generic_intel/generic_intel"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        lying = unit(5, 5, 0)
+        lying.update(meshes=6)
+        self.set_units(codes, [lying])
+        self.load()
+        self.settle()
+        self.assertLessEqual(self.calls_in_a_second("Unit.num_meshes"), 5)
+
+    def test_a_map_hellbomb_is_asked_about_its_model_twice_a_second(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(self.HELLBOMB, [unit(0, 30, 0)])
+        self.load()
+        self.settle()
+        self.assertLessEqual(self.calls_in_a_second("Unit.box"), 3)
+
+    def test_the_helldivers_are_listed_now_and_then_and_followed_every_frame(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(MARK, [unit(0, 0, 0)])
+        self.load()
+        self.settle()
+        before = self.fake.lookups[AVATAR]
+        self.frames(80, start=40.0)
+        self.assertLessEqual(self.fake.lookups[AVATAR] - before, 11)   # was 80
+        self.fake.units[AVATAR][1].x = 3                               # moved: seen at once
+        self.frames(1, start=42.0)
+        self.assertAlmostEqual(self.mod.dots[1][5][1], 3)
+
+    def test_a_new_helldiver_is_seen_within_the_next_list(self):
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.load()
+        self.settle()
+        avatars = self.fake.units[AVATAR]
+        avatars[2] = self.lua.table_from(unit(20, 0, 0))
+        self.fake.units[MARK] = self.lua.table(self.lua.table_from(unit(20.3, 0, 1.3)))   # on its back
+        self.fake.loaded[MARK] = True
+        self.frames(30, start=40.0)
+        self.assertEqual(self.dots(), 0)                               # worn by the one just come
+
+    def test_a_wreck_needs_no_reads_every_frame(self):
+        gun = "content/fac_helldivers/vehicles/frv/armaments/frv_mg/frv_mg"
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(self.VEHICLE, [unit(0, 20, 0)])
+        self.set_units(gun, [unit(0, 20, 1.5)])
+        self.load()
+        self.settle()
+        before = self.fake.lookups[self.VEHICLE]
+        self.frames(30, start=40.0)
+        self.assertGreaterEqual(self.fake.lookups[self.VEHICLE] - before, 29)   # a live one: every frame, with its gun
+        self.fake.units[gun] = self.lua.table()                        # destroyed
+        self.frames(5, start=41.0)
+        before = self.fake.lookups[self.VEHICLE]
+        self.frames(30, start=42.0)
+        self.assertLessEqual(self.fake.lookups[self.VEHICLE] - before, 4)       # the wreck: one eight-frame sweep, as any far item
+
+    def test_no_engine_gui_table_still_draws(self):
+        self.lua.execute("local fake = ...; fake.chef.screen = function() return 1920, 1200 end; stingray.Gui = nil", self.fake)
+        self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
+        self.set_units(MARK, [unit(0, 0, 0)])
+        self.load()
+        self.settle()
+        self.assertEqual(len(self.screen_points()), 1)
+        self.assertNotIn("failed", self.log_text())
+
+    def test_the_supply_crate_is_one_texture_21_px_across(self):
         crate = "content/fac_helldivers/hellpod/ammo_rack/ammo_box"
+        self.fake.textures_loaded = True
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(crate, [unit(0, 0, 0)])
         self.load()
         self.settle()
-        tris = self.screen_tris()
-        self.assertGreater(len(tris), 0)
-        coords = {v._x for t in tris for v in (t.a, t.b, t.c)} | {v._z for t in tris for v in (t.a, t.b, t.c)}
-        self.assertTrue(all(c == int(c) for c in coords))              # on whole pixels
-        self.assertEqual({t.color.a for t in tris} - {63, 127, 191, 255}, set())   # see-through edges, in quarters
-        self.assertEqual(max(v._x for t in tris for v in (t.a, t.b, t.c))
-                         - min(v._x for t in tris for v in (t.a, t.b, t.c)), 21)   # 21 px across, as made
+        self.fake.rects = 0
+        (b,) = self.bitmaps_now()
+        self.assertEqual(b.tex, "supply_24")                           # the smallest baked size of at least 21 px
+        self.assertAlmostEqual(b.w, 21, delta=0.01)
+        self.assertEqual(self.fake.rects, 0)                           # 2.6.0: 55 rectangles a crate, every frame
 
     def test_artillery_shells_get_diamonds_and_carried_packages_the_games_icon(self):
         shell = "content/objectives/obj_common/seaf_artillery/seaf_shell_regular"
@@ -1419,13 +1570,10 @@ class ScreenTests(Case):
     def test_markers_are_the_loaders_shapes_on_its_layer(self):
         self.set_units(AVATAR, [unit(0, -8, 0)], loaded=False)
         self.set_units(MARK, [unit(0, 0, 0)])                         # a diamond, straight ahead
-        self.set_units("content/fac_helldivers/hellpod/ammo_rack/ammo_box", [unit(4, 0, 0)])   # a pixel icon
         self.load()
         self.settle()
-        self.fake.rects = 0
         self.frames(1, start=40.0)
         tris = self.screen_tris()
-        self.assertGreater(self.fake.rects, 0)                        # the supply crate's pixels
         self.assertEqual({t.layer for t in tris}, {900})
         centre = lambda t: ((t.a._x + t.b._x + t.c._x) / 3, (t.a._z + t.b._z + t.c._z) / 3)
         diamond = [t for t in tris if abs(centre(t)[0] - 960) < 12 and abs(centre(t)[1] - 600) < 12]
@@ -2253,6 +2401,37 @@ class ChefWorldTests(Case):
 
 
 class NetworkIdentityTests(Case):
+    def test_the_last_death_is_kept_even_when_forty_other_priority_markers_are_closer(self):
+        bomb = 'content/fac_helldivers/hellpod/hellbomb_defunct/hellbomb_defunct'
+        self.start_network()
+        self.death()
+        self.lua.execute('''local f=...
+            f.net.objects[1].u4d1h9a=5
+            f.net.objects[5]={kind='vvhx8ga',owner='local',health=125,x=100,y=-8,z=0}
+            f.units['content/fac_helldivers/cha_avatar/avatar_helldiver'][1].x=100
+            f.cam.pos={100,-10,0.6}
+        ''', self.fake)
+        self.set_units(bomb, [unit(100 + k * .1, 40) for k in range(40)])
+        self.frames(40, start=23)
+        self.assertEqual(self.marks(), [(0, -8, 1.2)])
+        self.assertEqual(len(list(self.mod.dots.values())), 40)
+
+    def test_death_on_the_frame_after_a_health_read_freezes_the_container_before_it_moves(self):
+        body, net, box = self.sample_setup()
+        body.x, body.y, body.z = 120, 35, 8
+        box.x, box.y, box.z = 120.3, 34.8, 9.2
+        self.frames(1, start=22)  # A successful living health observation.
+        net.health = 0
+        box.x, box.y, box.z = 119.8, 34.5, 8.1
+        self.frames(1, start=22 + 1 / 60)
+        self.assertEqual(len(self.marks()), 1)
+        mark = self.marks()[0]
+        for actual, expected in zip(mark, (119.8, 34.5, 9.3)):
+            self.assertAlmostEqual(actual, expected)
+        box.x, box.z = 150, -20  # The explosion moves the container on later frames.
+        self.frames(8, start=22 + 2 / 60)
+        self.assertEqual(self.marks(), [mark])
+
     def setUp(self):
         super().setUp()
         self.set_units(AVATAR, [unit(0, -8, 0), unit(80, 0, 0)], loaded=False)
@@ -2680,7 +2859,7 @@ class NetworkIdentityTests(Case):
         net.health = 0
         self.frames(1, start=21.3)
         (mark,) = self.marks()
-        self.assertAlmostEqual(mark[0], net.x)
+        self.assertAlmostEqual(mark[0], net.x)                 # preserve the last living frame, not a stale container
         self.assertEqual(mark[1:], (-8, 1.2))
 
     def test_a_container_that_disappears_at_death_uses_its_last_confirmed_position(self):
@@ -2724,25 +2903,6 @@ class NetworkIdentityTests(Case):
 
 
 class NamingCompatibilityTests(Case):
-    def test_the_first_renamed_launch_preserves_the_previous_legacy_log(self):
-        legacy = os.path.join(self.folder.name, 'PickupDots.log')
-        with open(legacy, 'w') as f:
-            f.write('previous launch before the rename\n')
-        self.load()
-        with open(os.path.join(self.folder.name, 'ExtendedPickupIconsRange.previous.log')) as f:
-            self.assertEqual(f.read(), 'previous launch before the rename\n')
-        with open(legacy) as f:
-            self.assertEqual(f.read(), 'previous launch before the rename\n')
-        self.assertIn('Extended Pickup Icons Range ', self.log_text())
-
-    def test_a_current_log_takes_precedence_over_the_historical_log(self):
-        for name, text in [('PickupDots.log', 'old name'), ('ExtendedPickupIconsRange.log', 'new name')]:
-            with open(os.path.join(self.folder.name, name), 'w') as f:
-                f.write(text)
-        self.load()
-        with open(os.path.join(self.folder.name, 'ExtendedPickupIconsRange.previous.log')) as f:
-            self.assertEqual(f.read(), 'new name')
-
     def test_the_loader_title_uses_the_actual_mod_name(self):
         self.lua.execute("local fake = ...; fake.chef.title = function(name) fake.title = name end", self.fake)
         self.load()

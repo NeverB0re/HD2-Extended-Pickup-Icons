@@ -7,6 +7,7 @@ ICONS: name -> (file, how its pixels give the icon, framed):
   'red'     white, see-through by its red channel (white icons on black, a blue outline in the other channels)
   'green'   white, its green part only (a stratagem icon's picture, without its red frame)
   'body'    white, its red part only (a vehicle stratagem icon's vehicle, without what it carries)
+  'bright'  white, see-through by its brightness (the supply crate's icon: a screenshot, no texture of the game's)
 framed: inside the red corner frame of the game's stratagem icons (FRAME), fitted to where their picture sits.
 All white: the mod tints them as it draws them (ICON_RGB)."""
 import os
@@ -23,6 +24,7 @@ ICONS = {
     "grenade": ("grenade.png", "red", False),
     "stim": ("stim.png", "red", False),
     "egg": ("egg.png", "red", False),
+    "supply": ("supply.png", "bright", False),
     "tube": ("tube.png", "red", False),
     "common": ("sample_common.png", "alpha", False),
     "rare": ("sample_rare.png", "alpha", False),
@@ -102,6 +104,9 @@ def alpha_grid(path, mode):
                 a = max(0, p[1] - p[0]) / 255
             elif mode == "body":
                 a = max(0, p[0] - p[1]) / 255
+            elif mode == "bright":
+                a = max(0.0, min(1.0, (sum(p[:3]) / 3 - 40) / 120))
+                a = a if a >= 0.125 else 0.0   # the screenshot's background: no faint box around it
             else:   # the frame: the red corners
                 a = max(0, p[0] - p[1]) / 255
             line.append(a)

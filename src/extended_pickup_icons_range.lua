@@ -19,7 +19,7 @@ if rawget(_G, MOD_KEY) then return rawget(_G, MOD_KEY) end
 -- of the mod's patch). 2.4.0: the mod runs on them alone (CHEF_NEEDS).
 local CHEF = ...
 if type(CHEF) ~= 'table' then CHEF = nil end
-local VERSION = '2.6.0'
+local VERSION = '2.6.1-test.2'
 local M = {version = VERSION, status = 'starting'}
 rawset(_G, MOD_KEY, M)
 
@@ -49,7 +49,7 @@ local ICON_TEX = "@ICONS@"
 -- How big each is drawn at full size on a 1080-line screen, along its longer side (pixels): as the 2.3.0 pixel icons
 -- (made to match the game's); the framed ones (the stratagem icons' red corners around them) a little bigger, the
 -- vehicles' 15% more again
-local ICON_SIZE = {ammo = 19, grenade = 22, stim = 27, egg = 20, tube = 20, common = 18, rare = 18, super = 18,
+local ICON_SIZE = {ammo = 19, grenade = 22, stim = 27, egg = 20, tube = 20, common = 18, rare = 18, super = 18, supply = 21,
                    package = 28, larva = 28, hellbomb = 28, tank = 34.5, car = 34.5, walker = 34.5, skull = 28}
 local VEHICLE_RGB = {110, 205, 255}   -- vehicles: the sky blue of the HUD's support weapon icons
 local HELLBOMB_RGB = {255, 90, 70}    -- map-placed and fixed mission Hellbombs share the red marker
@@ -89,34 +89,26 @@ local SCREEN_DIAMOND = 7.92   -- screen diamond half-height, pixels (0.11: 20% s
 local SCREEN_LINE = 2         -- screen diamond outline thickness, pixels
 local CHEF_LAYER = 900        -- Chef Shared Loader's layer for them (under the game's HUD and menus)
 
--- The resupply crate's icon (no texture of the game's matches it), pixel for pixel at its size on screen, from a
--- screenshot of the icon (2.4.0: the other icons are the game's textures, ICON_TEX). In every size a pixel apart
--- along its longest side, from full
--- down to SMALLEST, as rectangles
--- {x0, y0, x1, y1, coverage in quarters} in whole pixels around the item (y up), drawn that see-through,
--- as the game draws its scaled icon (scaled from those images).
-local ICON_PIXELS = {
-    supply = {
-        {{-10, 7, -9, 8, 1}, {-10, 8, -9, 9, 3}, {-9, 6, -8, 7, 3}, {-9, 7, -4, 9, 4}, {-8, 4, -7, 5, 2}, {-8, 5, -4, 7, 4}, {-7, -3, -6, 2, 1}, {-7, 3, -6, 4, 3}, {-7, 4, -4, 5, 4}, {-6, -4, 0, -3, 3}, {-6, -3, 0, 0, 4}, {-6, 0, -4, 2, 4}, {-6, 3, -4, 4, 4}, {-4, 0, -2, 1, 1}, {-4, 3, -2, 9, 2}, {-2, -6, -1, -5, 3}, {-2, -5, 3, -4, 1}, {-2, 0, 0, 2, 4}, {-2, 2, 0, 3, 1}, {-2, 3, 3, 7, 4}, {-2, 7, -1, 9, 4}, {-1, -8, 0, -7, 2}, {-1, -7, 2, -5, 4}, {-1, 7, 0, 9, 2}, {0, -9, 1, -8, 3}, {0, -8, 1, -7, 4}, {0, -3, 1, 2, 1}, {1, -8, 2, -7, 2}, {1, -4, 7, -3, 3}, {1, -3, 7, 0, 4}, {1, 0, 3, 2, 4}, {1, 2, 3, 3, 1}, {1, 7, 2, 9, 2}, {2, -6, 3, -5, 3}, {2, 7, 3, 9, 4}, {3, 0, 5, 1, 1}, {3, 3, 5, 9, 2}, {5, 0, 7, 2, 4}, {5, 3, 7, 4, 4}, {5, 4, 8, 5, 4}, {5, 5, 9, 7, 4}, {5, 7, 10, 9, 4}, {7, -3, 8, 2, 1}, {7, 3, 8, 4, 3}, {8, 4, 9, 5, 2}, {9, 6, 10, 7, 3}, {10, 7, 11, 8, 1}, {10, 8, 11, 9, 3}},
-        {{-10, 7, -9, 8, 1}, {-10, 8, -9, 9, 3}, {-9, 5, -8, 6, 1}, {-9, 6, -8, 7, 3}, {-9, 7, -4, 9, 4}, {-8, 4, -7, 5, 2}, {-8, 5, -4, 7, 4}, {-7, -4, -6, 2, 1}, {-7, 3, -6, 4, 3}, {-7, 4, -4, 5, 4}, {-6, -4, -1, -3, 3}, {-6, -3, -1, 0, 4}, {-6, 0, -5, 2, 4}, {-6, 3, -4, 4, 4}, {-5, 0, -4, 2, 3}, {-4, 0, -3, 1, 1}, {-4, 3, -3, 9, 1}, {-3, 0, -2, 2, 2}, {-3, 3, -2, 9, 3}, {-2, -7, -1, -6, 2}, {-2, -6, 2, -5, 4}, {-2, -5, 2, -4, 1}, {-2, 0, -1, 2, 4}, {-2, 2, -1, 3, 1}, {-2, 3, 2, 4, 4}, {-2, 4, 3, 7, 4}, {-2, 7, -1, 9, 4}, {-1, -9, 1, -8, 2}, {-1, -8, 1, -6, 4}, {-1, -4, 1, 2, 2}, {-1, 7, 1, 8, 1}, {-1, 8, 0, 9, 1}, {1, -7, 2, -6, 2}, {1, -4, 6, -3, 3}, {1, -3, 6, 0, 4}, {1, 0, 2, 2, 4}, {1, 2, 2, 3, 1}, {1, 7, 3, 9, 4}, {2, 0, 3, 2, 2}, {2, 3, 3, 4, 3}, {3, 0, 4, 1, 1}, {3, 3, 4, 9, 1}, {4, 0, 5, 2, 3}, {4, 3, 6, 4, 4}, {4, 4, 7, 5, 4}, {4, 5, 8, 7, 4}, {4, 7, 9, 9, 4}, {5, 0, 6, 2, 4}, {6, -4, 7, 2, 1}, {6, 3, 7, 4, 3}, {7, 4, 8, 5, 2}, {8, 5, 9, 6, 1}, {8, 6, 9, 7, 3}, {9, 7, 10, 8, 1}, {9, 8, 10, 9, 3}},
-        {{-9, 6, -8, 7, 1}, {-9, 7, -8, 8, 3}, {-8, 4, -7, 5, 1}, {-8, 5, -7, 6, 3}, {-8, 6, -4, 8, 4}, {-7, 3, -6, 4, 2}, {-7, 4, -4, 6, 4}, {-6, -4, -5, 1, 2}, {-6, 1, -5, 2, 1}, {-6, 2, -3, 3, 2}, {-6, 3, -4, 4, 4}, {-5, -4, 0, -1, 4}, {-5, -1, -4, 1, 4}, {-5, 1, -4, 2, 2}, {-4, -1, -2, 0, 3}, {-4, 0, -3, 1, 2}, {-4, 1, -3, 2, 1}, {-4, 3, -3, 8, 3}, {-3, 2, -2, 8, 1}, {-2, -6, -1, -5, 2}, {-2, -5, 0, -4, 1}, {-2, -1, 0, 0, 4}, {-2, 0, -1, 1, 3}, {-2, 1, 0, 2, 2}, {-2, 2, 3, 3, 3}, {-2, 3, 3, 6, 4}, {-2, 6, -1, 8, 4}, {-1, -8, 0, -7, 2}, {-1, -7, 2, -5, 4}, {-1, 0, 0, 1, 4}, {-1, 6, 0, 8, 3}, {0, -9, 1, -8, 3}, {0, -8, 1, -7, 4}, {0, -4, 1, 1, 1}, {0, 6, 1, 7, 1}, {1, -8, 2, -7, 2}, {1, -5, 3, -4, 1}, {1, -4, 6, -1, 4}, {1, -1, 3, 0, 4}, {1, 0, 2, 1, 4}, {1, 1, 3, 2, 2}, {1, 6, 2, 7, 3}, {1, 7, 2, 8, 2}, {2, -6, 3, -5, 2}, {2, 0, 3, 1, 3}, {2, 6, 3, 8, 4}, {3, -1, 5, 0, 3}, {3, 2, 4, 8, 1}, {4, 0, 5, 1, 2}, {4, 1, 5, 2, 1}, {4, 2, 7, 3, 2}, {4, 3, 5, 8, 3}, {5, -1, 6, 1, 4}, {5, 1, 6, 2, 2}, {5, 3, 7, 4, 4}, {5, 4, 8, 6, 4}, {5, 6, 9, 8, 4}, {6, -4, 7, 1, 2}, {6, 1, 7, 2, 1}, {7, 3, 8, 4, 2}, {8, 4, 9, 5, 1}, {8, 5, 9, 6, 3}, {9, 6, 10, 7, 1}, {9, 7, 10, 8, 3}},
-        {{-9, 6, -8, 7, 1}, {-9, 7, -8, 8, 3}, {-8, 4, -7, 5, 1}, {-8, 5, -7, 6, 3}, {-8, 6, -4, 8, 4}, {-7, 3, -6, 4, 2}, {-7, 4, -4, 6, 4}, {-6, -4, -5, -3, 1}, {-6, -3, -5, 1, 3}, {-6, 1, -5, 2, 2}, {-6, 2, 6, 3, 1}, {-6, 3, -4, 4, 4}, {-5, -4, -1, -3, 2}, {-5, -3, -1, 0, 4}, {-5, 0, -4, 1, 4}, {-5, 1, -4, 2, 3}, {-4, 0, -2, 2, 1}, {-4, 3, -2, 8, 2}, {-2, -6, -1, -5, 2}, {-2, -5, 2, -4, 3}, {-2, 0, -1, 1, 4}, {-2, 1, -1, 2, 3}, {-2, 3, 2, 6, 4}, {-2, 6, -1, 8, 4}, {-1, -8, 1, -7, 2}, {-1, -7, 1, -5, 4}, {-1, -4, 1, -3, 1}, {-1, -3, 1, 1, 3}, {-1, 1, 1, 2, 2}, {-1, 6, 1, 7, 2}, {-1, 7, 1, 8, 1}, {1, -6, 2, -5, 2}, {1, -4, 5, -3, 2}, {1, -3, 5, 0, 4}, {1, 0, 2, 1, 4}, {1, 1, 2, 2, 3}, {1, 6, 2, 8, 4}, {2, 0, 4, 2, 1}, {2, 3, 4, 8, 2}, {4, 0, 5, 1, 4}, {4, 1, 5, 2, 3}, {4, 3, 6, 4, 4}, {4, 4, 7, 6, 4}, {4, 6, 8, 8, 4}, {5, -4, 6, -3, 1}, {5, -3, 6, 1, 3}, {5, 1, 6, 2, 2}, {6, 3, 7, 4, 2}, {7, 4, 8, 5, 1}, {7, 5, 8, 6, 3}, {8, 6, 9, 7, 1}, {8, 7, 9, 8, 3}},
-        {{-8, 5, -7, 6, 1}, {-8, 6, -7, 7, 3}, {-7, 3, -6, 4, 1}, {-7, 4, -6, 5, 3}, {-7, 5, -3, 7, 4}, {-6, 2, -5, 3, 2}, {-6, 3, -3, 5, 4}, {-5, -4, -4, -3, 2}, {-5, -3, -4, 0, 3}, {-5, 0, -3, 1, 3}, {-5, 1, -3, 2, 1}, {-5, 2, -3, 3, 4}, {-4, -4, 0, -3, 3}, {-4, -3, 0, -1, 4}, {-4, -1, -3, 0, 4}, {-3, -1, -1, 0, 3}, {-3, 2, -2, 7, 1}, {-2, -5, -1, -4, 1}, {-2, 0, -1, 1, 2}, {-2, 1, 0, 2, 1}, {-2, 2, -1, 3, 3}, {-2, 3, 3, 5, 4}, {-2, 5, -1, 7, 4}, {-1, -7, 0, -6, 2}, {-1, -6, 2, -5, 4}, {-1, -5, 2, -4, 2}, {-1, -1, 0, 1, 4}, {-1, 2, 3, 3, 4}, {-1, 5, 0, 7, 3}, {0, -8, 1, -7, 3}, {0, -7, 1, -6, 4}, {0, -4, 1, 1, 1}, {0, 5, 1, 6, 2}, {1, -7, 2, -6, 2}, {1, -4, 5, -3, 3}, {1, -3, 5, -1, 4}, {1, -1, 2, 1, 4}, {1, 1, 3, 2, 1}, {1, 5, 2, 7, 3}, {2, -5, 3, -4, 1}, {2, -1, 4, 0, 3}, {2, 0, 3, 1, 2}, {2, 5, 3, 7, 4}, {3, 2, 4, 7, 1}, {4, -1, 5, 0, 4}, {4, 0, 6, 1, 3}, {4, 1, 6, 2, 1}, {4, 2, 6, 3, 4}, {4, 3, 7, 5, 4}, {4, 5, 8, 7, 4}, {5, -4, 6, -3, 2}, {5, -3, 6, 0, 3}, {6, 2, 7, 3, 2}, {7, 3, 8, 4, 1}, {7, 4, 8, 5, 3}, {8, 5, 9, 6, 1}, {8, 6, 9, 7, 3}},
-        {{-8, 5, -7, 6, 1}, {-8, 6, -7, 7, 3}, {-7, 4, -6, 5, 3}, {-7, 5, -3, 7, 4}, {-6, 2, -5, 3, 1}, {-6, 3, -3, 5, 4}, {-5, -3, -1, 0, 4}, {-5, 0, -4, 1, 4}, {-5, 1, -4, 2, 3}, {-5, 2, -3, 3, 2}, {-4, 0, -3, 1, 3}, {-4, 1, -3, 2, 1}, {-3, 0, -2, 1, 1}, {-3, 2, -2, 7, 1}, {-2, -5, -1, -4, 2}, {-2, -4, 2, -3, 1}, {-2, 0, -1, 1, 4}, {-2, 1, 2, 2, 2}, {-2, 2, 2, 3, 3}, {-2, 3, 2, 5, 4}, {-2, 5, -1, 7, 4}, {-1, -7, 1, -6, 2}, {-1, -6, 1, -4, 4}, {-1, -3, 1, 1, 3}, {-1, 5, 1, 6, 3}, {-1, 6, 1, 7, 1}, {1, -5, 2, -4, 2}, {1, -3, 5, 0, 4}, {1, 0, 2, 1, 4}, {1, 5, 2, 7, 4}, {2, 0, 3, 1, 1}, {2, 2, 3, 7, 1}, {3, 0, 4, 1, 3}, {3, 1, 4, 2, 1}, {3, 2, 5, 3, 2}, {3, 3, 6, 5, 4}, {3, 5, 7, 7, 4}, {4, 0, 5, 1, 4}, {4, 1, 5, 2, 3}, {5, 2, 6, 3, 1}, {6, 3, 7, 4, 1}, {6, 4, 7, 5, 3}, {7, 5, 8, 6, 1}, {7, 6, 8, 7, 3}},
-        {{-7, 4, -6, 5, 1}, {-7, 5, -6, 6, 3}, {-6, 3, -5, 4, 2}, {-6, 4, -3, 6, 4}, {-5, -3, -4, 1, 1}, {-5, 1, 6, 2, 1}, {-5, 2, -3, 4, 4}, {-4, -4, 5, -3, 1}, {-4, -3, 0, -1, 4}, {-4, -1, -3, 1, 4}, {-3, -1, -1, 0, 3}, {-3, 0, -1, 1, 1}, {-3, 2, -1, 5, 3}, {-3, 5, -2, 6, 2}, {-2, 5, 0, 6, 3}, {-1, -6, 0, -5, 2}, {-1, -5, 2, -4, 4}, {-1, -1, 0, 1, 4}, {-1, 2, 2, 4, 4}, {-1, 4, 0, 5, 4}, {0, -7, 1, -6, 3}, {0, -6, 1, -5, 4}, {0, -3, 1, 1, 2}, {0, 4, 1, 5, 3}, {1, -6, 2, -5, 2}, {1, -3, 5, -1, 4}, {1, -1, 2, 1, 4}, {1, 4, 2, 5, 4}, {1, 5, 3, 6, 3}, {2, -1, 4, 0, 3}, {2, 0, 4, 1, 1}, {2, 2, 4, 5, 3}, {3, 5, 4, 6, 2}, {4, -1, 5, 1, 4}, {4, 2, 6, 4, 4}, {4, 4, 7, 6, 4}, {5, -3, 6, 1, 1}, {6, 3, 7, 4, 2}, {7, 4, 8, 5, 1}, {7, 5, 8, 6, 3}},
-    },
-}
-
 local CARRIED_RADIUS = 1.0    -- closer than this (horizontally) to a helldiver ...
 local CARRIED_LOW = -0.5      -- ... and no lower than this below its feet (prone helldivers and bodies too) ...
 local STILL_EPS = 0.05        -- metres from where a vehicle stopped: "not moved at all"
 local TRACK_STEP = 2          -- metres: the same vehicle as last frame if it is this close
 local CARRIED_HEIGHT = 2.5    -- ... and at most this far above its feet: worn or held, no dot
 local PLAYERS_HOLD_S = 2      -- keep the last helldiver positions this long if a read comes back empty
-local KEYS_PER_FRAME = 12     -- resource lookups per frame
+local KEYS_PER_FRAME = 12     -- retain the public full-sweep bound of eight frames for 87 resources
+local PACE = {                -- (a table: Lua 5.1 allows this chunk 200 local names, and it is close)
+    avatars = 8,              -- frames between lists of the helldivers; where they are is read every frame
+    rest_reads = 4,           -- reads without moving, and a near unit counts as at rest ...
+    rest_every = 4,           -- ... and is read every this many frames (a blast moves it: every frame again)
+    rest_eps = 0.01,          -- metres: not moved
+    probe = 0.5,              -- seconds, at most this often per unit: is any of its model still visible?
+    taken_probe = 0.25,       -- seconds, at most this often per unit: has a launch code hidden its meshes?
+    keep_first = {deaths = 2, vehicles = 1, hellbombs = 1},   -- preserve the last death before other priority markers
+                              -- skull used to go before 40 samples nearer by (2.6.1)
+}
 local HOT_PER_FRAME = 10      -- resources with an item near you, read again every frame (at most this many)
 local HOT_MARGIN = 10         -- metres beyond a group's range that still counts as near
-local MAX_DOTS = 40           -- the nearest dots only, at most this many in one frame (icons are many triangles)
+local MAX_DOTS = 40           -- at most this many in one frame
 local STARTUP_GRACE_S = 10    -- wait after start before touching the world
 local WORLD_SETTLE_S = 8      -- wait after a world appears before looking anything up in it
 local AVATAR = 'content/fac_helldivers/cha_avatar/avatar_helldiver'
@@ -126,43 +118,14 @@ local menu_open               -- defined before tick
 local TARGETS = "@TARGETS@"   -- filled in by build.py from targets.lua
 
 -- ----------------------------------------------------------------------- log --
-local logfile
-do
-    -- Written fresh each launch, in Chef Shared Loader's folder (%APPDATA%\Arrowhead\Helldivers2), where a mod may write;
-    -- the last launch's kept beside it as ExtendedPickupIconsRange.previous.log (2.4.0: a launch that ended in a crash is the one
-    -- the next launch would otherwise wipe).
-    local dir = CHEF and type(CHEF.log_directory) == 'string' and CHEF.log_directory or nil
-    if dir then
-        local okr, old = pcall(function()
-            local f = io.open(dir .. '\\ExtendedPickupIconsRange.log', 'rb')
-            -- One-way log-name migration: preserve the last pre-rename launch without changing its file.
-            if not f then f = io.open(dir .. '\\PickupDots.log', 'rb') end
-            if not f then return nil end
-            local text = f:read('*a')
-            f:close()
-            return text
-        end)
-        if okr and type(old) == 'string' and #old > 0 then
-            pcall(function()
-                local f = io.open(dir .. '\\ExtendedPickupIconsRange.previous.log', 'wb')
-                f:write(old)
-                f:close()
-            end)
-        end
-        local ok, file = pcall(io.open, dir .. '\\ExtendedPickupIconsRange.log', 'w')
-        if ok then logfile = file end
-    end
-end
+-- Chef Shared Loader's own log for a mod: every line is flushed, and launches follow one another in the file, so a
+-- launch that ended in a crash stays readable (it starts afresh past 1 MB). Since Chef 1.4 a mod can't read an old log
+-- back: 2.4.0-2.6.0 tried to, for a .previous.log that was never written and two 'blocked' lines in the loader's log.
+if CHEF and type(CHEF.own_log) == 'function' then pcall(CHEF.own_log, 'ExtendedPickupIcons') end
 
-local function write_line(file, message)
-    if not file then return end
-    pcall(function()
-        file:write(os.date('%H:%M:%S'), ' ', tostring(message), '\n')
-        file:flush()
-    end)
+local function log(message)
+    if CHEF and type(CHEF.log) == 'function' then pcall(CHEF.log, '%s', tostring(message)) end
 end
-
-local function log(message) write_line(logfile, message) end
 
 local LOCAL_PLAYER = "@LOCAL_PLAYER@"   -- filled by build.py; observations are numeric, never engine handles
 local local_player = LOCAL_PLAYER(CHEF, log)
@@ -222,8 +185,7 @@ local function loaded(key, label)
     return yes == true
 end
 
--- Resources known only by their 64-bit id (28 of the targets: the sample container,
--- mission carryables...) are asked about in whichever id form can_get understands on this game, found
+-- Resources known only by their 64-bit id (the sample container, mission carryables...) are asked about in whichever id form can_get understands on this game, found
 -- by a self-test: the helldiver avatar's id must be "loaded" and a made-up id must not be. If no form
 -- passes, those resources are not looked up at all (0.1.1-0.4.0 behaviour).
 local AVATAR_HEX = '4d1c334d294dfa97'   -- murmur64 of AVATAR (checked by the tests)
@@ -278,9 +240,8 @@ local function position_of(unit)
     if not unit_alive(unit) then return nil end
     local x, y, z = CHEF.unit_position(unit)
     if type(x) ~= 'number' or type(y) ~= 'number' or type(z) ~= 'number' then return nil end
-    for _, v in ipairs({x, y, z}) do
-        if v ~= v or math.abs(v) > 1e7 then return nil end  -- NaN or absurd
-    end
+    -- NaN or absurd (no table for this: it runs for every unit read)
+    if x ~= x or y ~= y or z ~= z or x > 1e7 or x < -1e7 or y > 1e7 or y < -1e7 or z > 1e7 or z < -1e7 then return nil end
     return x, y, z
 end
 
@@ -321,9 +282,10 @@ local function key_for(k)
 end
 
 local players_read_at
+local avatar_units = {}   -- the last list of helldivers
 
 -- (0.28-0.31 asked vehicles their animation state; that crashed the game soon after an exosuit was
--- destroyed, its state machine gone: no animation call is made any more.)
+-- destroyed, its state machine gone: vehicles are not asked any more.)
 
 -- Since when a vehicle has stayed where it stopped. Match its actual unit, so crossing or newly spawned
 -- vehicles cannot inherit another one's weapon/destruction history. Distance matching is only for an entry
@@ -355,9 +317,11 @@ local function track(previous, x, y, z, now, unit)
 end
 
 local function read_players(world, now)
-    local list = {}
     -- The avatar is in every world with a helldiver (the ship too); that is how 0.1.0's reference mod uses it.
-    for _, unit in ipairs(units_of(world, AVATAR, 'avatar')) do
+    -- They move every frame, but come and go seldom: the list only now and then.
+    if #avatar_units == 0 or stats.frames % PACE.avatars == 0 then avatar_units = units_of(world, AVATAR, 'avatar') end
+    local list = {}
+    for _, unit in ipairs(avatar_units) do
         local x, y, z = position_of(unit)
         if x then list[#list + 1] = {x, y, z, unit = unit} end
     end
@@ -369,16 +333,32 @@ local function read_players(world, now)
     end
 end
 
--- Read one resource: where its units are now (plain numbers; handles are not kept), whether it was looked up
+-- A reading of point p: where it is now, and how many reads it has not moved for.
+local function reading(p, x, y, z)
+    local eps = PACE.rest_eps
+    local still = p[1] ~= nil and math.abs(p[1] - x) < eps and math.abs(p[2] - y) < eps and math.abs(p[3] - z) < eps
+    p.still = still and (p.still or 0) + 1 or 0
+    p[1], p[2], p[3], p.read = x, y, z, stats.frames
+    return p
+end
+
+-- Read one resource: where its units are now, whether it was looked up
 -- (loaded), and what went wrong looking.
 local function read_key(world, i)
     local points = {}
     local ask, lookup = key_for(keys[i])
     if loaded(ask, keys[i].label) and lookup ~= nil then
         local units, problem = units_of(world, lookup, keys[i].label)
+        local before = found[i] or {}   -- (a list keeps its order: what it knew of each unit stays with it)
         for _, unit in ipairs(units) do
             local x, y, z = position_of(unit)
-            if x then points[#points + 1] = {x, y, z, unit = unit, kind = keys[i].label} end
+            if x then
+                local was = before[#points + 1]
+                local still = was ~= nil and was.unit == unit and was.still or nil
+                local p = {unit = unit, kind = keys[i].label, still = still}
+                if still ~= nil then p[1], p[2], p[3] = was[1], was[2], was[3] end
+                points[#points + 1] = reading(p, x, y, z)
+            end
         end
         return points, true, problem
     end
@@ -399,11 +379,15 @@ local function refresh_hot(world, first, last)
         local write = 1
         for read = 1, #points do
             local p = points[read]
-            local x, y, z = position_of(p.unit)
-            if x then
-                p[1], p[2], p[3] = x, y, z
+            if (p.still or 0) >= PACE.rest_reads and (stats.frames + read) % PACE.rest_every ~= 0 then
                 points[write] = p
                 write = write + 1
+            else
+                local x, y, z = position_of(p.unit)
+                if x then
+                    points[write] = reading(p, x, y, z)
+                    write = write + 1
+                end
             end
         end
         for j = #points, write, -1 do points[j] = nil end
@@ -425,15 +409,9 @@ local function sweep_step(world)
     local last = math.min(cursor + KEYS_PER_FRAME - 1, #keys)
     for i = cursor, last do
         local points, looked, problem = read_key(world, i)
-        if looked then
-
-            if problem ~= nil then
-                stats.key_errors = stats.key_errors + 1
-                if stats.key_errors <= 5 then log('lookup failed for ' .. keys[i].label .. ': ' .. tostring(problem)) end
-            end
-
-        else
-
+        if looked and problem ~= nil then
+            stats.key_errors = stats.key_errors + 1
+            if stats.key_errors <= 5 then log('lookup failed for ' .. keys[i].label .. ': ' .. tostring(problem)) end
         end
         found[i] = points
     end
@@ -442,15 +420,11 @@ local function sweep_step(world)
         for i = 1, #keys do
             if READ_TOGETHER[keys[i].group] and (i < first or i > last) then
                 found[i] = read_key(world, i)
-
             end
         end
     end
     cursor = last + 1
-    if cursor > #keys then
-        cursor = 1
-
-    end
+    if cursor > #keys then cursor = 1 end
 end
 
 -- ----------------------------------------------------------------- markers --
@@ -458,7 +432,12 @@ end
 -- helldiver it is measured from, and whether the unit is on any helldiver's body (worn or held). A body
 -- is still a helldiver here (0.16): its empty sample container stays hidden, and what it dropped lands
 -- beside it, within reach of the same rule.
-local function measure(x, y, z, worn)
+local function measure(x, y, z, worn, range)
+    if me ~= nil then   -- out of range: nothing else is asked of it, and most units are
+        local dx, dy, dz = x - me[1], y - me[2], z - me[3]
+        local d = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if d > range then return d, me end
+    end
     local carried, mine, others, nearest, nearest_d = false, false, false, nil, nil
     for _, p in ipairs(players) do
         local dx, dy, dz = x - p[1], y - p[2], z - p[3]
@@ -514,8 +493,6 @@ local function near(list, p, r)
 end
 
 local SHIP_HIDDEN = {mission = true, carry = true, dropoffs = true, controls = true, deaths = true}
-
--- Last frame's counts per group, for the status line: drawn, hidden as worn/held, out of range.
 
 -- Per-unit tables are keyed by the unit itself, weakly: under Chef Shared Loader every unit's tostring is the
 -- same (one key for all would mix units up).
@@ -593,10 +570,13 @@ end
 -- to, either). So fewer visible meshes than it was first seen with: taken, by whoever, with whatever key.
 -- (2.1.0-2.2.0 guessed from the interact key and teammates standing at it; out in 2.3.0.)
 local first_visible = by_unit()   -- per unit: how many meshes it showed when first seen
+local probe_at = by_unit()        -- per unit: when its next mesh or box question may be asked
 
-local function check_taken(p)
+local function check_taken(p, now)
     if p.unit == nil then return false end
     if taken[p.unit] then return true end
+    if now < (probe_at[p.unit] or 0) then return false end
+    probe_at[p.unit] = now + PACE.taken_probe
     local shown = visible_meshes(p.unit, p.kind)
     if shown ~= nil then
         first_visible[p.unit] = first_visible[p.unit] or shown
@@ -640,6 +620,8 @@ local function blown_up(p, now, group, reversible)
     if p.unit == nil then return false end
     if group == 'hellbombs' and not reversible then
         if blown[p.unit] == true then return true end
+        if now < (probe_at[p.unit] or 0) then return false end
+        probe_at[p.unit] = now + PACE.probe
         if no_visible_mesh(p.unit, p.kind) then
             blown[p.unit] = true
             log(string.format('hellbomb: the one at %.1f %.1f %.1f blew up (no visible mesh left)', p[1], p[2], p[3]))
@@ -653,7 +635,7 @@ local function blown_up(p, now, group, reversible)
     local state = blown[p.unit]
     if state == nil then state = {at = now, seen = false, hidden = false}; blown[p.unit] = state end
     if now >= state.at then
-        state.at = now + 0.5  -- at most two box probes/s per in-range unit, not a per-mesh scan
+        state.at = now + PACE.probe
         local empty = no_visible_mesh(p.unit, p.kind)
         if empty == false then
             state.seen, state.hidden = true, false
@@ -689,21 +671,22 @@ local function collect_dots(now)
         if on_ship and (SHIP_HIDDEN[group] or keys[i].mission_only) then range = 0 end
         local points = found[i]
         if points and range > 0 then
-
             local near_any = false
             for _, p in ipairs(points) do
-                local d, who, carried, mine, others = measure(p[1], p[2], p[3], keys[i].worn)
-                if d ~= nil and d <= range + HOT_MARGIN then near_any = true end
+                local d, who, carried, mine, others = measure(p[1], p[2], p[3], keys[i].worn, range)
+                -- (a vehicle's wreck needs no same-frame reads: its marker is gone for good)
+                if d ~= nil and d <= range + HOT_MARGIN and not (group == 'vehicles' and wrecked[p.unit]) then
+                    near_any = true
+                end
                 if d == nil or d > range then
                     -- Outside this marker's range.
-                elseif not unit_alive(p.unit) then
+                elseif p.read ~= stats.frames and not unit_alive(p.unit) then
+                    -- Reuse only this frame's successful alive check, never one from an earlier frame.
                     -- A sweep cached this position before despawn. Never pass its handle to node/mesh calls,
                     -- or draw the stale point while waiting for its next lookup.
                     node_of[p.unit] = nil
                     blown[p.unit] = nil
-
                     hellbomb_warning.forget(p.unit)
-
                 elseif not keys[i].taken and blown_up(p, now, group, keys[i].reversible_visibility) then
                     -- Geometry confirmed hidden/destroyed; no marker.
                 elseif group == 'vehicles' then
@@ -751,26 +734,21 @@ local function collect_dots(now)
                         log('vehicle: ' .. (string.match(keys[i].label, '([^/]+)$') or keys[i].label)
                             .. ' lost its weapons (or is by a wreck) - taken for destroyed')
                     end
-                    if destroyed or mine or (others and not parked) then
-
-                    else
-
+                    if not (destroyed or mine or (others and not parked)) then
                         dots[#dots + 1] = {p[1], p[2], p[3] + (keys[i].height or GROUP_HEIGHT.vehicles), d, who, group, keys[i].icon, range = range}
                     end
                 elseif LOOK.hide_near and (keys[i].near or NEAR_ME[group]) and me ~= nil and who == me
                     and d < (keys[i].near or NEAR_ME[group]) - NEAR_OVERLAP then
-
-                elseif keys[i].taken and check_taken(p) then
-
+                    -- no marker: the game shows its own icon here
+                elseif keys[i].taken and check_taken(p, now) then
+                    -- no marker: picked up
                 elseif carried and group ~= 'dropoffs' and group ~= 'controls' and group ~= 'hellbombs' then
-                    -- (those never worn; a teammate may stand at it)
-
+                    -- no marker: worn or held (those three never are; a teammate may stand at it)
                 elseif (group == 'mission' or group == 'carry') and near(dropoffs, p, DELIVERED_NEAR) then
-
+                    -- no marker: delivered
                 elseif group == 'carry' and near(racks, p, LOADED_NEAR) then
-
+                    -- no marker: loaded
                 else
-
                     local warning = group == 'hellbombs' and LOOK.hellbomb_warning ~= false and
                         hellbomb_warning.observe(p, now, blown[p.unit] and blown[p.unit].seen) or nil
                     local nx, ny, nz = node_position(p, keys[i].node)
@@ -810,8 +788,12 @@ local function collect_dots(now)
             if d <= range then dots[#dots + 1] = {m[1], m[2], m[3] + DEATH_HEIGHT, d, me, 'deaths', 'skull'} end
         end
     end
-    if #dots > MAX_DOTS then
-        table.sort(dots, function(a, b) return a[4] < b[4] end)
+    if #dots > MAX_DOTS then   -- what you would walk to goes last, however far: then the nearest
+        table.sort(dots, function(a, b)
+            local pa, pb = PACE.keep_first[a[6]] or 0, PACE.keep_first[b[6]] or 0
+            if pa ~= pb then return pa > pb end
+            return a[4] < b[4]
+        end)
         for i = #dots, MAX_DOTS + 1, -1 do dots[i] = nil end
     end
     return dots
@@ -877,7 +859,6 @@ local FULL_SIZE_M = 10
 -- The game scales its HUD with the screen: 1 at 1920 x 1080, by the smaller of width / 1920 and height / 1080
 -- (2.4.0: at 1920 x 1200 its icons matched ours; at 2560 x 1440 they were bigger). Ours (sizes, offsets) too.
 local UI_W, UI_H = 1920, 1080
-local SMALLEST = 0.7          -- the smallest of the game icons' pixel sizes (ICON_PIXELS); smaller: scaled from it
 local FADE_LEAST = 0.2
 local POINTER = {gap = 3, half = 9, slope = 0.5, line = 2}   -- the wide V under a vehicle's icon, pixels at full size
 -- A vehicle off screen (2.3.0), or where you died (2.5.0): at the screen's edge, this much smaller, with an arrow
@@ -891,13 +872,6 @@ local function far_share(d)
     return math.max(0, math.min(1, (d[4] - FULL_SIZE_M) / (range - FULL_SIZE_M)))
 end
 local function size_of(d) return 1 - (1 - LOOK.smallest) * far_share(d) end
--- How much a pixel icon's rectangles are scaled at this size: the full one above full size (a big screen, 2.4.0),
--- the smallest one below SMALLEST, else none (its own pixel size is picked)
-local function scale_of(size)
-    if size > 1 then return size end
-    if size < SMALLEST then return size / SMALLEST end
-    return 1
-end
 -- A stim this close is drawn solid (2.5.0): the game shows no icon of its own for stims, so up close, where the game's
 -- icons of the supplies around it show solid, a see-through one of ours stood out.
 local STIM_SOLID_M = 5
@@ -957,12 +931,9 @@ local function ink_of(alpha)
     return c
 end
 
--- a filled triangle in the marker's colour, a rectangle in this one; in our pixels (origin bottom-left, y up)
+-- a filled triangle in the marker's colour, in our pixels (origin bottom-left, y up)
 local function tri(x1, y1, x2, y2, x3, y3)
     CHEF.triangle(x1 * kx, y1 * ky, x2 * kx, y2 * ky, x3 * kx, y3 * ky, ink, CHEF_LAYER)
-end
-local function rect(x0, y0, x1, y1, color)
-    CHEF.rect(x0 * kx, y0 * ky, (x1 - x0) * kx, (y1 - y0) * ky, color, CHEF_LAYER)
 end
 
 -- under a vehicle's icon, a wide V pointing down at it (like the 0.11-0.25 vehicle marker's lower V)
@@ -1058,31 +1029,12 @@ local function diamond_at(sx, sy, size)
     return outer, outer
 end
 
--- a pixel icon (the supply crate's) at this size: its half width and height
-local function pixel_icon(sizes, sx, sy, size)
-    local step = math.floor((1 - size) / (1 - SMALLEST) * (#sizes - 1) + 0.5) + 1
-    local list = sizes[math.max(1, math.min(#sizes, step))]
-    local k = scale_of(size)
-    for _, r in ipairs(list) do
-        rect(sx + r[1] * k, sy + r[2] * k, sx + r[3] * k, sy + r[4] * k, ink_of(255 * r[5] / 4 * opacity))
-    end
-    if list.half == nil then   -- how far it reaches from its middle, across and up, worked out once
-        local hw, hh = 0, 0
-        for _, r in ipairs(list) do
-            hw = math.max(hw, math.abs(r[1]), math.abs(r[3]))
-            hh = math.max(hh, math.abs(r[2]), math.abs(r[4]))
-        end
-        list.half = {hw, hh}
-    end
-    return list.half[1] * k, list.half[2] * k
-end
-
 local function screen_draw(dots, cam)
     if #dots == 0 or cam == nil then return end
     local oks, w, h = pcall(CHEF.screen)
     if not oks or type(w) ~= 'number' or type(h) ~= 'number' or w <= 0 or h <= 0 then return end
     cw, ch = w, h
-    local okr, rw, rh = pcall(sr.Gui.resolution)
+    local okr, rw, rh = pcall(sr.Gui and sr.Gui.resolution)
     if okr and type(rw) == 'number' and type(rh) == 'number' and rw >= 1 and rh >= 1 then
         width, height = rw, rh
     else
@@ -1113,11 +1065,7 @@ local function screen_draw(dots, cam)
                     sx, sy = math.floor(sx + ICON_OFFSET[1] * ui + 0.5), math.floor(sy + ICON_OFFSET[2] * ui + 0.5)
                 end
                 local hw, hh
-                if d[7] and ICON_PIXELS[d[7]] then
-                    hw, hh = pixel_icon(ICON_PIXELS[d[7]], sx, sy, size)
-                elseif d[7] then
-                    hw, hh = texture_icon(d[7], sx, sy, size)
-                end
+                if d[7] then hw, hh = texture_icon(d[7], sx, sy, size) end
                 if hw == nil then hw, hh = diamond_at(sx, sy, size) end   -- a diamond, or the icon could not be drawn
                 if dir then
                     arrow(sx, sy, size, dir, math.max(hw, hh))
@@ -1136,7 +1084,6 @@ end
 
 local function draw(now, cam)
     local dots = collect_dots(now)
-
     M.dots = dots   -- this frame's markers (the tests read them)
     if menu_open() then return end   -- a menu is open: nothing drawn
     screen_draw(dots, cam)
@@ -1315,9 +1262,10 @@ end
 
 local function forget_units()
     cursor, found, players, players_read_at, me, hot = 1, {}, {}, nil, nil, {}
+    avatar_units = {}
     vehicles_seen, vehicles_near = {}, false
     wrecked, node_of = by_unit(), by_unit()
-    taken, blown, first_visible, me_unit = by_unit(), by_unit(), by_unit(), nil
+    taken, blown, first_visible, probe_at, me_unit = by_unit(), by_unit(), by_unit(), by_unit(), nil
     avatar_since, avatar_z0, own, candidate = by_unit(), by_unit(), nil, nil
     local_player.reset()
     hellbomb_warning.reset()
@@ -1356,6 +1304,7 @@ local function tick()
         local cam = camera_of()   -- once a frame, after the game moved it
         me = pick_me(cam)
         if local_player.mode == 'network' then
+            -- Death must freeze the sample container before later blast/despawn motion, every frame.
             local observed = local_player.update(now, CHEF.in_mission(), found, box_keys,
                 players_read_at == now and players or nil)
             M.identity = local_player.status
@@ -1385,7 +1334,6 @@ local function tick()
         M.tick_errors = (M.tick_errors or 0) + 1
         if M.tick_errors <= 5 then log('tick failed: ' .. tostring(problem)) end
     end
-
 end
 
 -- ---------------------------------------------------------------- settings --
@@ -1492,7 +1440,6 @@ local function install()
     local missing = check_api()
     if missing then
         log('FATAL: ' .. missing)
-        if logfile then pcall(function() logfile:close() end) end   -- off for good
         M.status = missing
         return M
     end
@@ -1528,7 +1475,6 @@ local function install()
     if type(shutdown) == 'function' then
         rawset(_G, 'shutdown', function(...)
             log('shutdown')
-            if logfile then pcall(function() logfile:close() end) end
             return shutdown(...)
         end)
     end

@@ -57,9 +57,9 @@ Give Chef the highest priority in your mod manager. This is a Chef addon. Other 
 must provide compatible Chef addon support; standalone compatibility is not guaranteed.
 Remove the previous version before importing and deploying this ZIP. Do not run both.
 
-IMPORTANT FOR UPDATING PLAYERS: 2.6.0 switches to native Chef settings. Marker preferences
-start at defaults. Press F9, select Extended Pickup Icons Range and configure them again.
-Later changes are saved normally. No separate Mod Options Menu mod is required.
+SETTINGS: preferences from 2.6.0 are preserved. Only updates from versions older than
+2.6.0 start with default settings after the native Chef backend change. Press F9 and select
+Extended Pickup Icons Range. No separate Mod Options Menu mod is required.
 
 What gets a marker (default distance):
 - Samples (50 m): common, rare, super, sample containers and Terminid eggs.
@@ -90,7 +90,8 @@ Mission Hellbomb warning:
   retain ordinary markers. Damaged map bombs and portable backpacks have no countdown.
 
 Behavior and limits:
-- At most the 40 nearest markers are drawn. Markers scale with distance/resolution, follow
+- At most 40 markers are drawn: your last death first, then vehicles/Hellbombs, then the
+  nearest other markers. Markers scale with distance/resolution, follow
   the camera and scopes, and hide in menus. Mission markers are hidden on the ship.
 - Near vanilla icons, our markers normally hide: samples 9 m, eggs/Automaton super samples
   20 m, sample containers 15 m, ammo/grenades 4 m. Stims keep their marker, solid within 5 m.
@@ -103,8 +104,8 @@ Behavior and limits:
   does not follow the corpse or container afterward. Missing/ambiguous data is not death.
   Unknown builds retain the earlier camera-based death method. Only the last death is shown.
 - Experimental position/timing/statistics logs are removed. Basic support information and
-  errors remain in ExtendedPickupIconsRange.log (previous launch: .previous.log) in Chef's
-  log folder. No debug panel, calibration mode or test files are shipped.
+  errors remain in ExtendedPickupIcons.log in Chef's log folder (launches follow one another,
+  so one that crashed stays readable). No debug panel, calibration mode or test files are shipped.
 """
 
 
