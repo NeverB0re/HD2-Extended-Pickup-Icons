@@ -4,6 +4,10 @@ Branch: `test-2.6.1`. Public baseline: `757ccd1` / 2.6.0. Reviewed input: Claude
 2.6.1-test.1 changes and `audit-2.6.0-and-update-plan.md`. Output: **2.6.1-test.2**, local only,
 pending gameplay validation. No game deployment, remote push or Nexus publication was performed.
 
+Release follow-up, 2026-11-02: the owner confirmed resupply fading, vehicle-death placement and vehicle
+destruction and authorized 2.6.1 release. The pending checks above describe the original review snapshot;
+see [release-audit-2.6.1.md](release-audit-2.6.1.md) for the stable promotion and exact artifact verification.
+
 ## Review findings and corrections
 
 1. **Death confirmation was throttled to 15 Hz.** A regression test failed when death occurred on the

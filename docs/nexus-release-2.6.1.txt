@@ -1,0 +1,45 @@
+NEXUS RELEASE FILE
+Version: 2.6.1
+File name: Extended Pickup Icons Range v2.6.1
+Category: Main Files
+Previous public version: 2.6.0
+
+ENGLISH — FILE DESCRIPTION
+Improves resupply-crate icon rendering and fading, reduces repeated rendering and unit-query work, keeps important markers visible when the marker limit is reached, and fixes Chef-managed support logging. Existing 2.6.0 settings are preserved. Requires Chef Shared Loader 1.4.0 or newer; the latest version is recommended.
+
+한국어 — 파일 설명
+재보급 상자 아이콘과 흐림 표시를 개선하고 반복 렌더링·유닛 조회 부담을 줄였습니다. 마커 제한에 도달했을 때 중요한 마커를 우선 표시하며 Chef 공식 로그 처리를 사용하도록 수정했습니다. 이미 저장한 2.6.0 설정은 유지됩니다. Chef Shared Loader 1.4.0 이상이 필요하며 최신 버전을 권장합니다.
+
+ENGLISH — CHANGELOG
+Version 2.6.1 — changes from 2.6.0
+
+- Improved resupply-crate icon rendering and fading. The icon now uses a texture made from the same source artwork instead of drawing many rectangles each frame.
+- Reduced repeated unit discovery and position queries. Known helldiver positions still update every frame; resting nearby items reuse their root position for up to four frames and return to per-frame updates once movement is observed.
+- Reduced repeated mesh checks for launch codes/keycards and geometry checks for damaged map Hellbombs.
+- Stopped unnecessary repeated vehicle/weapon/wreck discovery around vehicles already confirmed destroyed.
+- Changed the 40-marker limit to preserve your last death first, then vehicles and Hellbombs, followed by the nearest remaining targets.
+- Replaced manual log-file handling with Chef's managed-log API, avoiding blocked old-log reads. Basic support information now goes to ExtendedPickupIcons.log. There is no separate previous-launch file; Chef manages the log across launches.
+- Fixed the screen-resolution fallback when the game's Gui table is unavailable.
+- Kept the existing target list, settings, per-frame local death confirmation and eight-frame full discovery bound. Settings already saved in 2.6.0 are preserved; only upgrades from older versions require reconfiguration.
+
+한국어 — 변경 내역
+버전 2.6.1 — 직전 공개 버전 2.6.0 대비
+
+- 재보급 상자 아이콘과 흐림 표시를 개선했습니다. 같은 원본 이미지를 기반으로 만든 텍스처를 사용해 매 프레임 여러 사각형을 그리던 처리를 줄였습니다.
+- 반복 유닛 탐색과 위치 조회를 줄였습니다. 이미 확인한 헬다이버의 위치는 계속 매 프레임 갱신합니다. 가까운 정지 아이템은 기준 위치를 최대 4프레임 재사용하고 움직임을 관찰하면 매 프레임 갱신합니다.
+- 발사 코드·키카드의 메시 확인과 불발 헬밤의 모델 확인 횟수를 줄였습니다.
+- 파괴가 확정된 차량 때문에 차량·무장·잔해를 계속 반복 탐색하던 처리를 줄였습니다.
+- 마커 40개 제한에 도달하면 마지막 사망 위치를 최우선으로, 차량·헬밤을 그다음으로 남기고 나머지는 가까운 순서로 표시합니다.
+- 수동 로그 파일 처리를 Chef 공식 로그 관리 API로 교체해 이전 로그 읽기가 차단되던 문제를 수정했습니다. 기본 문제 해결 정보는 ExtendedPickupIcons.log에 남깁니다. 별도의 이전 실행 파일은 만들지 않으며 Chef가 실행 간 로그를 관리합니다.
+- 게임의 Gui 테이블을 사용할 수 없을 때 화면 크기 대체 처리가 실패하던 문제를 수정했습니다.
+- 기존 표시 대상과 설정, 매 프레임 수행하는 내 사망 확인, 전체 탐색 8프레임 이내 주기를 유지합니다. 이미 저장한 2.6.0 설정은 유지되며 더 오래된 버전에서 업데이트할 때만 다시 설정하면 됩니다.
+
+ENGLISH — UPDATE NOTICE / PINNED COMMENT DRAFT
+2.6.1 is now available! This update improves resupply-crate icon rendering/fading and reduces repeated rendering and unit-query work. Your last death, vehicles and Hellbombs now take priority when the marker limit is reached. Settings from 2.6.0 are preserved. Please remove the previous version before installing, and keep Chef Shared Loader at the highest priority.
+
+한국어 — 업데이트 공지 / 고정 댓글 초안
+2.6.1을 업데이트했습니다. 재보급 상자 아이콘·흐림 표시를 개선하고 반복 렌더링·유닛 조회 부담을 줄였습니다. 마커 제한에 도달하면 마지막 사망 위치, 차량·헬밤을 우선 표시합니다. 이미 저장한 2.6.0 설정은 유지됩니다. 이전 버전을 제거한 뒤 설치하고 Chef Shared Loader를 가장 높은 우선순위로 배치해 주세요.
+
+VALIDATION / 검증
+231 automated regression tests passed. The owner confirmed resupply fading, death placement inside a vehicle and vehicle destruction in gameplay on 2026-11-02. Simulated API call counts decreased with the same marker counts; this is not an FPS or frame-time measurement.
+자동 회귀 테스트 231개가 통과했습니다. 2026-11-02 소유자가 실게임에서 재보급 흐림, 차량 탑승 중 사망 위치, 차량 파괴 처리를 확인했습니다. 같은 마커 수를 유지하면서 모의 API 호출량이 감소했으며, 실제 FPS나 프레임 시간을 측정한 결과는 아닙니다.

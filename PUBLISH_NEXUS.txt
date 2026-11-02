@@ -1,7 +1,7 @@
 [size=6][b]Extended Pickup Icons Range[/b][/size]
 See samples, supplies, mission items and vehicles from farther away, using the game's icons.
 
-[b]2.6.0:[/b] fixed mission Hellbomb markers and an activation countdown, improved death/vehicle marker handling, more efficient discovery, and detailed folded F9 settings.
+[b]2.6.1:[/b] improved resupply-crate icon rendering and fading, reduced repeated rendering/unit-query work, prioritized important markers and corrected support logging. Existing 2.6.0 settings are preserved.
 [b]Updating from a version older than 2.6.0? Please configure your marker preferences again in F9. Settings already saved in 2.6.0 are preserved.[/b]
 
 [size=5][b]What gets a marker[/b][/size]
@@ -73,7 +73,7 @@ Basic startup, state-change and error information is in ExtendedPickupIcons.log 
 [size=6][b]한국어 안내[/b][/size]
 샘플, 보급품, 임무 아이템과 차량을 더 먼 거리에서 게임 아이콘으로 표시합니다.
 
-[b]2.6.0:[/b] 고정식 임무용 헬밤 마커와 작동 카운트다운, 사망·차량 마커 처리 개선, 탐색 효율 개선, 접을 수 있는 세부 F9 설정을 추가했습니다.
+[b]2.6.1:[/b] 재보급 상자 아이콘과 흐림 표시를 개선하고 반복 렌더링·유닛 조회 부담을 줄였습니다. 중요한 마커의 표시 우선순위와 지원 로그 처리도 개선했습니다. 이미 저장한 2.6.0 설정은 유지됩니다.
 [b]2.6.0보다 오래된 버전에서 업데이트하면 F9에서 설정을 다시 맞춰 주세요. 이미 저장한 2.6.0 설정은 유지됩니다.[/b]
 
 [size=5][b]표시 대상과 기본 거리[/b][/size]

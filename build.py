@@ -52,6 +52,9 @@ README = """Extended Pickup Icons Range v{version}
 
 See samples, supplies, mission items and vehicles from farther away, using the game's icons.
 
+2.6.1: improved resupply-crate rendering/fading, reduced repeated unit/drawing work,
+important-marker retention and Chef-managed support logging. Settings from 2.6.0 are kept.
+
 Requires Chef Shared Loader 1.4.0 or newer (Nexus mod 17760); the latest is recommended.
 Give Chef the highest priority in your mod manager. This is a Chef addon. Other loaders
 must provide compatible Chef addon support; standalone compatibility is not guaranteed.
