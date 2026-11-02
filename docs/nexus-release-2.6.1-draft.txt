@@ -1,0 +1,30 @@
+Draft for a future stable 2.6.1 release. Current build: 2.6.1-test.2.
+Do not publish these notes as a released update until gameplay validation is complete.
+
+ENGLISH — CHANGELOG
+- Reduced marker rendering and repeated unit-query overhead while preserving the existing target list and settings.
+- Replaced resupply-crate rectangle drawing with a texture made from the same source icon.
+- Reduced repeated mesh checks for launch codes/keycards and geometry checks for damaged map Hellbombs.
+- Cached resting item positions for up to four frames; moving items return to per-frame updates once movement is observed. Kept per-frame local death confirmation and the existing full discovery interval.
+- Kept the last death marker ahead of other markers when the 40-marker limit is reached, followed by vehicles and Hellbombs, then the nearest remaining targets.
+- Fixed stale cached-vehicle drawing after despawn, and avoided repeated vehicle/weapon discovery for terminal wrecks.
+- Fixed logging through Chef's managed-log API. Basic support information is written to ExtendedPickupIcons.log. There is no separate previous-launch log; the loader manages the file across launches.
+- Fixed the screen-resolution fallback when the game's Gui table is unavailable.
+- Settings saved in 2.6.0 are preserved. The reset notice applies only to upgrades from versions older than 2.6.0.
+
+한국어 — 변경 내역
+- 기존 표시 대상과 설정을 유지하면서 마커 렌더링과 반복 유닛 조회 부담을 줄였습니다.
+- 재보급 상자 아이콘을 같은 원본 이미지 기반의 텍스처로 바꿔 여러 사각형을 반복해서 그리던 처리를 줄였습니다.
+- 발사 코드·키카드의 메시 확인과 불발 헬밤의 모델 확인 횟수를 줄였습니다.
+- 정지한 아이템의 위치는 최대 4프레임 동안 재사용하고 움직임을 관찰하면 매 프레임 갱신합니다. 내 사망 확인은 매 프레임 수행하며 기존 전체 탐색 주기를 유지합니다.
+- 마커 40개 제한에 도달하면 마지막 사망 위치를 최우선으로 남기고, 차량·헬밤, 나머지 가까운 대상 순으로 표시합니다.
+- 디스폰된 차량의 이전 좌표로 마커가 남는 문제를 보강하고, 파괴가 확정된 잔해 때문에 차량·무장을 계속 반복 탐색하던 처리를 줄였습니다.
+- Chef의 공식 로그 관리 API를 사용하도록 수정했습니다. 기본 문제 해결 정보는 ExtendedPickupIcons.log에 기록합니다. 별도의 이전 실행 로그 파일은 만들지 않으며 로더가 실행 간 파일을 관리합니다.
+- 게임의 Gui 테이블을 사용할 수 없을 때 화면 크기 대체 처리가 실패하던 문제를 수정했습니다.
+- 이미 저장한 2.6.0 설정은 유지합니다. 설정 초기화 안내는 2.6.0보다 오래된 버전에서 업데이트할 때만 해당합니다.
+
+VALIDATION NOTE / 검증 안내
+231 offline regression tests passed. Simulated API call counts decreased with unchanged marker counts.
+These results do not measure live FPS or prove that every native crash is eliminated.
+자동 회귀 테스트 231개가 통과했으며, 같은 마커 수를 유지하면서 모의 API 호출량이 감소했습니다.
+실제 FPS를 측정한 결과가 아니며 모든 네이티브 크래시가 해결됐다는 의미는 아닙니다.

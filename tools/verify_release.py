@@ -3,6 +3,7 @@
 Requires lupa for Lua 5.1 compilation. This checks packaging, not live gameplay or F9 rendering.
 Run from the repository root: python -B tools/verify_release.py <zip>
 """
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -30,28 +31,31 @@ def archive_rows(z):
     return data, rows
 
 
-def textures(data, rows, renamed=None):
-    # The Lua body changes the following metadata offsets; all other fields and bytes stay identical.
-    return {(renamed or {}).get(r[0], r[0]): (r[1:2] + r[3:], data[r[2]:r[2] + r[7]])
-            for r in rows if r[1] == build.TEXTURE_TYPE}
+def textures(z, data, rows):
+    # By id: its header and its pixels. (Where they sit changes with the Lua body and the icons before them.)
+    gpu = z.read('Addon/9ba626afa44a3aa3.patch_0.gpu_resources')
+    assert all(r[4] + r[9] <= len(gpu) for r in rows if r[1] == build.TEXTURE_TYPE)
+    return {r[0]: (data[r[2]:r[2] + r[7]], gpu[r[4]:r[4] + r[9]]) for r in rows if r[1] == build.TEXTURE_TYPE}
 
 
-def verify(path):
+def verify(path, allow_test=False):
     path = Path(path).resolve()
-    baseline = ROOT / 'release/Extended Pickup Icons Range v2.5.0.zip'
+    baseline = ROOT / 'release/Extended Pickup Icons Range v2.6.0.zip'   # the last public one
     icon_assets, build.ICON_TABLE = build.icon_textures()
     expected = build.built_source().encode('utf-8')
     version = build.version_of(expected.decode('utf-8'))
-    assert re.fullmatch(r'\d+\.\d+\.\d+', version), 'Not a release version'
+    pattern = r'\d+\.\d+\.\d+(?:-test\.\d+)?' if allow_test else r'\d+\.\d+\.\d+'
+    assert re.fullmatch(pattern, version), 'Not a release version; test builds require --allow-test'
     with zipfile.ZipFile(path) as z, zipfile.ZipFile(baseline) as old:
         assert z.testzip() is None
-        assert set(z.namelist()) == {
+        expected_files = {
             'manifest.json', 'README.txt', 'icon.png', 'Addon/9ba626afa44a3aa3.patch_0',
             'Addon/9ba626afa44a3aa3.patch_0.gpu_resources', 'Addon/9ba626afa44a3aa3.patch_0.stream',
-        }, 'Unexpected player ZIP contents'
+        }
+        assert len(z.namelist()) == len(expected_files) and set(z.namelist()) == expected_files, 'Unexpected or duplicate ZIP contents'
         data, rows = archive_rows(z)
         old_data, old_rows = archive_rows(old)
-        assert len(rows) == 136
+        assert len(rows) == 1 + len(icon_assets)
         assert all(r[1] in (build.LUA_TYPE, build.TEXTURE_TYPE) for r in rows)
         lua_rows = [r for r in rows if r[1] == build.LUA_TYPE]
         assert len(lua_rows) == 1
@@ -64,26 +68,17 @@ def verify(path):
         assert not re.search(rb'"@[A-Z_]+@"', source)
         for removed in (b'position-diagnostic:', b'hellbomb timing:', b'STATUS_EVERY_S', b'function P.diagnostics'):
             assert removed not in source, removed
-        assert len(textures(data, rows)) == 135
-        old_lua = next(r for r in old_rows if r[1] == build.LUA_TYPE)
-        old_source = old_data[old_lua[2] + 8:old_lua[2] + old_lua[7]]
-        old_resource = re.match(rb'-- HD2-Addon: ([^\r\n]+)', old_source)[1].decode('ascii')
-        # 2.5.0 used pickup_dots; texture IDs changed with the addon rename in the tested builds.
-        rename = {build.murmur64(name.replace(build.RESOURCE, old_resource, 1).encode('ascii')):
-                  build.murmur64(name.encode('ascii')) for name, *_ in icon_assets}
-        assert {r[0] for r in rows if r[1] == build.TEXTURE_TYPE} == set(rename.values())
-        assert set(textures(old_data, old_rows)) == set(rename)
-        assert textures(data, rows) == textures(old_data, old_rows, rename)
-        for suffix in ('.gpu_resources', '.stream'):
-            name = 'Addon/9ba626afa44a3aa3.patch_0' + suffix
-            assert z.read(name) == old.read(name), name
+        now, before = textures(z, data, rows), textures(old, old_data, old_rows)
+        assert set(now) == {build.murmur64(name.encode('ascii')) for name, *_ in icon_assets}
+        assert all(now.get(k) == v for k, v in before.items()), 'A public icon changed or went'
+        new_icons = sorted(name for name, *_ in icon_assets if build.murmur64(name.encode('ascii')) not in before)
+        assert z.read('Addon/9ba626afa44a3aa3.patch_0.stream') == b''
         assert z.read('icon.png') == old.read('icon.png')
         manifest = json.loads(z.read('manifest.json'))
         assert manifest == build.MANIFEST
         assert manifest['Guid'] == json.loads(old.read('manifest.json'))['Guid']
         readme = z.read('README.txt').decode('utf-8')
         assert readme == build.README.format(version=version).replace('\n', '\r\n')
-        assert 'Marker preferences\r\nstart at defaults' in readme
         lua = LuaRuntime(unpack_returned_tuples=True)
         check = lua.eval('function(s) local f,e=loadstring(s); return f~=nil,e end')
         ok, error = check(source.decode('utf-8'))
@@ -93,12 +88,14 @@ def verify(path):
             mod = runtime.execute(source.decode('utf-8'), arg)
             assert mod.status == 'no Chef Shared Loader'
         return dict(version=version, zip=path.name, zip_files=len(z.namelist()), resources=len(rows),
-                    textures=135, lua51_compiles=True, embedded_source_matches=True,
-                    texture_and_gpu_assets_unchanged=True, manifest_guid_unchanged=True,
+                    textures=len(now), new_icons=new_icons, lua51_compiles=True, embedded_source_matches=True,
+                    public_icons_unchanged=True, manifest_guid_unchanged=True,
                     experimental_measurements_absent=True, sha256=hashlib.sha256(path.read_bytes()).hexdigest())
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        raise SystemExit('Usage: python -B tools/verify_release.py <player.zip>')
-    print(json.dumps(verify(sys.argv[1]), indent=2))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('zip', help='Player ZIP to verify against the current source')
+    parser.add_argument('--allow-test', action='store_true', help='Explicitly permit a -test.N build')
+    args = parser.parse_args()
+    print(json.dumps(verify(args.zip, allow_test=args.allow_test), indent=2))
