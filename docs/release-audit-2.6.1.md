@@ -21,9 +21,10 @@ problems in those checks, and explicitly authorized release. Nexus upload remain
 
 The 15-Hz death polling and stale liveness behavior corrected during test.1 review were **unreleased
 regressions**. The public changelog does not present those corrections as new fixes to 2.6.0.
-Superseded rectangle-rasterizer and older call-comparison tools are retired; the existing baker and
-`tools/count_calls.py` provide their current replacements. Historical release ZIP deletions present
-before this review are not staged or published as part of this release.
+The older rectangle-rasterizer and call-comparison tools remain available for historical comparisons;
+the rasterizer follows the relocated source image. Current builds use the baker and `tools/count_calls.py`.
+Historical release ZIP/changelog deletions present before this review are local worktree changes only;
+all preserved artifacts remain in the published commit tree.
 
 ## Verified release artifacts
 
