@@ -11,6 +11,7 @@ import re
 import struct
 import sys
 import zipfile
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -38,9 +39,48 @@ def textures(z, data, rows):
     return {r[0]: (data[r[2]:r[2] + r[7]], gpu[r[4]:r[4] + r[9]]) for r in rows if r[1] == build.TEXTURE_TYPE}
 
 
+def validate_manager_manifest(manifest, files):
+    """Independent checks against Arsenal's published V1 manifest/path contract."""
+    assert manifest.get('Version') == 1, 'Manager manifest Version must be 1'
+    uuid.UUID(manifest['Guid'])
+    assert isinstance(manifest.get('Name'), str) and manifest['Name'].strip(), 'Missing mod name'
+    assert isinstance(manifest.get('Description'), str), 'Missing description string'
+    names = set(files)
+
+    def relative(value):
+        assert isinstance(value, str) and value, 'Empty manager path'
+        assert '\\' not in value and not value.startswith('/') and not value.endswith('/'), 'Use relative / paths'
+        assert all(part not in ('', '.', '..') for part in value.split('/')), 'Unsafe relative path'
+        assert ':' not in value, 'Absolute manager path'
+        return value
+
+    def image(value):
+        if value:
+            assert relative(value) in names, 'Missing manager image: ' + value
+
+    def option(row):
+        assert isinstance(row, dict), 'Invalid option object'
+        assert isinstance(row.get('Name'), str) and row['Name'].strip(), 'Missing option name'
+        assert isinstance(row.get('Description'), str), 'Missing option description'
+        includes = row.get('Include', [])
+        assert isinstance(includes, list), 'Include must be a list'
+        for value in includes:
+            prefix = relative(value) + '/'
+            assert any(name.startswith(prefix) for name in names), 'Include folder missing or wrong case: ' + value
+        image(row.get('Image'))
+        for sub in row.get('SubOptions', []):
+            option(sub)
+
+    image(manifest.get('IconPath'))
+    assert isinstance(manifest.get('Options', []), list), 'Options must be a list'
+    for row in manifest.get('Options', []):
+        option(row)
+    assert any('.patch_' in name and not name.endswith(('.gpu_resources', '.stream')) for name in names), 'No patch data'
+
+
 def verify(path, allow_test=False):
     path = Path(path).resolve()
-    baseline = ROOT / 'release/Extended Pickup Icons Range v2.6.0.zip'   # the last public one
+    baseline = ROOT / 'release/Extended Pickup Icons Range v2.6.1.zip'   # the last public one
     icon_assets, build.ICON_TABLE = build.icon_textures()
     expected = build.built_source().encode('utf-8')
     version = build.version_of(expected.decode('utf-8'))
@@ -64,6 +104,7 @@ def verify(path, allow_test=False):
         source = data[row[2] + 8:row[2] + 8 + size]
         assert flag == 2 and row[7] == size + 8 and source == expected
         assert source.startswith(('-- HD2-Addon: ' + build.RESOURCE + '\n').encode('ascii'))
+        assert b'\n-- HD2-Requires: chef-shared-loader >= 1.4.0\n' in source[:1200], 'Missing early Chef handoff declaration'
         assert row[0] == build.murmur64(build.RESOURCE.encode('ascii'))
         assert not re.search(rb'"@[A-Z_]+@"', source)
         for removed in (b'position-diagnostic:', b'hellbomb timing:', b'STATUS_EVERY_S', b'function P.diagnostics'):
@@ -75,6 +116,7 @@ def verify(path, allow_test=False):
         assert z.read('Addon/9ba626afa44a3aa3.patch_0.stream') == b''
         assert z.read('icon.png') == old.read('icon.png')
         manifest = json.loads(z.read('manifest.json'))
+        validate_manager_manifest(manifest, z.namelist())
         assert manifest == build.MANIFEST
         assert manifest['Guid'] == json.loads(old.read('manifest.json'))['Guid']
         readme = z.read('README.txt').decode('utf-8')
