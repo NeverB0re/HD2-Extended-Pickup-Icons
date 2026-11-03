@@ -110,3 +110,9 @@ code and explicit early Chef dependency checks. No textures or manifest identity
 Have the first reporter confirm that Chef's F9 options appear under the documented Boot+Chef setup
 with the test ZIP. This does not require changing the owner's current loader installation. Keep the
 candidate local until that execution path is verified; do not present the Arsenal case as fixed by it.
+
+## Release approval
+
+On 2026-11-03 the owner confirmed compatibility on another computer and authorized release.
+Promoted to 2.6.2 with only the version string changed from the tested candidate runtime.
+The Arsenal report remains unconfirmed; this release does not claim to fix it.

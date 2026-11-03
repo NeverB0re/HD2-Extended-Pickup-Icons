@@ -1,0 +1,7 @@
+2.6.2
+
+English
+Fixed the missing Chef dependency declaration so Boot Mod Loader can correctly delegate this addon to Chef when both loaders are used. Compatibility was confirmed by the owner on another computer. Gameplay, icons and saved settings are unchanged. This does not add standalone Boot support or claim to resolve Arsenal import reports.
+
+한국어
+Chef 의존성 선언 누락을 수정하여 Boot와 Chef를 함께 사용할 때 이 모드가 Chef에서 정상 실행되도록 했습니다. 다른 컴퓨터에서 호환성을 확인했습니다. 게임 동작, 아이콘, 저장된 설정은 유지됩니다. Boot 단독 실행 지원이나 Arsenal 가져오기 문제 해결을 의미하지 않습니다.

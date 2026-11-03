@@ -9,10 +9,9 @@ The owner confirmed resupply fading, vehicle-death placement and vehicle-destruc
 and approved release on 2026-11-02. The runtime and textures match the tested 2.6.1-test.2 build apart from
 the version string. Previous public version: **2.6.0**.
 
-Local bug-fix candidate: **2.6.2-test.1**, branch `fix-loader-package-2.6.2`, not published.
-It adds the explicit Chef requirement used by Boot 0.13.4's handoff classifier. The 2026-11-03
-report audit, Arsenal import findings and support steps are in
-[the compatibility/import audit](docs/loader-and-import-reports-2026-11-03.md).
+Latest release: **2.6.2**. The owner verified Chef/Boot compatibility on another computer on
+2026-11-03. Adds the explicit Chef dependency declaration; gameplay and saved settings are unchanged.
+See [the compatibility/import audit](docs/loader-and-import-reports-2026-11-03.md).
 
 - [Nexus page text, English + Korean BBCode](PUBLISH_NEXUS.txt)
 - [2.6.1 changelog, upload description and announcement, English + Korean](docs/nexus-release-2.6.1.txt)

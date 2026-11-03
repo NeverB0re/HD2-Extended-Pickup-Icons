@@ -52,7 +52,7 @@ README = """Extended Pickup Icons Range v{version}
 
 See samples, supplies, mission items and vehicles from farther away, using the game's icons.
 
-2.6.2-test.1: declares Chef Shared Loader as a requirement so Boot Mod Loader can hand
+2.6.2: declares Chef Shared Loader as a requirement so Boot Mod Loader can hand
 this addon to Chef. Gameplay, icon assets, manifest GUID and saved settings are unchanged.
 
 Requires Chef Shared Loader 1.4.0 or newer (Nexus mod 17760); the latest is recommended.
